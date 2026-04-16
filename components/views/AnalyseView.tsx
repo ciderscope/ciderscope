@@ -74,7 +74,7 @@ export const AnalyseView = ({
     <div className="analyse-shell">
       {/* Session selector */}
       <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "20px", flexWrap: "wrap" }}>
-        <h2 style={{ fontFamily: "Syne", fontWeight: 800, fontSize: "clamp(17px,2.5vw,22px)" }}>Analyse</h2>
+        <h2 style={{ fontWeight: 800, fontSize: "clamp(17px,2.5vw,22px)" }}>Analyse</h2>
         <div style={{ flex: 1 }} />
         <label style={{ fontFamily: "DM Mono, monospace", fontSize: "11px", color: "var(--mid)" }}>Séance :</label>
         <select
@@ -498,8 +498,8 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
             <div style={{ display: "flex", gap: "32px", flexWrap: "wrap", alignItems: "flex-start" }}>
               {/* Big result */}
               <div style={{ textAlign: "center", minWidth: "120px" }}>
-                <div style={{ fontSize: "clamp(36px,5vw,52px)", fontWeight: 800, color: nc >= minC ? "#1a6b3a" : "#888", fontFamily: "Syne" }}>
-                  {nc}/{n}
+                <div style={{ fontSize: "clamp(36px,5vw,52px)", fontWeight: 800, color: nc >= minC ? "#1a6b3a" : "#888" }}>
+                  {nc}
                 </div>
                 <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>réponses correctes</div>
                 <div style={{ fontSize: "22px", fontWeight: 700, color: sigColor, marginTop: "6px" }}>{pct}%</div>

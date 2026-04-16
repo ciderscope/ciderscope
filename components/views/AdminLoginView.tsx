@@ -39,7 +39,6 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
         boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
       }}>
         <h2 style={{
-          fontFamily: "Syne",
           fontWeight: 800,
           fontSize: "clamp(18px, 2.5vw, 22px)",
           marginBottom: "6px",

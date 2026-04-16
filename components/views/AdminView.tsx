@@ -142,7 +142,7 @@ export const AdminView = ({
         {adminSection === "seances" && (
         <>
         <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px", flexWrap: "wrap" }}>
-          <h2 style={{ fontFamily: "Syne", fontWeight: 800, fontSize: "22px" }}>Séances</h2>
+          <h2 style={{ fontWeight: 800, fontSize: "22px" }}>Séances</h2>
           <div style={{ flex: 1 }}></div>
           <Button size="sm" onClick={onNewSession}>+ Nouvelle</Button>
         </div>
