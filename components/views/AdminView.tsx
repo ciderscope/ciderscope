@@ -471,14 +471,27 @@ function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
           >&#8942;&#8942;</span>
           <span className="rank-pos">{i + 1}</span>
           <span className="rank-code">{code}</span>
-          {/* × — onClick normal, aucune interférence drag */}
+          {/* × — onClick avec stopPropagation pour éviter les interférences */}
           <button
             className="chip-x"
-            style={{ marginLeft: "auto" }}
-            onClick={() => onRemove(code)}
+            style={{ 
+              marginLeft: "auto", 
+              padding: "6px", 
+              borderRadius: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRemove(code);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
             type="button"
+            draggable={false}
           >
-            <FiX size={11} />
+            <FiX size={12} />
           </button>
         </div>
       ))}

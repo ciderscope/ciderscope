@@ -1240,9 +1240,11 @@ canvas { max-width: 100%; }
   align-items: center; justify-content: center;
   background: none; border: none;
   cursor: pointer; color: inherit;
-  opacity: 0.55; padding: 0; margin-left: 2px;
+  opacity: 0.55; padding: 6px; margin-left: 2px;
+  transition: opacity .15s, background .15s;
+  border-radius: 4px;
 }
-.chip-x:hover { opacity: 1; }
+.chip-x:hover { opacity: 1; background: rgba(0,0,0,0.05); }
 
 /* ── Chip pool ── */
 .chip-pool {
