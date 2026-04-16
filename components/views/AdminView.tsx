@@ -402,23 +402,32 @@ function DraggableSerie({ codes, onChange, onRemove }: {
   return (
     <div className="draggable-list admin-order-list">
       {codes.map((code, i) => (
+        /* ⚠ Le div N'EST PAS draggable — seul le handle l'est */
         <div
           key={code}
-          draggable
-          onDragStart={() => setDragIdx(i)}
           onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
           onDrop={() => handleDrop(i)}
-          onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
           className={`draggable-item${dragIdx === i ? " dragging" : ""}${overIdx === i && dragIdx !== i ? " drag-over" : ""}`}
         >
-          <span className="drag-handle">&#8942;&#8942;</span>
+          {/* Handle — seule partie draggable */}
+          <span
+            className="drag-handle"
+            draggable
+            onDragStart={(e) => {
+              setDragIdx(i);
+              e.dataTransfer.setData("chip-code", code);
+              e.dataTransfer.setData("from-serie", "1");
+            }}
+            onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+            style={{ cursor: "grab" }}
+          >&#8942;&#8942;</span>
           <span className="rank-pos">{i + 1}</span>
           <span className="rank-code">{code}</span>
+          {/* × — onClick normal, aucune interférence drag */}
           <button
             className="chip-x"
-            draggable={false}
             style={{ marginLeft: "auto" }}
-            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onRemove(code); }}
+            onClick={() => onRemove(code)}
             type="button"
           >
             <FiX size={11} />
@@ -441,6 +450,7 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
   onChangeOrder: (o: string[]) => void;
 }) {
   const [showCorrectOrder, setShowCorrectOrder] = useState(correctOrder.length > 0);
+  const [overPool, setOverPool] = useState(false);
 
   const pool = products.filter(p => !codes.includes(p.code));
 
@@ -455,9 +465,23 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
 
   return (
     <div>
-      {/* Pool — available samples */}
-      <div className="builder-section-label">DISPONIBLES — cliquez pour ajouter à la série</div>
-      <div className="chip-pool" style={{ minHeight: "36px" }}>
+      {/* Pool — available samples, also accepts drag-back from série */}
+      <div className="builder-section-label">
+        DISPONIBLES — cliquez pour ajouter · ou glissez ici depuis la série pour retirer
+      </div>
+      <div
+        className={`chip-pool${overPool ? " drag-over" : ""}`}
+        style={{ minHeight: "42px", border: "1.5px dashed var(--border)", borderRadius: "10px", padding: "8px" }}
+        onDragOver={(e) => { e.preventDefault(); setOverPool(true); }}
+        onDragLeave={() => setOverPool(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOverPool(false);
+          const code = e.dataTransfer.getData("chip-code");
+          const fromSerie = e.dataTransfer.getData("from-serie");
+          if (code && fromSerie === "1") removeFromSerie(code);
+        }}
+      >
         {pool.length === 0 && codes.length > 0
           ? <span className="pool-hint">Tous les échantillons sont dans la série</span>
           : pool.length === 0
@@ -610,7 +634,8 @@ function ANonABuilder({ products, codes, correctAnswer, refCode, onChangeCodes, 
   const zoneA = codes.filter(c => assignment[c] === "A");
   const zoneNonA = codes.filter(c => assignment[c] === "non-A");
   const unassigned = codes.filter(c => !assignment[c]);
-  const pool = products.filter(p => !codes.includes(p.code));
+  // Exclure les codes déjà dans le test ET l'échantillon de référence
+  const pool = products.filter(p => !codes.includes(p.code) && p.code !== refCode);
 
   const [overA, setOverA] = useState(false);
   const [overNonA, setOverNonA] = useState(false);
