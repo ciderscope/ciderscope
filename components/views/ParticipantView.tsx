@@ -47,6 +47,8 @@ export const ParticipantView = ({
                 name={s.name}
                 date={s.date}
                 jurorCount={s.jurorCount}
+                productCount={s.productCount}
+                questionCount={s.questionCount}
                 onClick={() => onSelectSession(s.id)}
               />
             ))

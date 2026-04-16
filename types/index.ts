@@ -40,4 +40,6 @@ export interface SessionListItem {
   date: string;
   active: boolean;
   jurorCount: number;
+  productCount?: number;
+  questionCount?: number;
 }

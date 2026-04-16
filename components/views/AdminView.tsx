@@ -154,7 +154,7 @@ export const AdminView = ({
               <div key={s.id} className="sess-list-card">
                 <div>
                   <div className="name">{s.name}{s.active ? <Badge variant="active">ACTIVE</Badge> : <Badge variant="inactive">INACTIVE</Badge>}</div>
-                  <div className="info">{s.date} · {s.jurorCount} jurys</div>
+                  <div className="info">{s.date} · {s.productCount} éch. · {s.questionCount} Q · {s.jurorCount} jurys</div>
                 </div>
                 <div className="spacer"></div>
                 <div className="actions">

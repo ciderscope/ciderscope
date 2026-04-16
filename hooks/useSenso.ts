@@ -45,20 +45,25 @@ export const useSenso = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("sessions")
-      .select("id, name, date, active, juror_count")
+      .select("id, name, date, active, juror_count, config")
       .order("created_at", { ascending: false });
     if (error) {
       console.error("Erreur lors du chargement des séances:", error);
       setOnline(false);
     } else if (data) {
       setOnline(true);
-      setSessions(data.map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        date: r.date,
-        active: r.active,
-        jurorCount: r.juror_count,
-      })));
+      setSessions(data.map((r: any) => {
+        const cfg = r.config as SessionConfig;
+        return {
+          id: r.id,
+          name: r.name,
+          date: r.date,
+          active: r.active,
+          jurorCount: r.juror_count,
+          productCount: cfg?.products?.length || 0,
+          questionCount: cfg?.questions?.length || 0,
+        };
+      }));
     }
     setLoading(false);
   };
