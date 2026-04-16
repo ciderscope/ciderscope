@@ -396,12 +396,39 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "se
                   <div>χ² = {chi2.toFixed(3)} · p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)} <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span></div>
                   
                   {pValue < 0.05 && (
-                    <div style={{ marginTop: "8px" }}>
+                    <div style={{ marginTop: "12px" }}>
                       <strong>Post-hoc de Nemenyi</strong> (α=0,05)
                       <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Différence Critique (CD) = {nemenyiCD.toFixed(2)}</div>
-                      <div style={{ fontSize: "11px", color: "#1a6b3a", fontStyle: "italic" }}>
+                      <div style={{ fontSize: "11px", color: "#1a6b3a", fontStyle: "italic", marginBottom: "8px" }}>
                         Les produits partageant une même lettre ne sont pas significativement différents.
                       </div>
+                      
+                      {/* Pairwise comparisons table */}
+                      <details>
+                        <summary style={{ cursor: "pointer", fontSize: "12px", color: "var(--mid)" }}>Afficher les comparaisons par paires</summary>
+                        <table className="data-table" style={{ marginTop: "8px", fontSize: "11px" }}>
+                          <thead>
+                            <tr><th>Paire</th><th>Diff. Σ Rangs</th><th>Signif.</th></tr>
+                          </thead>
+                          <tbody>
+                            {products.map((p1: string, i: number) => 
+                              products.slice(i + 1).map((p2: string) => {
+                                const diff = Math.abs(rankSums[p1] - rankSums[p2]);
+                                const isSig = diff > nemenyiCD * n;
+                                return (
+                                  <tr key={`${p1}-${p2}`}>
+                                    <td>{p1} vs {p2}</td>
+                                    <td className="num">{diff.toFixed(1)}</td>
+                                    <td style={{ color: isSig ? "var(--danger)" : "var(--mid)", fontWeight: isSig ? 700 : 400 }}>
+                                      {isSig ? "Oui" : "Non"}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </details>
                     </div>
                   )}
 

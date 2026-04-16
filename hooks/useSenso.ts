@@ -134,10 +134,20 @@ export const useSenso = () => {
     const rankQ = cfg.questions.filter((q: any) => q.type === "classement" || q.type === "seuil");
     const discQ = cfg.questions.filter((q: any) => ["triangulaire", "duo-trio", "a-non-a"].includes(q.type));
     const glQ = cfg.questions.filter((q: any) => q.scope === "global" && !["classement", "seuil", "triangulaire", "duo-trio", "a-non-a"].includes(q.type));
+    
     const products = getOrderedProducts(cfg, jurorName, jl);
+    const productOrder = products.map(p => p.code);
+
+    // Helper to sort codes of a question according to juror's specific order
+    const sortCodes = (q: Question) => {
+      if (!q.codes || q.codes.length === 0) return q;
+      const sorted = productOrder.filter(c => q.codes?.includes(c));
+      return { ...q, codes: sorted };
+    };
+
     if (ppQ.length) products.forEach(p => st.push({ type: "product", product: p, questions: ppQ }));
-    rankQ.forEach(q => st.push({ type: "ranking", question: q }));
-    discQ.forEach(q => st.push({ type: "discrim", question: q }));
+    rankQ.forEach(q => st.push({ type: "ranking", question: sortCodes(q) }));
+    discQ.forEach(q => st.push({ type: "discrim", question: sortCodes(q) }));
     if (glQ.length) st.push({ type: "global", questions: glQ });
     return st;
   };
