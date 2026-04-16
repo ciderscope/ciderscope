@@ -955,6 +955,16 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
   };
 
   const TYPES: QuestionType[] = ["scale", "classement", "seuil", "text", "qcm", "triangulaire", "duo-trio", "a-non-a"];
+  const TYPE_LABELS: Record<string, string> = {
+    scale: "échelle",
+    classement: "classement",
+    seuil: "seuil",
+    text: "texte",
+    qcm: "qcm",
+    triangulaire: "triangulaire",
+    "duo-trio": "duo-trio",
+    "a-non-a": "a-non-a"
+  };
 
   return (
     <div>
@@ -962,7 +972,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
         <div key={q.id} className={`q-builder q-builder-${q.type}`}>
           <div className="q-builder-header">
             <span className="q-num">Q{i + 1}</span>
-            <Badge variant="ns">{q.type}</Badge>
+            <Badge variant="ns">{TYPE_LABELS[q.type] || q.type}</Badge>
             <span style={{ flex: 1 }} />
             <button className="q-del" onClick={() => onSetEditCfg((prev: any) => ({ ...prev, questions: prev.questions.filter((_: any, idx: number) => idx !== i) }))}>
               <FiX />
@@ -1046,7 +1056,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
         <div className="flex mt8" style={{ flexWrap: "wrap" }}>
           {TYPES.map(t => (
             <Button key={t} variant="secondary" size="sm" onClick={() => addQuestion(t)}>
-              <FiPlus /> {t}
+              <FiPlus /> {TYPE_LABELS[t] || t}
             </Button>
           ))}
         </div>

@@ -21,13 +21,13 @@ function chiSquarePValue(chi2: number, df: number): number {
   return Math.max(0, Math.min(1, 1 - normalCDF(z)));
 }
 
-// Nemenyi Critical Values (Alpha = 0.05, divided by sqrt(2) as used in some formulas)
-// Approximate q values for Nemenyi test (Friedman version)
+// Nemenyi Critical Values (Alpha = 0.10, divided by sqrt(2) as used in some formulas)
+// Approximate q values for Nemenyi test (Friedman version) for Alpha = 0.10
 function getNemenyiCD(k: number, n: number): number {
   const qValues: Record<number, number> = {
-    2: 2.77, 3: 3.31, 4: 3.63, 5: 3.86, 6: 4.03, 7: 4.17, 8: 4.29, 9: 4.39, 10: 4.47
+    2: 2.33, 3: 2.90, 4: 3.24, 5: 3.48, 6: 3.66, 7: 3.81, 8: 3.93, 9: 4.04, 10: 4.13
   };
-  const q = qValues[k] || (4.47 + (k - 10) * 0.08); // fallback
+  const q = qValues[k] || (4.13 + (k - 10) * 0.08); // fallback
   // CD = q * sqrt(k*(k+1) / (6*n))
   return q * Math.sqrt((k * (k + 1)) / (6 * n));
 }
