@@ -853,6 +853,31 @@ textarea.q-text:focus { border-color: var(--accent); }
   border-bottom: 2.5px solid var(--accent);
 }
 
+/* ── Admin section sub-nav (Séances / Analyse) ── */
+.admin-section-nav {
+  display: flex; gap: 6px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0;
+}
+.admin-section-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 18px;
+  border: none; background: none;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer; border-radius: 8px 8px 0 0;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.admin-section-btn:hover { color: var(--text-primary); }
+.admin-section-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--surface);
+}
+
 /* ── Sample picker ── */
 .sample-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 

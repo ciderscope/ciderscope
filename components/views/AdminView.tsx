@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
-import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus } from "react-icons/fi";
+import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList } from "react-icons/fi";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
+import { AnalyseView } from "./AnalyseView";
 import { Question, QuestionType, Product } from "../../types";
 
 interface AdminViewProps {
@@ -23,16 +24,62 @@ interface AdminViewProps {
   onHome: () => void;
   buildCSVRows: (cfg: any, ans: any) => any[];
   downloadCSV: (rows: any[], filename: string) => void;
+  // Analyse props
+  allAnswers: any;
+  anSessId: string | null;
+  anCfg: any;
+  csvData: any[];
+  curAnT: string;
+  onAnSessChange: (id: string) => void;
+  onAnTabChange: (tab: string) => void;
 }
 
 export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
   onNewSession, onEditSession, onToggleActive, onDuplicateSession, onDeleteSession,
-  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, buildCSVRows, downloadCSV
+  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, buildCSVRows, downloadCSV,
+  allAnswers, anSessId, anCfg, csvData, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
+  const [adminSection, setAdminSection] = useState<"seances" | "analyse">("seances");
+
   if (screen === "landing") {
     return (
       <div className="admin-shell">
+        {/* Sub-nav */}
+        <div className="admin-section-nav">
+          <button
+            className={`admin-section-btn${adminSection === "seances" ? " active" : ""}`}
+            onClick={() => setAdminSection("seances")}
+          >
+            <FiList size={13} /> Séances
+          </button>
+          <button
+            className={`admin-section-btn${adminSection === "analyse" ? " active" : ""}`}
+            onClick={() => {
+              setAdminSection("analyse");
+              if (!anSessId && sessions.length) onAnSessChange(sessions[0].id);
+            }}
+          >
+            <FiBarChart2 size={13} /> Analyse
+          </button>
+        </div>
+
+        {adminSection === "analyse" && (
+          <AnalyseView
+            sessions={sessions}
+            anSessId={anSessId}
+            anCfg={anCfg}
+            csvData={csvData}
+            allAnswers={allAnswers}
+            curAnT={curAnT}
+            onAnSessChange={onAnSessChange}
+            onAnTabChange={onAnTabChange}
+            downloadCSV={downloadCSV}
+          />
+        )}
+
+        {adminSection === "seances" && (
+        <>
         <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px", flexWrap: "wrap" }}>
           <h2 style={{ fontFamily: "Syne", fontWeight: 800, fontSize: "22px" }}>Séances</h2>
           <div style={{ flex: 1 }}></div>
@@ -61,6 +108,8 @@ export const AdminView = ({
             ))
           )}
         </div>
+        </>
+        )}
       </div>
     );
   }

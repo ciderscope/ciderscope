@@ -1,15 +1,14 @@
-import { FiUsers, FiSettings, FiBarChart2 } from "react-icons/fi";
+import { FiUsers, FiSettings } from "react-icons/fi";
 
 interface TopbarProps {
-  mode: "participant" | "admin" | "analyse";
-  onModeChange: (mode: "participant" | "admin" | "analyse") => void;
+  mode: "participant" | "admin";
+  onModeChange: (mode: "participant" | "admin") => void;
   online?: boolean;
 }
 
 const NAV = [
   { id: "participant" as const, label: "Participants", icon: FiUsers },
   { id: "admin"       as const, label: "Admin",        icon: FiSettings },
-  { id: "analyse"     as const, label: "Analyse",      icon: FiBarChart2 },
 ];
 
 export const Topbar = ({ mode, onModeChange, online = false }: TopbarProps) => (

@@ -18,7 +18,6 @@ import { Topbar } from "../components/ui/Topbar";
 import { ParticipantView } from "../components/views/ParticipantView";
 import { AdminView } from "../components/views/AdminView";
 import { AdminLoginView } from "../components/views/AdminLoginView";
-import { AnalyseView } from "../components/views/AnalyseView";
 import { useSenso } from "../hooks/useSenso";
 
 ChartJS.register(
@@ -32,6 +31,16 @@ ChartJS.register(
   LinearScale,
   BarElement
 );
+
+const downloadCSV = (rows: any[], name: string) => {
+  if (rows.length === 0) return;
+  const hd = Object.keys(rows[0]);
+  const csv = "\ufeff" + [hd.join(";"), ...rows.map(r => hd.map(h => r[h]).join(";"))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = name + ".csv";
+  a.click();
+};
 
 export default function CiderScope() {
   const [adminAuth, setAdminAuth] = useState(false);
@@ -52,6 +61,7 @@ export default function CiderScope() {
     curEditTab, setCurEditTab,
     anSessId, anCfg, csvData, curAnT, setCurAnT,
     handleAnSessChange,
+    allAnswers,
     buildSteps,
     saveSession,
     deleteSession,
@@ -69,7 +79,6 @@ export default function CiderScope() {
         onModeChange={(m) => {
           setMode(m);
           setScreen("landing");
-          if (m === "analyse" && sessions.length && !anSessId) handleAnSessChange(sessions[0].id);
         }}
       />
 
@@ -129,11 +138,8 @@ export default function CiderScope() {
               const nc = { ...c, name: c.name + " (copie)", date: new Date().toISOString().slice(0, 10) };
               const ni = "s" + Date.now();
               const res = await saveSession(ni, nc, { active: false, jurorCount: 0 });
-              if (res.success) {
-                await loadSessions();
-              } else {
-                alert("Erreur lors de la duplication.");
-              }
+              if (res.success) await loadSessions();
+              else alert("Erreur lors de la duplication.");
             }}
             onDeleteSession={async (id) => {
               if (confirm("Supprimer cette séance ?")) {
@@ -153,7 +159,7 @@ export default function CiderScope() {
               const id = editSessId || "s" + Date.now();
               const existing = sessions.find(s => s.id === id);
               const res = await saveSession(id, editCfg, {
-                active: existing ? existing.active : true, // Active par défaut si nouvelle
+                active: existing ? existing.active : true,
                 jurorCount: existing?.jurorCount ?? 0,
               });
               if (res.success) {
@@ -172,21 +178,8 @@ export default function CiderScope() {
               });
               return rows;
             }}
-            downloadCSV={(rows, name) => {
-              if (rows.length === 0) return;
-              const hd = Object.keys(rows[0]);
-              const csv = "\ufeff" + [hd.join(";"), ...rows.map(r => hd.map(h => r[h]).join(";"))].join("\n");
-              const a = document.createElement("a");
-              a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-              a.download = name + ".csv";
-              a.click();
-            }}
-          />
-        )}
-
-        {mode === "analyse" && (
-          <AnalyseView
-            sessions={sessions}
+            downloadCSV={downloadCSV}
+            allAnswers={allAnswers}
             anSessId={anSessId}
             anCfg={anCfg}
             csvData={csvData}
