@@ -66,7 +66,7 @@ function computeCLD(products: string[], rankMeans: Record<string, number>, cd: n
     }
     if (currentGroup.length > 1) {
       // Check if this group is a subset of an existing one
-      const isSubset = pGroups.some(g => currentGroup.every(item => g.includes(item)));
+      const isSubset = pGroups.some((g: string[]) => currentGroup.every((item: string) => g.includes(item)));
       if (!isSubset) pGroups.push(currentGroup);
     } else {
       pGroups.push(currentGroup);
@@ -74,14 +74,14 @@ function computeCLD(products: string[], rankMeans: Record<string, number>, cd: n
   }
 
   // Clean up subsets
-  const finalGroups = pGroups.filter((g, i) => !pGroups.some((other, j) => i !== j && g.every(item => other.includes(item))));
+  const finalGroups = pGroups.filter((g: string[], i: number) => !pGroups.some((other: string[], j: number) => i !== j && g.every((item: string) => other.includes(item))));
   
   const productLetters: Record<string, string> = {};
-  products.forEach(p => productLetters[p] = "");
+  products.forEach((p: string) => productLetters[p] = "");
   
-  finalGroups.forEach((group, idx) => {
+  finalGroups.forEach((group: string[], idx: number) => {
     const letter = letters[idx % 26];
-    group.forEach(p => productLetters[p] += letter);
+    group.forEach((p: string) => productLetters[p] += letter);
   });
   
   return productLetters;
@@ -92,7 +92,7 @@ function spearmanRho(rank1: Record<string, number>, rank2: Record<string, number
   const n = products.length;
   if (n <= 1) return 1;
   let d2 = 0;
-  products.forEach(p => {
+  products.forEach((p: string) => {
     const d = (rank1[p] || 0) - (rank2[p] || 0);
     d2 += d * d;
   });
@@ -335,10 +335,10 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "se
         
         if (correctProducts.length > 0) {
           const correctRank: Record<string, number> = {};
-          correctProducts.forEach((p, idx) => { correctRank[p] = idx + 1; });
+          correctProducts.forEach((p: string, idx: number) => { correctRank[p] = idx + 1; });
           
           matrices.forEach(m => {
-            if (Object.keys(m).every(p => correctRank[p] === m[p])) matchCount++;
+            if (Object.keys(m).every((p: string) => correctRank[p] === m[p])) matchCount++;
             avgCorrelation += spearmanRho(correctRank, m, products);
           });
           avgCorrelation /= n;
@@ -354,7 +354,7 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "se
           labels: sortedByMean,
           datasets: [{
             label: "Rang moyen",
-            data: sortedByMean.map(p => parseFloat(rankMeans[p].toFixed(2))),
+            data: sortedByMean.map((p: string) => parseFloat(rankMeans[p].toFixed(2))),
             backgroundColor: sortedByMean.map((_, i) => COLORS[i % 8] + "cc"),
             borderColor: sortedByMean.map((_, i) => COLORS[i % 8]),
             borderWidth: 1,
@@ -423,11 +423,11 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "se
                     <table className="data-table" style={{ flex: 1 }}>
                       <thead><tr><th>Produit</th>{products.map((_, i) => <th key={i}>R{i + 1}</th>)}</tr></thead>
                       <tbody>
-                        {products.map(p => (
+                        {products.map((p: string) => (
                           <tr key={p}>
                             <td>{p}</td>
                             {products.map((_, idx) => {
-                              const count = matrices.filter(m => m[p] === idx + 1).length;
+                              const count = matrices.filter((m: Record<string, number>) => m[p] === idx + 1).length;
                               return <td key={idx} className="num">{count}</td>;
                             })}
                           </tr>
