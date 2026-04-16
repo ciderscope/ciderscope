@@ -101,6 +101,7 @@ export const AdminView = ({
   allAnswers, anSessId, anCfg, csvData, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
   const [adminSection, setAdminSection] = useState<"seances" | "analyse">("seances");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   if (screen === "landing") {
     return (
@@ -166,7 +167,14 @@ export const AdminView = ({
                     if (cfg) printServiceSheet(s.name, cfg);
                   }}><FiPrinter /></Button>
                   <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer"><FiCopy /></Button>
-                  <Button variant="ghost" size="sm" style={{ color: "var(--danger)" }} onClick={() => onDeleteSession(s.id)} title="Supprimer"><FiX /></Button>
+                  {confirmingId === s.id ? (
+                    <div style={{ display: "flex", gap: "4px" }}>
+                      <Button variant="danger" size="sm" onClick={() => { onDeleteSession(s.id); setConfirmingId(null); }}>Confirmer ?</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmingId(null)}>Annuler</Button>
+                    </div>
+                  ) : (
+                    <Button variant="ghost" size="sm" style={{ color: "var(--danger)" }} onClick={() => setConfirmingId(s.id)} title="Supprimer"><FiX /></Button>
+                  )}
                 </div>
               </div>
             ))
@@ -383,25 +391,60 @@ function ChipPool({ codes, label }: { codes: string[]; label?: string }) {
 // ─────────────────────────────────────────────
 // Draggable ordered list (série admin)
 // ─────────────────────────────────────────────
-function DraggableSerie({ codes, onChange, onRemove }: {
+function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
   codes: string[];
   onChange: (c: string[]) => void;
   onRemove: (code: string) => void;
+  onAdd?: (code: string) => void;
 }) {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
+  const [overEmpty, setOverEmpty] = useState(false);
 
-  const handleDrop = (i: number) => {
-    if (dragIdx === null || dragIdx === i) { setDragIdx(null); setOverIdx(null); return; }
-    const next = [...codes];
-    const [moved] = next.splice(dragIdx, 1);
-    next.splice(i, 0, moved);
-    onChange(next);
+  const handleDrop = (e: React.DragEvent, i: number) => {
+    e.preventDefault();
+    const code = e.dataTransfer.getData("chip-code");
+    const fromSerie = e.dataTransfer.getData("from-serie");
+
+    if (dragIdx !== null) {
+      // Internal move
+      if (dragIdx === i) { setDragIdx(null); setOverIdx(null); return; }
+      const next = [...codes];
+      const [moved] = next.splice(dragIdx, 1);
+      next.splice(i, 0, moved);
+      onChange(next);
+    } else if (code && fromSerie !== "1" && onAdd) {
+      // External add (from pool)
+      onAdd(code);
+    }
     setDragIdx(null); setOverIdx(null);
   };
 
   if (codes.length === 0) {
-    return <div className="serie-empty">Cliquez sur un échantillon ci-dessus pour l&apos;ajouter à la série</div>;
+    return (
+      <div 
+        className={`serie-empty${overEmpty ? " drag-over" : ""}`}
+        onDragOver={(e) => { e.preventDefault(); setOverEmpty(true); }}
+        onDragLeave={() => setOverEmpty(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOverEmpty(false);
+          const code = e.dataTransfer.getData("chip-code");
+          const fromSerie = e.dataTransfer.getData("from-serie");
+          if (code && fromSerie !== "1" && onAdd) onAdd(code);
+        }}
+        style={{ 
+          border: "2px dashed var(--border)", 
+          borderRadius: "12px", 
+          padding: "24px", 
+          textAlign: "center",
+          transition: "all .15s"
+        }}
+      >
+        Cliquez sur un échantillon ci-dessus pour l&apos;ajouter à la série <br/>
+        <span style={{ fontSize: "11px", color: "var(--mid)" }}>ou glissez-le ici</span>
+      </div>
+    );
   }
 
   return (
@@ -411,7 +454,7 @@ function DraggableSerie({ codes, onChange, onRemove }: {
         <div
           key={code}
           onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
-          onDrop={() => handleDrop(i)}
+          onDrop={(e) => handleDrop(e, i)}
           className={`draggable-item${dragIdx === i ? " dragging" : ""}${overIdx === i && dragIdx !== i ? " drag-over" : ""}`}
         >
           {/* Handle — seule partie draggable */}
@@ -501,7 +544,7 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
       <div className="builder-section-label" style={{ marginTop: "16px" }}>
         SÉRIE — {codes.length} échantillon{codes.length > 1 ? "s" : ""} · glissez pour réordonner · × pour retirer
       </div>
-      <DraggableSerie codes={codes} onChange={onChangeCodes} onRemove={removeFromSerie} />
+      <DraggableSerie codes={codes} onChange={onChangeCodes} onRemove={removeFromSerie} onAdd={addToSerie} />
 
       {/* Correct order — classement only, optional */}
       {type === "classement" && codes.length > 1 && (
@@ -526,6 +569,11 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
                 codes={correctOrder.length ? correctOrder.filter(c => codes.includes(c)) : [...codes]}
                 onChange={onChangeOrder}
                 onRemove={(code) => onChangeOrder(correctOrder.filter(c => c !== code))}
+                onAdd={(code) => {
+                  if (codes.includes(code) && !correctOrder.includes(code)) {
+                    onChangeOrder([...correctOrder, code]);
+                  }
+                }}
               />
             </>
           )}

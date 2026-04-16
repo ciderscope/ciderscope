@@ -143,10 +143,8 @@ export default function CiderScope() {
               else alert("Erreur lors de la duplication.");
             }}
             onDeleteSession={async (id) => {
-              if (confirm("Supprimer cette séance ?")) {
-                await deleteSession(id);
-                await loadSessions();
-              }
+              await deleteSession(id);
+              await loadSessions();
             }}
             onSetEditCfg={setEditCfg}
             onSetEditTab={setCurEditTab}
