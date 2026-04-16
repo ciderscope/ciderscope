@@ -343,7 +343,13 @@ function DraggableSerie({ codes, onChange, onRemove }: {
           <span className="drag-handle">&#8942;&#8942;</span>
           <span className="rank-pos">{i + 1}</span>
           <span className="rank-code">{code}</span>
-          <button className="chip-x" style={{ marginLeft: "auto" }} onClick={() => onRemove(code)} type="button">
+          <button
+            className="chip-x"
+            draggable={false}
+            style={{ marginLeft: "auto" }}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onRemove(code); }}
+            type="button"
+          >
             <FiX size={11} />
           </button>
         </div>
@@ -510,14 +516,16 @@ function DuoTrioBuilder({ products, codes, correctAnswer, onChangeCodes, onChang
 }
 
 // ─────────────────────────────────────────────
-// A non-A builder (two drop zones)
+// A non-A builder (two drop zones + référence)
 // ─────────────────────────────────────────────
-function ANonABuilder({ products, codes, correctAnswer, onChangeCodes, onChangeCorrect }: {
+function ANonABuilder({ products, codes, correctAnswer, refCode, onChangeCodes, onChangeCorrect, onChangeRef }: {
   products: Product[];
   codes: string[];
   correctAnswer: string;
+  refCode: string;
   onChangeCodes: (c: string[]) => void;
   onChangeCorrect: (v: string) => void;
+  onChangeRef: (v: string) => void;
 }) {
   // Parse correctAnswer string "X:A,Y:non-A" → {X:'A', Y:'non-A'}
   const parseAnswer = (s: string): Record<string, string> => {
@@ -584,8 +592,25 @@ function ANonABuilder({ products, codes, correctAnswer, onChangeCodes, onChangeC
     setOverPool(false);
   };
 
+  const [overRef, setOverRef] = useState(false);
+
   return (
     <div>
+      {/* Reference sample */}
+      <div className="builder-section-label">ÉCHANTILLON DE RÉFÉRENCE (A) — glissez l&apos;échantillon servant de référence</div>
+      <div
+        className={`drop-slot${overRef ? " drag-over" : ""}${refCode ? " filled" : ""}`}
+        style={{ maxWidth: "200px", marginBottom: "16px" }}
+        onDragOver={(e) => { e.preventDefault(); setOverRef(true); }}
+        onDragLeave={() => setOverRef(false)}
+        onDrop={(e) => { e.preventDefault(); const c = e.dataTransfer.getData("chip-code"); if (c) onChangeRef(c); setOverRef(false); }}
+      >
+        <div className="drop-slot-label" style={{ color: "var(--accent)" }}>Référence A</div>
+        {refCode
+          ? <Chip code={refCode} active removable onRemove={() => onChangeRef("")} />
+          : <span className="drop-slot-hint">Glisser ici</span>}
+      </div>
+
       {/* Products pool (not yet in test) */}
       {pool.length > 0 && (
         <div className="chip-pool-section">
@@ -803,8 +828,10 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
                 products={products}
                 codes={q.codes || []}
                 correctAnswer={q.correctAnswer || ""}
+                refCode={q.refCode || ""}
                 onChangeCodes={(c) => updateQ(i, { codes: c })}
                 onChangeCorrect={(v) => updateQ(i, { correctAnswer: v })}
+                onChangeRef={(v) => updateQ(i, { refCode: v })}
               />
             )}
 

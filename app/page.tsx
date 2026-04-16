@@ -103,6 +103,7 @@ export default function CiderScope() {
             }}
             onGoBack={() => setScreen("jury")}
             onHome={() => setScreen("landing")}
+            onReviewAnswers={() => handleLoginJury(cj)}
             buildSteps={buildSteps}
           />
         )}

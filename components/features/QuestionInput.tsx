@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { Badge } from "../ui/Badge";
 import { Question, Product } from "../../types";
+import { FiChevronRight } from "react-icons/fi";
 
 interface QuestionInputProps {
   q: Question;
@@ -10,46 +11,75 @@ interface QuestionInputProps {
   products?: Product[];
 }
 
-// Draggable list for classement / seuil
-function DraggableRank({ items, value, onChange }: { items: string[]; value: any; onChange: (v: any) => void }) {
+// Horizontal draggable rank for classement / seuil
+function HorizontalRank({ items, value, onChange }: { items: string[]; value: any; onChange: (v: any) => void }) {
   const ordered: string[] = Array.isArray(value) && value.length === items.length
     ? value
-    : items;
+    : [...items];
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
-  const handleDragStart = (i: number) => setDragIdx(i);
-  const handleDragOver = (e: React.DragEvent, i: number) => { e.preventDefault(); setOverIdx(i); };
+  const applyReorder = (from: number, to: number) => {
+    const next = [...ordered];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+  };
+
   const handleDrop = (i: number) => {
     if (dragIdx === null || dragIdx === i) { setDragIdx(null); setOverIdx(null); return; }
-    const next = [...ordered];
-    const [moved] = next.splice(dragIdx, 1);
-    next.splice(i, 0, moved);
-    onChange(next);
-    setDragIdx(null);
-    setOverIdx(null);
+    applyReorder(dragIdx, i);
+    setDragIdx(null); setOverIdx(null);
   };
-  const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
+
+  // Tap-to-swap for touch devices
+  const handleTap = (i: number) => {
+    if (selectedIdx === null) {
+      setSelectedIdx(i);
+    } else if (selectedIdx === i) {
+      setSelectedIdx(null);
+    } else {
+      applyReorder(selectedIdx, i);
+      setSelectedIdx(null);
+    }
+  };
 
   return (
-    <div className="draggable-list">
-      <p className="drag-hint">Glissez les échantillons pour les classer du meilleur au moins bon</p>
-      {ordered.map((code, i) => (
-        <div
-          key={code}
-          draggable
-          onDragStart={() => handleDragStart(i)}
-          onDragOver={(e) => handleDragOver(e, i)}
-          onDrop={() => handleDrop(i)}
-          onDragEnd={handleDragEnd}
-          className={`draggable-item${dragIdx === i ? " dragging" : ""}${overIdx === i && dragIdx !== i ? " drag-over" : ""}`}
-        >
-          <span className="drag-handle">&#8942;&#8942;</span>
-          <span className="rank-pos">{i + 1}</span>
-          <span className="rank-code">{code}</span>
-        </div>
-      ))}
+    <div className="h-rank-wrap">
+      <p className="drag-hint">
+        Glissez les échantillons pour les classer du moins (plus faible) au plus selon le critère de la question.
+        <span className="drag-hint-touch"> Sur tablette : appuyez sur un verre pour le sélectionner, puis sur sa position cible.</span>
+      </p>
+      <div className="h-rank-list">
+        {ordered.map((code, i) => (
+          <React.Fragment key={code}>
+            <div
+              draggable
+              onDragStart={() => { setDragIdx(i); setSelectedIdx(null); }}
+              onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
+              onDrop={() => handleDrop(i)}
+              onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+              onClick={() => handleTap(i)}
+              className={[
+                "h-rank-item",
+                dragIdx === i ? "dragging" : "",
+                overIdx === i && dragIdx !== i ? "drag-over" : "",
+                selectedIdx === i ? "h-rank-selected" : "",
+              ].filter(Boolean).join(" ")}
+            >
+              <span className="h-rank-pos">{i + 1}</span>
+              <span className="h-rank-code">{code}</span>
+            </div>
+            {i < ordered.length - 1 && (
+              <div className="h-rank-sep" aria-hidden="true">
+                <FiChevronRight size={16} />
+              </div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
     </div>
   );
 }
@@ -121,7 +151,7 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
       <div className="q-block">
         <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">{label}</Badge></span>
         {codes.length > 0 ? (
-          <DraggableRank items={codes} value={value} onChange={onChange} />
+          <HorizontalRank items={codes} value={value} onChange={onChange} />
         ) : (
           <p style={{ fontSize: "13px", color: "var(--mid)" }}>Aucun échantillon défini.</p>
         )}
@@ -169,12 +199,13 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
 
   if (q.type === "a-non-a") {
     const codes = q.codes || [];
+    const ref = q.refCode || "A";
     const currentVal: Record<string, string> = (typeof value === "object" && value !== null) ? value : {};
     return (
       <div className="q-block">
         <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">A / non-A</Badge></span>
         <p className="discrim-ref">
-          Vous avez un verre de référence <strong>A</strong> devant vous. Dites, pour chacun des verres ci-dessous, s&apos;il est identique ou différent du <strong>A</strong>.
+          Vous avez un verre de référence <strong>{ref}</strong> devant vous. Dites, pour chacun des verres ci-dessous, s&apos;il est identique ou différent du verre <strong>{ref}</strong>.
         </p>
         <div className="anona-grid">
           {codes.map(code => (

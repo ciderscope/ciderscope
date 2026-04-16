@@ -19,12 +19,13 @@ interface ParticipantViewProps {
   onSetJa: (ja: any) => void;
   onGoBack: () => void;
   onHome: () => void;
+  onReviewAnswers: () => void;
   buildSteps: (cfg: any, name: string) => any[];
 }
 
 export const ParticipantView = ({
   screen, sessions, curSess, jurors, cj, ja, cs,
-  onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, buildSteps
+  onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, onReviewAnswers, buildSteps
 }: ParticipantViewProps) => {
   const activeSessions = sessions.filter(s => s.active);
 
@@ -127,7 +128,10 @@ export const ParticipantView = ({
         <div className="done-icon"><FiCheckCircle size={48} color="var(--ok)" /></div>
         <h2>Merci !</h2>
         <p>Réponses enregistrées.</p>
-        <Button variant="secondary" onClick={onHome}><FiArrowLeft /> Retour</Button>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+          <Button variant="ghost" size="sm" onClick={onReviewAnswers}>Revoir mes réponses</Button>
+          <Button variant="secondary" onClick={onHome}><FiArrowLeft /> Retour</Button>
+        </div>
       </div>
     );
   }

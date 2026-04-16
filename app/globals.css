@@ -1422,6 +1422,83 @@ canvas { max-width: 100%; }
   transform: scale(1.01);
 }
 
+/* ── Horizontal rank (classement / seuil participant) ── */
+.h-rank-wrap { margin-top: 10px; }
+
+.drag-hint-touch {
+  display: none;
+  color: var(--mid); font-size: 11px;
+}
+
+.h-rank-list {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 14px 4px 18px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.h-rank-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 72px;
+  min-height: 80px;
+  padding: 12px 10px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  cursor: grab;
+  user-select: none;
+  transition: border-color .15s, box-shadow .15s, transform .12s;
+  flex-shrink: 0;
+}
+.h-rank-item:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(238,140,0,.12); }
+.h-rank-item:active { cursor: grabbing; }
+.h-rank-item.dragging { opacity: 0.4; transform: scale(0.94); }
+.h-rank-item.drag-over {
+  background: #fff8ed; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(238,140,0,.2);
+  transform: scale(1.04);
+}
+.h-rank-item.h-rank-selected {
+  border-color: var(--accent);
+  background: #fff8ed;
+  box-shadow: 0 0 0 3px rgba(238,140,0,.25);
+}
+
+.h-rank-pos {
+  font-size: 10px;
+  font-family: "DM Mono", monospace;
+  color: var(--mid);
+  font-weight: 500;
+}
+.h-rank-code {
+  font-family: "DM Mono", monospace;
+  font-size: clamp(14px, 2vw, 18px);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.h-rank-sep {
+  color: var(--mid);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .drag-hint-touch { display: inline; }
+  .h-rank-item { cursor: pointer; min-width: 64px; min-height: 72px; }
+}
+
 .drag-handle { font-size: 18px; color: var(--mid); letter-spacing: -2px; line-height: 1; opacity: 0.5; }
 
 .rank-pos {
