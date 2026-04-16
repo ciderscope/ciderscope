@@ -296,9 +296,9 @@ function Chip({ code, active, onClick, onDragStart, removable, onRemove }: {
 
   return (
     <div
-      className={`admin-chip${active ? " active" : ""}${onDragStart || onClick ? " draggable" : ""}`}
-      draggable={!!onDragStart || !!onClick}
-      onDragStart={handleDragStart}
+      className={`admin-chip${active ? " active" : ""}${onDragStart ? " draggable" : ""}`}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart ? handleDragStart : undefined}
       onClick={onClick}
       title={code}
     >
@@ -535,7 +535,12 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
           : pool.length === 0
             ? <span className="pool-hint">Ajoutez d&apos;abord des échantillons dans l&apos;onglet Session.</span>
             : pool.map(p => (
-                <Chip key={p.code} code={p.code} onClick={() => addToSerie(p.code)} />
+                <Chip
+                  key={p.code}
+                  code={p.code}
+                  onClick={() => addToSerie(p.code)}
+                  onDragStart={(e) => { e.dataTransfer.setData("chip-code", p.code); }}
+                />
               ))
         }
       </div>

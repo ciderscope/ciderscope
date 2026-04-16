@@ -43,10 +43,11 @@ const downloadCSV = (rows: any[], name: string) => {
 };
 
 export default function CiderScope() {
-  const [adminAuth, setAdminAuth] = useState(false);
+  // null = pas encore vérifié (évite le flash du formulaire de connexion)
+  const [adminAuth, setAdminAuth] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (sessionStorage.getItem("admin_auth") === "1") setAdminAuth(true);
+    setAdminAuth(sessionStorage.getItem("admin_auth") === "1");
   }, []);
 
   const {
@@ -108,11 +109,11 @@ export default function CiderScope() {
           />
         )}
 
-        {mode === "admin" && !adminAuth && (
+        {mode === "admin" && adminAuth === false && (
           <AdminLoginView onSuccess={() => setAdminAuth(true)} />
         )}
 
-        {mode === "admin" && adminAuth && (
+        {mode === "admin" && adminAuth === true && (
           <AdminView
             screen={screen}
             sessions={sessions}
