@@ -195,8 +195,8 @@ export const AnalyseView = ({
 
           <div id="anContent">
             {activeTab === "profil"       && <AnalyseProfil      config={anCfg} data={csvData} />}
-            {activeTab === "classement"   && <AnalyseFriedman    data={csvData} type="classement" />}
-            {activeTab === "seuil"        && <AnalyseFriedman    data={csvData} type="seuil" />}
+            {activeTab === "classement"   && <AnalyseFriedman    config={anCfg} data={csvData} type="classement" />}
+            {activeTab === "seuil"        && <AnalyseFriedman    config={anCfg} data={csvData} type="seuil" />}
             {activeTab === "triangulaire" && <AnalyseDiscrimType data={csvData} type="triangulaire" label="Triangulaire" />}
             {activeTab === "duo-trio"     && <AnalyseDiscrimType data={csvData} type="duo-trio"     label="Duo-trio" />}
             {activeTab === "a-non-a"      && <AnalyseDiscrimType data={csvData} type="a-non-a"      label="A-non-A" />}
@@ -273,7 +273,7 @@ function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
 
 // ─── Classement & Seuil → Friedman + Nemenyi ──────────────────────────────────
 
-function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "seuil" }) {
+function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; type: "classement" | "seuil" }) {
   const rankRows = data.filter(r => r.type === type && r.valeur);
   const questions = [...new Set(rankRows.map(r => r.question))];
   const title = type === "seuil" ? "Seuil" : "Classement";
@@ -348,6 +348,20 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "se
         const nemenyiCD = getNemenyiCD(k, n);
         const cld = pValue < 0.05 ? computeCLD(products, rankMeans, nemenyiCD) : {};
 
+        // Identification du seuil (si p < 0.05)
+        let thresholdProduct: string | null = null;
+        if (type === "seuil" && pValue < 0.05) {
+          const sortedByMeanLocal = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
+          const firstGroup = cld[sortedByMeanLocal[0]] || "";
+          // Le premier échantillon dont le groupe ne contient pas les lettres du premier échantillon
+          // On cherche le premier qui n'a AUCUNE lettre commune avec le groupe 'a' initial
+          // Ou plus simplement, si les groupes sont a, ab, b -> le premier sans 'a'
+          thresholdProduct = sortedByMeanLocal.find(p => {
+            const letters = cld[p] || "";
+            return ![...firstGroup].some(l => letters.includes(l));
+          }) || null;
+        }
+
         // Bar chart data — rank means (lower = better rank)
         const sortedByMean = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
         const barData = {
@@ -391,13 +405,13 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "se
                 </table>
 
                 <div style={{ marginTop: "16px", padding: "12px 14px", background: "var(--bg)", borderRadius: "8px", fontSize: "13px", lineHeight: 1.8 }}>
-                  <div><strong>Test de Friedman</strong></div>
+                  <div><strong>Test de Friedman</strong> (α=0,05)</div>
                   <div>n = {n} jurys · k = {k} produits</div>
                   <div>χ² = {chi2.toFixed(3)} · p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)} <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span></div>
                   
                   {pValue < 0.05 && (
                     <div style={{ marginTop: "12px" }}>
-                      <strong>Post-hoc de Nemenyi</strong> (α=0,05)
+                      <strong>Post-hoc de Nemenyi</strong> (α=0,10)
                       <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Différence Critique (CD) = {nemenyiCD.toFixed(2)}</div>
                       <div style={{ fontSize: "11px", color: "#1a6b3a", fontStyle: "italic", marginBottom: "8px" }}>
                         Les produits partageant une même lettre ne sont pas significativement différents.
@@ -429,6 +443,18 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "se
                           </tbody>
                         </table>
                       </details>
+                    </div>
+                  )}
+
+                  {thresholdProduct && (
+                    <div style={{ marginTop: "12px", padding: "10px", background: "var(--paper2)", borderLeft: "4px solid var(--accent)", borderRadius: "4px" }}>
+                      <strong>Conclusion Seuil</strong>
+                      <div>L&apos;échantillon marquant le seuil est : <strong>{thresholdProduct}</strong></div>
+                      {config?.products?.find((p: any) => p.code === thresholdProduct)?.label && (
+                        <div style={{ fontSize: "12px", color: "var(--mid)", fontStyle: "italic", marginTop: "4px" }}>
+                          Descripteurs : {config.products.find((p: any) => p.code === thresholdProduct).label}
+                        </div>
+                      )}
                     </div>
                   )}
 
