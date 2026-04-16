@@ -281,11 +281,16 @@ function Chip({ code, active, onClick, onDragStart, removable, onRemove }: {
   removable?: boolean;
   onRemove?: () => void;
 }) {
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData("chip-code", code);
+    if (onDragStart) onDragStart(e);
+  };
+
   return (
     <div
-      className={`admin-chip${active ? " active" : ""}${onDragStart ? " draggable" : ""}`}
-      draggable={!!onDragStart}
-      onDragStart={onDragStart}
+      className={`admin-chip${active ? " active" : ""}${onDragStart || onClick ? " draggable" : ""}`}
+      draggable={!!onDragStart || !!onClick}
+      onDragStart={handleDragStart}
       onClick={onClick}
       title={code}
     >
@@ -863,7 +868,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
     if (type === "triangulaire") newQ.codes = allCodes.slice(0, 3);
     if (type === "duo-trio") newQ.codes = allCodes.slice(0, 3);
     if (type === "a-non-a") { newQ.codes = allCodes; newQ.correctAnswer = ""; }
-    if (type === "classement" || type === "seuil") { newQ.codes = allCodes; newQ.correctOrder = []; }
+    if (type === "classement" || type === "seuil") { newQ.codes = []; newQ.correctOrder = []; }
     onSetEditCfg({ ...editCfg, questions: [...editCfg.questions, newQ] });
   };
 

@@ -14,6 +14,7 @@ const NAV = [
 export const Topbar = ({ mode, onModeChange, online = false }: TopbarProps) => (
   <div className="topbar">
     <div className="topbar-logo">
+      <img src="/Logo.jpg" alt="Logo" style={{ height: "24px", marginRight: "8px", borderRadius: "4px" }} />
       <span className="topbar-logo-ifpc">IFPC</span>
       <span className="topbar-logo-sep">/</span>
       Cider<span>Scope</span>

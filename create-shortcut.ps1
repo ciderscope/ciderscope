@@ -4,8 +4,14 @@ param(
 )
 
 $WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\CiderScope.url")
+$ShortcutPath = "$env:USERPROFILE\Desktop\CiderScope.url"
+$Shortcut = $WshShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath = $Url
 $Shortcut.Save()
 
-Write-Host "Raccourci créé sur le bureau : CiderScope -> $Url"
+# Ajouter l'icône au fichier .url (nécessite une modification directe du fichier car l'objet COM ne le gère pas bien pour les .url)
+$IconPath = "$PSScriptRoot\public\Logo.ico"
+Add-Content $ShortcutPath "IconFile=$IconPath"
+Add-Content $ShortcutPath "IconIndex=0"
+
+Write-Host "Raccourci créé sur le bureau : CiderScope -> $Url (avec icône)"
