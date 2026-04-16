@@ -1,5 +1,4 @@
 "use client";
-export const dynamic = "force-dynamic";
 
 import {
   Chart as ChartJS,
@@ -51,12 +50,14 @@ export default function CiderScope() {
     toggleActive,
     loadSessions,
     loadSessionConfig,
+    online,
   } = useSenso();
 
   return (
     <div>
       <Topbar
         mode={mode}
+        online={online}
         onModeChange={(m) => {
           setMode(m);
           setScreen("landing");
@@ -115,8 +116,12 @@ export default function CiderScope() {
               if (!c) return;
               const nc = { ...c, name: c.name + " (copie)", date: new Date().toISOString().slice(0, 10) };
               const ni = "s" + Date.now();
-              await saveSession(ni, nc, { active: false, jurorCount: 0 });
-              await loadSessions();
+              const res = await saveSession(ni, nc, { active: false, jurorCount: 0 });
+              if (res.success) {
+                await loadSessions();
+              } else {
+                alert("Erreur lors de la duplication.");
+              }
             }}
             onDeleteSession={async (id) => {
               if (confirm("Supprimer cette séance ?")) {
@@ -129,14 +134,22 @@ export default function CiderScope() {
             onHome={() => setScreen("landing")}
             onSaveEdit={async () => {
               if (!editCfg) return;
+              if (!editCfg.name.trim()) {
+                alert("Veuillez donner un nom à la séance.");
+                return;
+              }
               const id = editSessId || "s" + Date.now();
               const existing = sessions.find(s => s.id === id);
-              await saveSession(id, editCfg, {
-                active: existing?.active ?? false,
+              const res = await saveSession(id, editCfg, {
+                active: existing ? existing.active : true, // Active par défaut si nouvelle
                 jurorCount: existing?.jurorCount ?? 0,
               });
-              await loadSessions();
-              setScreen("landing");
+              if (res.success) {
+                await loadSessions();
+                setScreen("landing");
+              } else {
+                alert("Erreur lors de l'enregistrement.");
+              }
             }}
             buildCSVRows={(cfg, ans) => {
               const rows: any[] = [];

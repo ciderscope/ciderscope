@@ -9,6 +9,7 @@ export const useSenso = () => {
   const [screen, setScreen] = useState<"landing" | "jury" | "form" | "done" | "edit">("landing");
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [online, setOnline] = useState(false);
   const [curSessId, setCurSessId] = useState<string | null>(null);
   const [curSess, setCurSess] = useState<SessionConfig | null>(null);
   const [jurors, setJurors] = useState<string[]>([]);
@@ -23,6 +24,18 @@ export const useSenso = () => {
   const [allAnswers, setAllAnswers] = useState<any>({});
   const [curAnT, setCurAnT] = useState<string>("profil");
 
+  // Online/offline detection
+  useEffect(() => {
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
   // Load session list on mount
   useEffect(() => {
     loadSessions();
@@ -34,7 +47,11 @@ export const useSenso = () => {
       .from("sessions")
       .select("id, name, date, active, juror_count")
       .order("created_at", { ascending: false });
-    if (!error && data) {
+    if (error) {
+      console.error("Erreur lors du chargement des séances:", error);
+      setOnline(false);
+    } else if (data) {
+      setOnline(true);
       setSessions(data.map((r: any) => ({
         id: r.id,
         name: r.name,
@@ -56,7 +73,10 @@ export const useSenso = () => {
       .select("config")
       .eq("id", id)
       .single();
-    if (error || !data) return null;
+    if (error || !data) {
+      console.error("Erreur lors du chargement de la config:", error);
+      return null;
+    }
     return data.config as SessionConfig;
   };
 
@@ -65,10 +85,11 @@ export const useSenso = () => {
     if (!cfg) return;
     setCurSessId(id);
     setCurSess(cfg);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("answers")
       .select("juror_name")
       .eq("session_id", id);
+    if (error) console.error("Erreur lors du chargement des jurys:", error);
     setJurors(data ? data.map((r: any) => r.juror_name) : []);
     setScreen("jury");
   };
@@ -179,7 +200,7 @@ export const useSenso = () => {
   };
 
   const saveSession = async (id: string, cfg: SessionConfig, meta: Partial<SessionListItem>) => {
-    await supabase.from("sessions").upsert({
+    const { error } = await supabase.from("sessions").upsert({
       id,
       name: meta.name ?? cfg.name,
       date: meta.date ?? cfg.date,
@@ -187,10 +208,16 @@ export const useSenso = () => {
       juror_count: meta.jurorCount ?? 0,
       config: cfg,
     });
+    if (error) {
+      console.error("Erreur lors de l'enregistrement de la séance:", error);
+      return { success: false, error };
+    }
+    return { success: true };
   };
 
   const deleteSession = async (id: string) => {
-    await supabase.from("sessions").delete().eq("id", id);
+    const { error } = await supabase.from("sessions").delete().eq("id", id);
+    if (error) console.error("Erreur lors de la suppression:", error);
   };
 
   const toggleActive = async (id: string) => {
@@ -232,7 +259,7 @@ export const useSenso = () => {
     mode, setMode,
     screen, setScreen,
     sessions, saveSessions,
-    loading,
+    loading, online,
     loadSessionConfig,
     curSessId, curSess,
     jurors, cj, ja, cs, setCs,

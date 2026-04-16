@@ -256,84 +256,125 @@ function ChipPool({ codes, label }: { codes: string[]; label?: string }) {
 }
 
 // ─────────────────────────────────────────────
+// Draggable ordered list (série admin)
+// ─────────────────────────────────────────────
+function DraggableSerie({ codes, onChange, onRemove }: {
+  codes: string[];
+  onChange: (c: string[]) => void;
+  onRemove: (code: string) => void;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+
+  const handleDrop = (i: number) => {
+    if (dragIdx === null || dragIdx === i) { setDragIdx(null); setOverIdx(null); return; }
+    const next = [...codes];
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(i, 0, moved);
+    onChange(next);
+    setDragIdx(null); setOverIdx(null);
+  };
+
+  if (codes.length === 0) {
+    return <div className="serie-empty">Cliquez sur un échantillon ci-dessus pour l&apos;ajouter à la série</div>;
+  }
+
+  return (
+    <div className="draggable-list admin-order-list">
+      {codes.map((code, i) => (
+        <div
+          key={code}
+          draggable
+          onDragStart={() => setDragIdx(i)}
+          onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
+          onDrop={() => handleDrop(i)}
+          onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+          className={`draggable-item${dragIdx === i ? " dragging" : ""}${overIdx === i && dragIdx !== i ? " drag-over" : ""}`}
+        >
+          <span className="drag-handle">&#8942;&#8942;</span>
+          <span className="rank-pos">{i + 1}</span>
+          <span className="rank-code">{code}</span>
+          <button className="chip-x" style={{ marginLeft: "auto" }} onClick={() => onRemove(code)} type="button">
+            <FiX size={11} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Classement / Seuil builder
 // ─────────────────────────────────────────────
-function ClassementBuilder({ products, codes, correctOrder, onChangeCodes, onChangeOrder }: {
+function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes, onChangeOrder }: {
+  type: "classement" | "seuil";
   products: Product[];
   codes: string[];
   correctOrder: string[];
   onChangeCodes: (c: string[]) => void;
   onChangeOrder: (o: string[]) => void;
 }) {
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const [showCorrectOrder, setShowCorrectOrder] = useState(correctOrder.length > 0);
 
-  // Sync correctOrder whenever codes changes
-  const handleCodesChange = (newCodes: string[]) => {
-    onChangeCodes(newCodes);
-    // Remove from correctOrder any code that's no longer selected
-    onChangeOrder(correctOrder.filter(c => newCodes.includes(c)));
+  const pool = products.filter(p => !codes.includes(p.code));
+
+  const addToSerie = (code: string) => {
+    onChangeCodes([...codes, code]);
   };
 
-  const handleDrop = (i: number) => {
-    if (dragIdx === null || dragIdx === i) { setDragIdx(null); setOverIdx(null); return; }
-    const next = [...correctOrder];
-    const [moved] = next.splice(dragIdx, 1);
-    next.splice(i, 0, moved);
-    onChangeOrder(next);
-    setDragIdx(null); setOverIdx(null);
+  const removeFromSerie = (code: string) => {
+    onChangeCodes(codes.filter(c => c !== code));
+    onChangeOrder(correctOrder.filter(c => c !== code));
   };
-
-  // codes not yet in correctOrder
-  const unordered = codes.filter(c => !correctOrder.includes(c));
 
   return (
     <div>
-      <div className="builder-section-label">ÉCHANTILLONS INCLUS — cliquez pour inclure / exclure</div>
-      <SampleToggle products={products} selected={codes} onChange={handleCodesChange} />
+      {/* Pool — available samples */}
+      <div className="builder-section-label">DISPONIBLES — cliquez pour ajouter à la série</div>
+      <div className="chip-pool" style={{ minHeight: "36px" }}>
+        {pool.length === 0 && codes.length > 0
+          ? <span className="pool-hint">Tous les échantillons sont dans la série</span>
+          : pool.length === 0
+            ? <span className="pool-hint">Ajoutez d&apos;abord des échantillons dans l&apos;onglet Session.</span>
+            : pool.map(p => (
+                <Chip key={p.code} code={p.code} onClick={() => addToSerie(p.code)} />
+              ))
+        }
+      </div>
 
-      {codes.length > 0 && (
-        <>
-          <div className="builder-section-label" style={{ marginTop: "16px" }}>
-            ORDRE CORRECT — glissez pour définir l&apos;ordre attendu (du meilleur au moins bon)
-          </div>
-          {unordered.length > 0 && (
-            <ChipPool codes={unordered} label="Non encore classés — glissez-les dans la liste ci-dessous" />
+      {/* Série — selected + orderable */}
+      <div className="builder-section-label" style={{ marginTop: "16px" }}>
+        SÉRIE — {codes.length} échantillon{codes.length > 1 ? "s" : ""} · glissez pour réordonner · × pour retirer
+      </div>
+      <DraggableSerie codes={codes} onChange={onChangeCodes} onRemove={removeFromSerie} />
+
+      {/* Correct order — classement only, optional */}
+      {type === "classement" && codes.length > 1 && (
+        <div style={{ marginTop: "16px" }}>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={showCorrectOrder}
+              onChange={(e) => {
+                setShowCorrectOrder(e.target.checked);
+                if (!e.target.checked) onChangeOrder([]);
+              }}
+            />
+            <span className="builder-section-label" style={{ margin: 0 }}>ORDRE ATTENDU (optionnel) — définir la bonne réponse</span>
+          </label>
+          {showCorrectOrder && (
+            <>
+              <div style={{ fontSize: "12px", color: "var(--mid)", margin: "6px 0 8px" }}>
+                Glissez les échantillons dans l&apos;ordre correct attendu du jury
+              </div>
+              <DraggableSerie
+                codes={correctOrder.length ? correctOrder.filter(c => codes.includes(c)) : [...codes]}
+                onChange={onChangeOrder}
+                onRemove={(code) => onChangeOrder(correctOrder.filter(c => c !== code))}
+              />
+            </>
           )}
-          <div className="draggable-list admin-order-list">
-            {correctOrder.filter(c => codes.includes(c)).map((code, i) => (
-              <div
-                key={code}
-                draggable
-                onDragStart={() => setDragIdx(i)}
-                onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
-                onDrop={() => handleDrop(i)}
-                onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
-                className={`draggable-item${dragIdx === i ? " dragging" : ""}${overIdx === i && dragIdx !== i ? " drag-over" : ""}`}
-              >
-                <span className="drag-handle">&#8942;&#8942;</span>
-                <span className="rank-pos">{i + 1}</span>
-                <span className="rank-code">{code}</span>
-                <button className="chip-x" style={{ marginLeft: "auto" }} onClick={() => onChangeOrder(correctOrder.filter(c => c !== code))} type="button">
-                  <FiX size={11} />
-                </button>
-              </div>
-            ))}
-            {/* drop zone at bottom to add unordered */}
-            {unordered.map(code => (
-              <div
-                key={code}
-                className="draggable-item unordered"
-                onClick={() => onChangeOrder([...correctOrder.filter(c => codes.includes(c)), code])}
-              >
-                <span className="drag-handle" style={{ opacity: 0.3 }}>&#8942;&#8942;</span>
-                <span className="rank-pos" style={{ color: "var(--mid)" }}>—</span>
-                <span className="rank-code" style={{ color: "var(--mid)" }}>{code}</span>
-                <span style={{ marginLeft: "auto", fontSize: "11px", color: "var(--accent)", cursor: "pointer" }}>+ ajouter</span>
-              </div>
-            ))}
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -679,6 +720,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
 
             {(q.type === "classement" || q.type === "seuil") && (
               <ClassementBuilder
+                type={q.type}
                 products={products}
                 codes={q.codes || []}
                 correctOrder={q.correctOrder || []}

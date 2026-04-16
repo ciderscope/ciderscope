@@ -9,8 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@prisma/client": "^7.7.0",
     "@supabase/ssr": "^0.10.2",
-    "@supabase/supabase-js": "^2.103.1",
+    "@supabase/supabase-js": "^2.103.2",
     "chart.js": "^4.5.1",
     "next": "16.2.3",
     "react": "19.2.4",
@@ -25,6 +26,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
+    "pg": "^8.20.0",
+    "prisma": "^7.7.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
