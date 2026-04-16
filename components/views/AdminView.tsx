@@ -924,7 +924,7 @@ function QCMOptions({ options, onChange }: { options: string[]; onChange: (o: st
 // ─────────────────────────────────────────────
 // Main question builder
 // ─────────────────────────────────────────────
-function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg: any }) {
+function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg: (val: any) => void }) {
   const products: Product[] = editCfg.products || [];
 
   const addQuestion = (type: QuestionType) => {
@@ -942,13 +942,16 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
     if (type === "duo-trio") newQ.codes = allCodes.slice(0, 3);
     if (type === "a-non-a") { newQ.codes = allCodes; newQ.correctAnswer = ""; }
     if (type === "classement" || type === "seuil") { newQ.codes = []; newQ.correctOrder = []; }
-    onSetEditCfg({ ...editCfg, questions: [...editCfg.questions, newQ] });
+    
+    onSetEditCfg((prev: any) => ({ ...prev, questions: [...prev.questions, newQ] }));
   };
 
   const updateQ = (i: number, patch: Partial<Question>) => {
-    const n = [...editCfg.questions];
-    n[i] = { ...n[i], ...patch };
-    onSetEditCfg({ ...editCfg, questions: n });
+    onSetEditCfg((prev: any) => {
+      const n = [...prev.questions];
+      n[i] = { ...n[i], ...patch };
+      return { ...prev, questions: n };
+    });
   };
 
   const TYPES: QuestionType[] = ["scale", "classement", "seuil", "text", "qcm", "triangulaire", "duo-trio", "a-non-a"];
@@ -961,7 +964,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
             <span className="q-num">Q{i + 1}</span>
             <Badge variant="ns">{q.type}</Badge>
             <span style={{ flex: 1 }} />
-            <button className="q-del" onClick={() => onSetEditCfg({ ...editCfg, questions: editCfg.questions.filter((_: any, idx: number) => idx !== i) })}>
+            <button className="q-del" onClick={() => onSetEditCfg((prev: any) => ({ ...prev, questions: prev.questions.filter((_: any, idx: number) => idx !== i) }))}>
               <FiX />
             </button>
           </div>

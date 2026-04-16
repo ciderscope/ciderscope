@@ -21,6 +21,84 @@ function chiSquarePValue(chi2: number, df: number): number {
   return Math.max(0, Math.min(1, 1 - normalCDF(z)));
 }
 
+// Nemenyi Critical Values (Alpha = 0.05, divided by sqrt(2) as used in some formulas)
+// Approximate q values for Nemenyi test (Friedman version)
+function getNemenyiCD(k: number, n: number): number {
+  const qValues: Record<number, number> = {
+    2: 2.77, 3: 3.31, 4: 3.63, 5: 3.86, 6: 4.03, 7: 4.17, 8: 4.29, 9: 4.39, 10: 4.47
+  };
+  const q = qValues[k] || (4.47 + (k - 10) * 0.08); // fallback
+  // CD = q * sqrt(k*(k+1) / (6*n))
+  return q * Math.sqrt((k * (k + 1)) / (6 * n));
+}
+
+function computeCLD(products: string[], rankMeans: Record<string, number>, cd: number): Record<string, string> {
+  const sorted = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
+  const k = sorted.length;
+  const groups: number[][] = [];
+  
+  for (let i = 0; i < k; i++) {
+    for (let j = i; j < k; j++) {
+      if (Math.abs(rankMeans[sorted[i]] - rankMeans[sorted[j]]) <= cd) {
+        // They are in the same group
+        let found = false;
+        for (const g of groups) {
+          if (g.includes(i) || g.includes(j)) {
+            // This logic is a bit complex for a simple loop, let's use the standard algorithm
+          }
+        }
+      }
+    }
+  }
+  
+  // Simplified CLD algorithm
+  const letters = "abcdefghijklmnopqrstuvwxyz";
+  const pGroups: string[][] = [];
+  
+  for (let i = 0; i < k; i++) {
+    const currentGroup = [sorted[i]];
+    for (let j = i + 1; j < k; j++) {
+      if (Math.abs(rankMeans[sorted[i]] - rankMeans[sorted[j]]) <= cd) {
+        currentGroup.push(sorted[j]);
+      } else {
+        break;
+      }
+    }
+    if (currentGroup.length > 1) {
+      // Check if this group is a subset of an existing one
+      const isSubset = pGroups.some(g => currentGroup.every(item => g.includes(item)));
+      if (!isSubset) pGroups.push(currentGroup);
+    } else {
+      pGroups.push(currentGroup);
+    }
+  }
+
+  // Clean up subsets
+  const finalGroups = pGroups.filter((g, i) => !pGroups.some((other, j) => i !== j && g.every(item => other.includes(item))));
+  
+  const productLetters: Record<string, string> = {};
+  products.forEach(p => productLetters[p] = "");
+  
+  finalGroups.forEach((group, idx) => {
+    const letter = letters[idx % 26];
+    group.forEach(p => productLetters[p] += letter);
+  });
+  
+  return productLetters;
+}
+
+// Spearman correlation for ranking comparison
+function spearmanRho(rank1: Record<string, number>, rank2: Record<string, number>, products: string[]): number {
+  const n = products.length;
+  if (n <= 1) return 1;
+  let d2 = 0;
+  products.forEach(p => {
+    const d = (rank1[p] || 0) - (rank2[p] || 0);
+    d2 += d * d;
+  });
+  return 1 - (6 * d2) / (n * (n * n - 1));
+}
+
 function wordColor(w: string) {
   let h = 0;
   for (const c of w) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
@@ -118,7 +196,7 @@ export const AnalyseView = ({
           <div id="anContent">
             {activeTab === "profil"       && <AnalyseProfil      config={anCfg} data={csvData} />}
             {activeTab === "classement"   && <AnalyseFriedman    data={csvData} type="classement" />}
-            {activeTab === "seuil"        && <AnalyseSeuil       data={csvData} />}
+            {activeTab === "seuil"        && <AnalyseFriedman    data={csvData} type="seuil" />}
             {activeTab === "triangulaire" && <AnalyseDiscrimType data={csvData} type="triangulaire" label="Triangulaire" />}
             {activeTab === "duo-trio"     && <AnalyseDiscrimType data={csvData} type="duo-trio"     label="Duo-trio" />}
             {activeTab === "a-non-a"      && <AnalyseDiscrimType data={csvData} type="a-non-a"      label="A-non-A" />}
@@ -193,14 +271,15 @@ function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
   );
 }
 
-// ─── Classement → Friedman ────────────────────────────────────────────────────
+// ─── Classement & Seuil → Friedman + Nemenyi ──────────────────────────────────
 
-function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" }) {
+function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" | "seuil" }) {
   const rankRows = data.filter(r => r.type === type && r.valeur);
   const questions = [...new Set(rankRows.map(r => r.question))];
+  const title = type === "seuil" ? "Seuil" : "Classement";
 
   if (rankRows.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée de classement disponible.</div>;
+    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée de {type} disponible.</div>;
   }
 
   return (
@@ -223,7 +302,7 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" }) {
 
         if (n < 2 || k < 2) {
           return (
-            <Card key={q} title={`Classement — ${q}`}>
+            <Card key={q} title={`${title} — ${q}`}>
               <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
                 Pas assez de réponses ({n} jury{n > 1 ? "s" : ""}) pour calculer le test de Friedman.
               </p>
@@ -248,9 +327,26 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" }) {
         const sig = pValue < 0.001 ? "***" : pValue < 0.01 ? "**" : pValue < 0.05 ? "*" : "ns";
         const sigColor = pValue < 0.05 ? "#1a6b3a" : "#888";
 
-        // Correct order
+        // Correct order comparison
         const correctStr = qRows[0]?.correct || "";
         const correctProducts = correctStr ? correctStr.split(">").map((s: string) => s.trim()) : [];
+        let matchCount = 0;
+        let avgCorrelation = 0;
+        
+        if (correctProducts.length > 0) {
+          const correctRank: Record<string, number> = {};
+          correctProducts.forEach((p, idx) => { correctRank[p] = idx + 1; });
+          
+          matrices.forEach(m => {
+            if (Object.keys(m).every(p => correctRank[p] === m[p])) matchCount++;
+            avgCorrelation += spearmanRho(correctRank, m, products);
+          });
+          avgCorrelation /= n;
+        }
+
+        // Nemenyi Post-hoc & CLD
+        const nemenyiCD = getNemenyiCD(k, n);
+        const cld = pValue < 0.05 ? computeCLD(products, rankMeans, nemenyiCD) : {};
 
         // Bar chart data — rank means (lower = better rank)
         const sortedByMean = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
@@ -266,7 +362,7 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" }) {
         };
 
         return (
-          <Card key={q} title={`Classement — ${q}`}>
+          <Card key={q} title={`${title} — ${q}`}>
             <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-start" }}>
               <div style={{ flex: "1 1 260px", maxWidth: "360px" }}>
                 <Bar
@@ -281,14 +377,14 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" }) {
               <div style={{ flex: "1 1 200px" }}>
                 <table className="data-table">
                   <thead>
-                    <tr><th>Produit</th><th>Rang moyen</th><th>Σ rangs</th></tr>
+                    <tr><th>Produit</th><th>Rang moyen</th>{pValue < 0.05 && <th>Gr.</th>}</tr>
                   </thead>
                   <tbody>
                     {sortedByMean.map(p => (
                       <tr key={p}>
                         <td style={{ fontFamily: "DM Mono, monospace" }}>{p}</td>
                         <td className="num">{rankMeans[p].toFixed(2)}</td>
-                        <td className="num">{rankSums[p]}</td>
+                        {pValue < 0.05 && <td style={{ textAlign: "center", fontWeight: 700, color: "var(--accent)" }}>{cld[p]}</td>}
                       </tr>
                     ))}
                   </tbody>
@@ -297,125 +393,49 @@ function AnalyseFriedman({ data, type }: { data: any[]; type: "classement" }) {
                 <div style={{ marginTop: "16px", padding: "12px 14px", background: "var(--bg)", borderRadius: "8px", fontSize: "13px", lineHeight: 1.8 }}>
                   <div><strong>Test de Friedman</strong></div>
                   <div>n = {n} jurys · k = {k} produits</div>
-                  <div>χ² = {chi2.toFixed(3)} · ddl = {df}</div>
-                  <div>
-                    p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)}
-                    {" "}
-                    <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span>
-                  </div>
+                  <div>χ² = {chi2.toFixed(3)} · p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)} <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span></div>
+                  
                   {pValue < 0.05 && (
-                    <div style={{ color: "#1a6b3a", fontSize: "12px", marginTop: "4px" }}>
-                      Différence significative entre les produits (α=0,05)
+                    <div style={{ marginTop: "8px" }}>
+                      <strong>Post-hoc de Nemenyi</strong> (α=0,05)
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Différence Critique (CD) = {nemenyiCD.toFixed(2)}</div>
+                      <div style={{ fontSize: "11px", color: "#1a6b3a", fontStyle: "italic" }}>
+                        Les produits partageant une même lettre ne sont pas significativement différents.
+                      </div>
                     </div>
                   )}
+
                   {correctProducts.length > 0 && (
-                    <div style={{ marginTop: "8px", color: "var(--text-muted)", fontSize: "12px" }}>
-                      Ordre attendu : {correctProducts.join(" > ")}
+                    <div style={{ marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
+                      <strong>Conformité à l&apos;ordre attendu</strong>
+                      <div>{matchCount} / {n} jurys exacts ({(matchCount / n * 100).toFixed(0)}%)</div>
+                      <div>Corrélation moyenne ρ = {avgCorrelation.toFixed(2)}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Attendu : {correctProducts.join(" > ")}</div>
                     </div>
                   )}
                 </div>
               </div>
             </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Seuil ───────────────────────────────────────────────────────────────────
-
-function AnalyseSeuil({ data }: { data: any[] }) {
-  const seuilRows = data.filter(r => r.type === "seuil" && r.valeur);
-  const questions = [...new Set(seuilRows.map(r => r.question))];
-
-  if (seuilRows.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée de seuil disponible.</div>;
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {questions.map(q => {
-        const qRows = seuilRows.filter(r => r.question === q && r.valeur);
-        const n = qRows.length;
-        const correctStr = qRows[0]?.correct || "";
-
-        // Parse rankings per juror
-        const matrices = qRows.map(r => {
-          const parts = (r.valeur as string).split(">");
-          return parts.map((c: string) => c.trim());
-        });
-
-        // Count how many times each product was ranked first
-        const firstCounts: Record<string, number> = {};
-        matrices.forEach(m => {
-          if (m[0]) firstCounts[m[0]] = (firstCounts[m[0]] || 0) + 1;
-        });
-
-        // Frequency per position per product
-        const allProducts = [...new Set(matrices.flatMap(m => m))];
-        const positionFreq: Record<string, number[]> = {};
-        allProducts.forEach(p => {
-          positionFreq[p] = Array(allProducts.length).fill(0);
-        });
-        matrices.forEach(m => {
-          m.forEach((code, idx) => {
-            if (positionFreq[code]) positionFreq[code][idx]++;
-          });
-        });
-
-        return (
-          <Card key={q} title={`Seuil — ${q}`}>
-            <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-              <div style={{ flex: "1 1 200px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
-                  Fréquence de classement en 1ère position ({n} jurys)
-                </div>
-                <table className="data-table">
-                  <thead>
-                    <tr><th>Produit</th><th>1er</th><th>%</th></tr>
-                  </thead>
-                  <tbody>
-                    {allProducts
-                      .sort((a, b) => (firstCounts[b] || 0) - (firstCounts[a] || 0))
-                      .map(p => (
-                        <tr key={p}>
-                          <td style={{ fontFamily: "DM Mono, monospace" }}>{p}</td>
-                          <td className="num">{firstCounts[p] || 0}</td>
-                          <td className="num">{n ? ((firstCounts[p] || 0) / n * 100).toFixed(0) : 0}%</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ flex: "1 1 280px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
-                  Distribution des rangs par produit
-                </div>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Produit</th>
-                      {allProducts.map((_, i) => <th key={i}>Rang {i + 1}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allProducts.map(p => (
-                      <tr key={p}>
-                        <td style={{ fontFamily: "DM Mono, monospace" }}>{p}</td>
-                        {positionFreq[p].map((cnt, i) => (
-                          <td key={i} className="num">{cnt}</td>
+            {type === "seuil" && (
+               <details style={{ marginTop: "16px" }}>
+                 <summary style={{ cursor: "pointer", fontSize: "12px", color: "var(--mid)" }}>Afficher la distribution des rangs</summary>
+                 <div style={{ marginTop: "10px", display: "flex", gap: "20px", flexWrap: "wrap" }}>
+                    <table className="data-table" style={{ flex: 1 }}>
+                      <thead><tr><th>Produit</th>{products.map((_, i) => <th key={i}>R{i + 1}</th>)}</tr></thead>
+                      <tbody>
+                        {products.map(p => (
+                          <tr key={p}>
+                            <td>{p}</td>
+                            {products.map((_, idx) => {
+                              const count = matrices.filter(m => m[p] === idx + 1).length;
+                              return <td key={idx} className="num">{count}</td>;
+                            })}
+                          </tr>
                         ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            {correctStr && (
-              <div style={{ marginTop: "12px", fontSize: "12px", color: "var(--text-muted)" }}>
-                Ordre attendu : {correctStr.split(">").join(" > ")}
-              </div>
+                      </tbody>
+                    </table>
+                 </div>
+               </details>
             )}
           </Card>
         );
@@ -423,6 +443,7 @@ function AnalyseSeuil({ data }: { data: any[] }) {
     </div>
   );
 }
+
 
 // ─── Tests discriminatifs (un type à la fois) ─────────────────────────────────
 
