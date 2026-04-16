@@ -1253,6 +1253,7 @@ canvas { max-width: 100%; }
 }
 
 .chip-pool-section { margin-bottom: 16px; }
+.chip-pool.drag-over { border-color: var(--accent) !important; background: #fff8ed; }
 
 .pool-hint {
   display: block;

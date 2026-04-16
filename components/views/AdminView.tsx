@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import React, { useState, useRef } from "react";
 import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPrinter } from "react-icons/fi";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
@@ -499,6 +499,7 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
 }) {
   const [showCorrectOrder, setShowCorrectOrder] = useState(correctOrder.length > 0);
   const [overPool, setOverPool] = useState(false);
+  const poolRef = useRef<HTMLDivElement>(null);
 
   const pool = products.filter(p => !codes.includes(p.code));
 
@@ -518,10 +519,16 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
         DISPONIBLES — cliquez pour ajouter · ou glissez ici depuis la série pour retirer
       </div>
       <div
+        ref={poolRef}
         className={`chip-pool${overPool ? " drag-over" : ""}`}
-        style={{ minHeight: "42px", border: "1.5px dashed var(--border)", borderRadius: "10px", padding: "8px" }}
+        style={{ minHeight: "54px", border: "1.5px dashed var(--border)", borderRadius: "10px", padding: "8px", transition: "border-color .15s, background .15s" }}
         onDragOver={(e) => { e.preventDefault(); setOverPool(true); }}
-        onDragLeave={() => setOverPool(false)}
+        onDragLeave={(e) => {
+          // Ne pas réinitialiser si la souris entre dans un élément enfant du pool
+          if (poolRef.current && !poolRef.current.contains(e.relatedTarget as Node)) {
+            setOverPool(false);
+          }
+        }}
         onDrop={(e) => {
           e.preventDefault();
           setOverPool(false);
@@ -531,7 +538,7 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
         }}
       >
         {pool.length === 0 && codes.length > 0
-          ? <span className="pool-hint">Tous les échantillons sont dans la série</span>
+          ? <span className="pool-hint">Glisser ici pour retirer de la série</span>
           : pool.length === 0
             ? <span className="pool-hint">Ajoutez d&apos;abord des échantillons dans l&apos;onglet Session.</span>
             : pool.map(p => (
