@@ -5,7 +5,7 @@ import { hsh, wlm, formatVal } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 
 export const useSenso = () => {
-  const [mode, setMode] = useState<"participant" | "admin" | "analyse">("participant");
+  const [mode, setMode] = useState<"participant" | "admin">("participant");
   const [screen, setScreen] = useState<"landing" | "jury" | "form" | "done" | "edit">("landing");
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
