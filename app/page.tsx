@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -16,6 +17,7 @@ import {
 import { Topbar } from "../components/ui/Topbar";
 import { ParticipantView } from "../components/views/ParticipantView";
 import { AdminView } from "../components/views/AdminView";
+import { AdminLoginView } from "../components/views/AdminLoginView";
 import { AnalyseView } from "../components/views/AnalyseView";
 import { useSenso } from "../hooks/useSenso";
 
@@ -32,6 +34,12 @@ ChartJS.register(
 );
 
 export default function CiderScope() {
+  const [adminAuth, setAdminAuth] = useState(false);
+
+  useEffect(() => {
+    if (sessionStorage.getItem("admin_auth") === "1") setAdminAuth(true);
+  }, []);
+
   const {
     mode, setMode,
     screen, setScreen,
@@ -90,7 +98,11 @@ export default function CiderScope() {
           />
         )}
 
-        {mode === "admin" && (
+        {mode === "admin" && !adminAuth && (
+          <AdminLoginView onSuccess={() => setAdminAuth(true)} />
+        )}
+
+        {mode === "admin" && adminAuth && (
           <AdminView
             screen={screen}
             sessions={sessions}
