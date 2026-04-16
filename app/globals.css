@@ -1575,6 +1575,8 @@ canvas { max-width: 100%; }
   background: var(--accent); color: #fff; border-color: var(--accent);
   box-shadow: 0 2px 10px rgba(238,140,0,.28);
 }
+.anona-btn.selected.ok  { background: var(--ok); border-color: var(--ok); box-shadow: 0 2px 10px rgba(26,107,58,.25); }
+.anona-btn.selected.diff{ background: #c0392b; border-color: #c0392b; box-shadow: 0 2px 10px rgba(192,57,43,.25); }
 
 /* ══════════════════════════════════════════
    RESPONSIVE — Mobile (<480px)

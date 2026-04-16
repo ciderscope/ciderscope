@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { Badge } from "../ui/Badge";
 import { Question, Product } from "../../types";
-import { FiChevronRight } from "react-icons/fi";
+import { FiChevronLeft } from "react-icons/fi";
 
 interface QuestionInputProps {
   q: Question;
@@ -49,7 +49,8 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: an
   return (
     <div className="h-rank-wrap">
       <p className="drag-hint">
-        Glissez les échantillons pour les classer du moins (plus faible) au plus selon le critère de la question.
+        Classez les verres de gauche à droite : le verre le moins intense se place à gauche, le plus intense à droite.
+        Chaque verre est <strong>inférieur</strong> (&lt;) à celui qui le suit.
         <span className="drag-hint-touch"> Sur tablette : appuyez sur un verre pour le sélectionner, puis sur sa position cible.</span>
       </p>
       <div className="h-rank-list">
@@ -74,7 +75,7 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: an
             </div>
             {i < ordered.length - 1 && (
               <div className="h-rank-sep" aria-hidden="true">
-                <FiChevronRight size={16} />
+                <FiChevronLeft size={16} />
               </div>
             )}
           </React.Fragment>
@@ -213,16 +214,18 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
               <span className="anona-code">{code}</span>
               <div className="anona-choices">
                 <button
-                  className={`anona-btn ${currentVal[code] === "A" ? "selected" : ""}`}
+                  className={`anona-btn ${currentVal[code] === "A" ? "selected ok" : ""}`}
                   onClick={() => onChange({ ...currentVal, [code]: "A" })}
+                  title="Identique à la référence"
                 >
-                  A
+                  <span style={{ fontSize: "18px", lineHeight: 1 }}>=</span>
                 </button>
                 <button
-                  className={`anona-btn ${currentVal[code] === "non-A" ? "selected" : ""}`}
+                  className={`anona-btn ${currentVal[code] === "non-A" ? "selected diff" : ""}`}
                   onClick={() => onChange({ ...currentVal, [code]: "non-A" })}
+                  title="Différent de la référence"
                 >
-                  non-A
+                  <span style={{ fontSize: "18px", lineHeight: 1 }}>≠</span>
                 </button>
               </div>
             </div>

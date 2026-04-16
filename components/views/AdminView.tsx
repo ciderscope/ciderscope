@@ -1,11 +1,70 @@
 "use client";
 import { useState } from "react";
-import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList } from "react-icons/fi";
+import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPrinter } from "react-icons/fi";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { AnalyseView } from "./AnalyseView";
 import { Question, QuestionType, Product } from "../../types";
+import { wlm } from "../../lib/utils";
+
+// ─── Fiche de service ─────────────────────────────────────────────────────────
+function printServiceSheet(sessionName: string, cfg: any) {
+  const products: Product[] = cfg.products || [];
+  const n = products.length;
+  if (n === 0) { alert("Aucun échantillon dans cette séance."); return; }
+
+  const sq = wlm(n); // sq[juryIdx][position] = productIdx
+  const rows = sq.map((order, juryIdx) => ({
+    jury: juryIdx + 1,
+    order: order.map((pi: number) => products[pi]?.code ?? "?"),
+  }));
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Fiche de service — ${sessionName}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 20px; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .meta { color: #666; font-size: 12px; margin-bottom: 20px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; }
+  th { background: #f4f4f4; font-weight: 700; }
+  td.jury { font-weight: 700; background: #fafafa; }
+  .code { font-family: "Courier New", monospace; font-size: 15px; font-weight: 700; }
+  @media print { body { padding: 0; } button { display: none; } }
+</style>
+</head>
+<body>
+<h1>Fiche de service — ${sessionName}</h1>
+<div class="meta">
+  ${cfg.date || ""} · Présentation : ${cfg.presMode === "latin" ? "Carré latin" : cfg.presMode === "random" ? "Aléatoire" : "Fixe"} · ${n} échantillons · ${rows.length} positions de jury
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Jury n°</th>
+      ${rows[0].order.map((_: any, i: number) => `<th>Position ${i + 1}</th>`).join("")}
+    </tr>
+  </thead>
+  <tbody>
+    ${rows.map(r => `
+    <tr>
+      <td class="jury">${r.jury}</td>
+      ${r.order.map((c: string) => `<td class="code">${c}</td>`).join("")}
+    </tr>`).join("")}
+  </tbody>
+</table>
+<br>
+<button onclick="window.print()">🖨 Imprimer</button>
+</body>
+</html>`;
+
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+}
 
 interface AdminViewProps {
   screen: "landing" | "jury" | "form" | "done" | "edit";
@@ -24,6 +83,7 @@ interface AdminViewProps {
   onHome: () => void;
   buildCSVRows: (cfg: any, ans: any) => any[];
   downloadCSV: (rows: any[], filename: string) => void;
+  loadSessionConfig: (id: string) => Promise<any>;
   // Analyse props
   allAnswers: any;
   anSessId: string | null;
@@ -37,7 +97,7 @@ interface AdminViewProps {
 export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
   onNewSession, onEditSession, onToggleActive, onDuplicateSession, onDeleteSession,
-  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, buildCSVRows, downloadCSV,
+  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, buildCSVRows, downloadCSV, loadSessionConfig,
   allAnswers, anSessId, anCfg, csvData, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
   const [adminSection, setAdminSection] = useState<"seances" | "analyse">("seances");
@@ -101,6 +161,10 @@ export const AdminView = ({
                     ? <Button variant="ghost" size="sm" onClick={() => onToggleActive(s.id)}>Désactiver</Button>
                     : <Button variant="ok" size="sm" onClick={() => onToggleActive(s.id)}>Activer</Button>}
                   <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier"><FiEdit2 /></Button>
+                  <Button variant="ghost" size="sm" title="Fiche de service" onClick={async () => {
+                    const cfg = await loadSessionConfig(s.id);
+                    if (cfg) printServiceSheet(s.name, cfg);
+                  }}><FiPrinter /></Button>
                   <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer"><FiCopy /></Button>
                   <Button variant="ghost" size="sm" style={{ color: "var(--danger)" }} onClick={() => onDeleteSession(s.id)} title="Supprimer"><FiX /></Button>
                 </div>
@@ -167,7 +231,14 @@ export const AdminView = ({
                   </div>
                 ))}
                 <div className="flex mt8">
-                  <Button variant="ghost" size="sm" onClick={() => onSetEditCfg({ ...editCfg, products: [...editCfg.products, { code: String(Math.floor(Math.random() * 900) + 100), label: "" }] })}>
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    const existing = editCfg.products.map((p: any) => p.code);
+                    let code: string;
+                    let attempts = 0;
+                    do { code = String(Math.floor(Math.random() * 900) + 100); attempts++; }
+                    while (existing.includes(code) && attempts < 1000);
+                    onSetEditCfg({ ...editCfg, products: [...editCfg.products, { code, label: "" }] });
+                  }}>
                     <FiPlus /> Échantillon
                   </Button>
                 </div>
@@ -347,7 +418,7 @@ function DraggableSerie({ codes, onChange, onRemove }: {
             className="chip-x"
             draggable={false}
             style={{ marginLeft: "auto" }}
-            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onRemove(code); }}
+            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onRemove(code); }}
             type="button"
           >
             <FiX size={11} />
@@ -603,11 +674,31 @@ function ANonABuilder({ products, codes, correctAnswer, refCode, onChangeCodes, 
         style={{ maxWidth: "200px", marginBottom: "16px" }}
         onDragOver={(e) => { e.preventDefault(); setOverRef(true); }}
         onDragLeave={() => setOverRef(false)}
-        onDrop={(e) => { e.preventDefault(); const c = e.dataTransfer.getData("chip-code"); if (c) onChangeRef(c); setOverRef(false); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          const c = e.dataTransfer.getData("chip-code");
+          if (c) {
+            // Remove from test codes if present, add previous ref back to codes
+            const newCodes = codes.filter(x => x !== c);
+            if (refCode && refCode !== c && !newCodes.includes(refCode)) newCodes.push(refCode);
+            onChangeCodes(newCodes);
+            // Also clean correctAnswer from new ref if needed
+            const newAss = Object.fromEntries(Object.entries(
+              Object.fromEntries((typeof correctAnswer === "string" ? correctAnswer : "").split(",").map((p: string) => p.split(":")).filter((a: string[]) => a.length === 2))
+            ).filter(([k]) => k !== c));
+            onChangeCorrect(Object.entries(newAss).map(([k, v]) => `${k}:${v}`).join(","));
+            onChangeRef(c);
+          }
+          setOverRef(false);
+        }}
       >
         <div className="drop-slot-label" style={{ color: "var(--accent)" }}>Référence A</div>
         {refCode
-          ? <Chip code={refCode} active removable onRemove={() => onChangeRef("")} />
+          ? <Chip code={refCode} active removable onRemove={() => {
+              // Put refCode back into codes when removed as reference
+              if (!codes.includes(refCode)) onChangeCodes([...codes, refCode]);
+              onChangeRef("");
+            }} />
           : <span className="drop-slot-hint">Glisser ici</span>}
       </div>
 

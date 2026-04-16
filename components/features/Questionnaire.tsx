@@ -16,9 +16,10 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
   if (!step) return null;
 
   const handleUpdate = (ctx: string, qid: string, val: any) => {
-    const newJa = { ...ja };
-    if (!newJa[ctx]) newJa[ctx] = {};
-    newJa[ctx][qid] = val;
+    const newJa = {
+      ...ja,
+      [ctx]: { ...(ja[ctx] || {}), [qid]: val },
+    };
     setJa(newJa);
   };
 

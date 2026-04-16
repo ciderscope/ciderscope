@@ -180,6 +180,7 @@ export default function CiderScope() {
               return rows;
             }}
             downloadCSV={downloadCSV}
+            loadSessionConfig={loadSessionConfig}
             allAnswers={allAnswers}
             anSessId={anSessId}
             anCfg={anCfg}

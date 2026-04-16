@@ -171,7 +171,7 @@ export const useSenso = () => {
       juror_name: cj,
       data: newJa,
       updated_at: new Date().toISOString(),
-    });
+    }, { onConflict: "session_id,juror_name" });
     // Update juror list if new
     if (!jurors.includes(cj)) {
       const newJurors = [...jurors, cj];
