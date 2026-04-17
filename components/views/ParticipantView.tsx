@@ -1,4 +1,4 @@
-import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle } from "react-icons/fi";
+import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud, FiAlertCircle, FiLoader } from "react-icons/fi";
 import { Button } from "../ui/Button";
 import { SessionCard } from "../features/SessionCard";
 import { Questionnaire } from "../features/Questionnaire";
@@ -12,6 +12,8 @@ interface ParticipantViewProps {
   cj: string;
   ja: any;
   cs: number;
+  saveStatus: "idle" | "saving" | "saved" | "error" | "pending";
+  pendingCount: number;
   onSelectSession: (id: string) => void;
   onLoginJury: (name: string) => void;
   onPrevStep: () => void;
@@ -21,11 +23,53 @@ interface ParticipantViewProps {
   onHome: () => void;
   onReviewAnswers: () => void;
   buildSteps: (cfg: any, name: string) => any[];
+  isStepComplete: (idx: number) => boolean;
 }
 
+const stepShortLabel = (step: any) => {
+  if (!step) return "";
+  if (step.type === "product") return step.product.code;
+  if (step.type === "ranking") return step.question.type === "seuil" ? "Seuil" : "Rang";
+  if (step.type === "discrim") {
+    if (step.question.type === "triangulaire") return "△";
+    if (step.question.type === "duo-trio") return "D/T";
+    if (step.question.type === "a-non-a") return "A/¬A";
+    return "Test";
+  }
+  if (step.type === "global") return "Général";
+  return "•";
+};
+
+const SaveIndicator = ({ status, pendingCount }: { status: "idle" | "saving" | "saved" | "error" | "pending"; pendingCount: number }) => {
+  if (status === "idle" && pendingCount === 0) return null;
+  const map = {
+    idle:    { icon: <FiCloud size={13} />, text: `${pendingCount} en attente de synchronisation`, color: "#c8820a" },
+    saving:  { icon: <FiLoader size={13} style={{ animation: "spin 1s linear infinite" }} />, text: "Enregistrement…", color: "var(--mid)" },
+    saved:   { icon: <FiCloud size={13} />, text: "Enregistré", color: "#1a6b3a" },
+    pending: { icon: <FiAlertCircle size={13} />, text: `Hors-ligne — ${pendingCount} en file d'attente locale`, color: "#c8820a" },
+    error:   { icon: <FiAlertCircle size={13} />, text: "Erreur serveur — réessai automatique", color: "#c0392b" },
+  } as const;
+  const m = map[status];
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: "fixed", bottom: "80px", right: "16px", zIndex: 50,
+        display: "flex", alignItems: "center", gap: "6px",
+        padding: "6px 10px", background: "var(--paper)", border: `1px solid ${m.color}22`,
+        borderRadius: "999px", fontSize: "12px", color: m.color,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+      }}
+    >
+      {m.icon}<span>{m.text}</span>
+    </div>
+  );
+};
+
 export const ParticipantView = ({
-  screen, sessions, curSess, jurors, cj, ja, cs,
-  onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, onReviewAnswers, buildSteps
+  screen, sessions, curSess, jurors, cj, ja, cs, saveStatus, pendingCount,
+  onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, onReviewAnswers, buildSteps, isStepComplete,
 }: ParticipantViewProps) => {
   const activeSessions = sessions.filter(s => s.active);
 
@@ -92,6 +136,10 @@ export const ParticipantView = ({
   if (screen === "form" && curSess) {
     const steps = buildSteps(curSess, cj);
     const products: Product[] = curSess.products || [];
+    const total = steps.length;
+    const done = steps.filter((_, i) => isStepComplete(i)).length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const canAdvance = isStepComplete(cs);
     return (
       <>
         <div className="form-shell">
@@ -103,23 +151,72 @@ export const ParticipantView = ({
             <div className="form-header-sep"></div>
             <Button variant="ghost" size="sm" onClick={onGoBack}><FiArrowLeft /> Changer</Button>
           </div>
+
+          <div style={{ padding: "0 16px", marginTop: "4px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--mid)", marginBottom: "4px" }}>
+              <span>Étape {cs + 1} / {total}</span>
+              <span>{done} / {total} complétées ({pct}%)</span>
+            </div>
+            <div style={{ height: "6px", background: "var(--paper2)", borderRadius: "999px", overflow: "hidden" }}>
+              <div
+                style={{
+                  height: "100%", width: `${pct}%`, background: "var(--accent)",
+                  transition: "width 200ms ease",
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "4px", marginTop: "8px", overflowX: "auto", paddingBottom: "4px" }}>
+              {steps.map((s, i) => {
+                const complete = isStepComplete(i);
+                const active = i === cs;
+                const bg = active ? "var(--accent)" : complete ? "#1a6b3a22" : "var(--paper2)";
+                const col = active ? "#fff" : complete ? "#1a6b3a" : "var(--mid)";
+                return (
+                  <div
+                    key={i}
+                    title={`Étape ${i + 1}${complete ? " — complète" : ""}`}
+                    style={{
+                      flex: "0 0 auto", padding: "3px 8px",
+                      background: bg, color: col,
+                      borderRadius: "999px", fontSize: "10px", fontWeight: active ? 700 : 500,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {stepShortLabel(s)}{complete && !active ? " ✓" : ""}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <Questionnaire
             steps={steps}
             currentStepIdx={cs}
             ja={ja}
             setJa={onSetJa}
             products={products}
+            jurorName={cj}
           />
         </div>
         <div className="product-nav">
-          <div className="product-nav-info"></div>
+          <div className="product-nav-info">
+            {!canAdvance && (
+              <span style={{ fontSize: "11px", color: "#c0392b" }}>Répondez à la question pour continuer.</span>
+            )}
+          </div>
           <Button variant="ghost" size="sm" onClick={onPrevStep} style={{ display: cs === 0 ? "none" : "" }}>
             <FiArrowLeft />
           </Button>
-          <Button size="sm" onClick={onNextStep}>
+          <Button
+            size="sm"
+            onClick={onNextStep}
+            disabled={!canAdvance}
+            style={{ opacity: canAdvance ? 1 : 0.5, cursor: canAdvance ? "pointer" : "not-allowed" }}
+          >
             {cs >= steps.length - 1 ? <><FiCheck /> Terminer</> : <>Suivant <FiArrowRight /></>}
           </Button>
         </div>
+        <SaveIndicator status={saveStatus} pendingCount={pendingCount} />
       </>
     );
   }

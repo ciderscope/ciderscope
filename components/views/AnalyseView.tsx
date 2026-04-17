@@ -1,12 +1,13 @@
 "use client";
 import { useMemo } from "react";
 import { Card } from "../ui/Card";
-import { Radar, Bar } from "react-chartjs-2";
+import { Radar, Bar, Scatter } from "react-chartjs-2";
 
 const COLORS = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
 
 // ─── Stats helpers ───────────────────────────────────────────────────────────
 
+// CDF N(0,1) — approximation Abramowitz-Stegun, précision ~7.5e-8
 function normalCDF(z: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(z));
   const d = 0.3989423 * Math.exp(-z * z / 2);
@@ -15,88 +16,303 @@ function normalCDF(z: number): number {
   return z >= 0 ? p : 1 - p;
 }
 
+// ln Γ(x) — Lanczos (précision ~1e-14)
+function logGamma(x: number): number {
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
+  const g = 7;
+  const c = [
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+    771.32342877765313, -176.61502916214059, 12.507343278686905,
+    -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+  ];
+  x -= 1;
+  let a = c[0];
+  const t = x + g + 0.5;
+  for (let i = 1; i < c.length; i++) a += c[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+
+// P(a, x) régularisée — série (x < a+1)
+function gammaPSeries(a: number, x: number): number {
+  const maxIter = 400, eps = 1e-15;
+  let sum = 1 / a, term = sum;
+  for (let n = 1; n < maxIter; n++) {
+    term *= x / (a + n);
+    sum += term;
+    if (Math.abs(term) < Math.abs(sum) * eps) break;
+  }
+  return sum * Math.exp(-x + a * Math.log(x) - logGamma(a));
+}
+
+// Q(a, x) = 1 - P(a, x) — fraction continue Lentz (x ≥ a+1)
+function gammaQFrac(a: number, x: number): number {
+  const maxIter = 400, eps = 1e-15, fpmin = 1e-300;
+  let b = x + 1 - a;
+  let c = 1 / fpmin, d = 1 / b, h = d;
+  for (let i = 1; i <= maxIter; i++) {
+    const an = -i * (i - a);
+    b += 2;
+    d = an * d + b; if (Math.abs(d) < fpmin) d = fpmin;
+    c = b + an / c; if (Math.abs(c) < fpmin) c = fpmin;
+    d = 1 / d;
+    const del = d * c; h *= del;
+    if (Math.abs(del - 1) < eps) break;
+  }
+  return h * Math.exp(-x + a * Math.log(x) - logGamma(a));
+}
+
+function regularizedGammaP(a: number, x: number): number {
+  if (x <= 0 || a <= 0) return 0;
+  return x < a + 1 ? gammaPSeries(a, x) : 1 - gammaQFrac(a, x);
+}
+
+// p-value chi² exacte — via gamma incomplète régularisée.
+// Fiable à tout df (la précédente approximation Wilson-Hilferty était
+// imprécise aux petits df typiques de l'analyse sensorielle).
+// Note sur les ex-æquo : le test de Friedman nécessite en principe une
+// correction si le panel produit des rangs liés. Le drag-and-drop actuel
+// impose un ordre strict donc il n'y a pas de ties à corriger.
 function chiSquarePValue(chi2: number, df: number): number {
   if (chi2 <= 0 || df <= 0) return 1;
-  const z = ((chi2 / df) ** (1 / 3) - (1 - 2 / (9 * df))) / Math.sqrt(2 / (9 * df));
-  return Math.max(0, Math.min(1, 1 - normalCDF(z)));
+  return Math.max(0, Math.min(1, 1 - regularizedGammaP(df / 2, chi2 / 2)));
 }
 
-// Nemenyi Critical Values (Alpha = 0.10, divided by sqrt(2) as used in some formulas)
-// Approximate q values for Nemenyi test (Friedman version) for Alpha = 0.10
+// Nemenyi — q de la distribution Studentized Range (α = 0.10, ν = ∞)
+// CD = (q / √2) · √(k(k+1)/(6n))  — le /√2 convertit le q range en CD
+// de différence de rangs moyens (cf. Conover 1999, Hollander & Wolfe 1999).
 function getNemenyiCD(k: number, n: number): number {
   const qValues: Record<number, number> = {
-    2: 2.33, 3: 2.90, 4: 3.24, 5: 3.48, 6: 3.66, 7: 3.81, 8: 3.93, 9: 4.04, 10: 4.13
+    2: 2.33, 3: 2.90, 4: 3.24, 5: 3.48, 6: 3.66, 7: 3.81, 8: 3.93, 9: 4.04, 10: 4.13,
   };
-  const q = qValues[k] || (4.13 + (k - 10) * 0.08); // fallback
-  // CD = q * sqrt(k*(k+1) / (6*n))
-  return q * Math.sqrt((k * (k + 1)) / (6 * n));
+  const q = qValues[k] || (4.13 + (k - 10) * 0.08);
+  return (q / Math.sqrt(2)) * Math.sqrt((k * (k + 1)) / (6 * n));
 }
 
+// CLD — algorithme « insert-and-absorb » de Piepho (2004).
+// 1. Partir d'un unique groupe contenant tous les produits.
+// 2. Pour chaque paire (i, j) sig. différente : scinder tout groupe
+//    contenant i ET j en deux (l'un sans i, l'autre sans j).
+// 3. Absorption : supprimer les groupes strictement inclus dans un autre.
+// Cet algorithme garantit transitivité et couverture complète (contrairement
+// à l'heuristique précédente qui pouvait perdre des sous-groupes).
 function computeCLD(products: string[], rankMeans: Record<string, number>, cd: number): Record<string, string> {
   const sorted = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
   const k = sorted.length;
-  const groups: number[][] = [];
-  
-  for (let i = 0; i < k; i++) {
-    for (let j = i; j < k; j++) {
-      if (Math.abs(rankMeans[sorted[i]] - rankMeans[sorted[j]]) <= cd) {
-        // They are in the same group
-        let found = false;
-        for (const g of groups) {
-          if (g.includes(i) || g.includes(j)) {
-            // This logic is a bit complex for a simple loop, let's use the standard algorithm
-          }
-        }
-      }
-    }
+  const out: Record<string, string> = {};
+  products.forEach(p => { out[p] = ""; });
+  if (k === 0) return out;
+
+  const sig: boolean[][] = Array.from({ length: k }, () => Array(k).fill(false));
+  for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
+    const d = Math.abs(rankMeans[sorted[i]] - rankMeans[sorted[j]]);
+    if (d > cd) { sig[i][j] = true; sig[j][i] = true; }
   }
-  
-  // Simplified CLD algorithm
-  const letters = "abcdefghijklmnopqrstuvwxyz";
-  const pGroups: string[][] = [];
-  
+
+  let groups: Set<number>[] = [new Set(sorted.map((_, i) => i))];
+
   for (let i = 0; i < k; i++) {
-    const currentGroup = [sorted[i]];
     for (let j = i + 1; j < k; j++) {
-      if (Math.abs(rankMeans[sorted[i]] - rankMeans[sorted[j]]) <= cd) {
-        currentGroup.push(sorted[j]);
-      } else {
-        break;
+      if (!sig[i][j]) continue;
+      const next: Set<number>[] = [];
+      for (const g of groups) {
+        if (g.has(i) && g.has(j)) {
+          const gi = new Set(g); gi.delete(j);
+          const gj = new Set(g); gj.delete(i);
+          if (gi.size > 0) next.push(gi);
+          if (gj.size > 0) next.push(gj);
+        } else next.push(g);
       }
-    }
-    if (currentGroup.length > 1) {
-      // Check if this group is a subset of an existing one
-      const isSubset = pGroups.some((g: string[]) => currentGroup.every((item: string) => g.includes(item)));
-      if (!isSubset) pGroups.push(currentGroup);
-    } else {
-      pGroups.push(currentGroup);
+      groups = next;
     }
   }
 
-  // Clean up subsets
-  const finalGroups = pGroups.filter((g: string[], i: number) => !pGroups.some((other: string[], j: number) => i !== j && g.every((item: string) => other.includes(item))));
-  
-  const productLetters: Record<string, string> = {};
-  products.forEach((p: string) => productLetters[p] = "");
-  
-  finalGroups.forEach((group: string[], idx: number) => {
-    const letter = letters[idx % 26];
-    group.forEach((p: string) => productLetters[p] += letter);
+  const keyOf = (g: Set<number>) => [...g].sort((a, b) => a - b).join(",");
+  const uniq = new Map<string, Set<number>>();
+  for (const g of groups) uniq.set(keyOf(g), g);
+  let arr = [...uniq.values()];
+  arr = arr.filter(g => !arr.some(o => o !== g && g.size < o.size && [...g].every(x => o.has(x))));
+  arr.sort((a, b) => Math.min(...a) - Math.min(...b));
+
+  const letters = "abcdefghijklmnopqrstuvwxyz";
+  arr.forEach((g, idx) => {
+    const l = letters[idx % 26];
+    g.forEach(i => { out[sorted[i]] += l; });
   });
-  
-  return productLetters;
+  return out;
 }
 
-// Spearman correlation for ranking comparison
-function spearmanRho(rank1: Record<string, number>, rank2: Record<string, number>, products: string[]): number {
+// Kendall τ-a — concordance d'un classement avec un ordre de référence.
+// τ ∈ [-1,1] : 1 = identique, -1 = inverse, 0 = indépendant.
+// Plus robuste que Spearman ρ pour petits n et interprétation en paires.
+function kendallTau(rank1: Record<string, number>, rank2: Record<string, number>, products: string[]): number {
   const n = products.length;
   if (n <= 1) return 1;
-  let d2 = 0;
-  products.forEach((p: string) => {
-    const d = (rank1[p] || 0) - (rank2[p] || 0);
-    d2 += d * d;
+  let c = 0, d = 0;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const a = Math.sign((rank1[products[i]] ?? 0) - (rank1[products[j]] ?? 0));
+    const b = Math.sign((rank2[products[i]] ?? 0) - (rank2[products[j]] ?? 0));
+    if (a * b > 0) c++;
+    else if (a * b < 0) d++;
+  }
+  return (c - d) / (n * (n - 1) / 2);
+}
+
+// Kendall W — coefficient de concordance inter-jurys (cohérence du panel).
+// W ∈ [0,1] : 0 = désaccord total, 1 = accord parfait. Relié à Friedman :
+// χ² = m·(n-1)·W. Indicateur direct de l'entraînement du panel.
+function kendallW(matrices: Record<string, number>[], products: string[]): number {
+  const m = matrices.length, n = products.length;
+  if (m < 2 || n < 2) return 1;
+  const rankSums: Record<string, number> = {};
+  products.forEach(p => {
+    rankSums[p] = matrices.reduce((s, mat) => s + (mat[p] ?? (n + 1) / 2), 0);
   });
-  return 1 - (6 * d2) / (n * (n * n - 1));
+  const meanSum = products.reduce((s, p) => s + rankSums[p], 0) / n;
+  const S = products.reduce((s, p) => s + (rankSums[p] - meanSum) ** 2, 0);
+  return (12 * S) / (m * m * (n * n * n - n));
+}
+
+// ─── Distributions F et inverse normale ──────────────────────────────────────
+
+// Beta incomplète régularisée I_x(a, b) — fraction continue (Numerical Recipes)
+function betaCF(x: number, a: number, b: number): number {
+  const maxIter = 400, eps = 1e-15, fpmin = 1e-300;
+  const qab = a + b, qap = a + 1, qam = a - 1;
+  let c = 1, d = 1 - qab * x / qap;
+  if (Math.abs(d) < fpmin) d = fpmin;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= maxIter; m++) {
+    const m2 = 2 * m;
+    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < fpmin) d = fpmin;
+    c = 1 + aa / c; if (Math.abs(c) < fpmin) c = fpmin;
+    d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d; if (Math.abs(d) < fpmin) d = fpmin;
+    c = 1 + aa / c; if (Math.abs(c) < fpmin) c = fpmin;
+    d = 1 / d;
+    const del = d * c; h *= del;
+    if (Math.abs(del - 1) < eps) break;
+  }
+  return h;
+}
+
+function regularizedBetaI(x: number, a: number, b: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+  return x < (a + 1) / (a + b + 2)
+    ? bt * betaCF(x, a, b) / a
+    : 1 - bt * betaCF(1 - x, b, a) / b;
+}
+
+// p-value F unilatérale (F, df1, df2)
+function fPValue(F: number, df1: number, df2: number): number {
+  if (F <= 0 || df1 <= 0 || df2 <= 0) return 1;
+  return regularizedBetaI(df2 / (df2 + df1 * F), df2 / 2, df1 / 2);
+}
+
+// Inverse N(0,1) — algorithme AS241 (Wichura 1988), précision ~1e-16
+function normalInvCDF(p: number): number {
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  const q = p - 0.5;
+  if (Math.abs(q) <= 0.425) {
+    const r = q * q;
+    return q * (((((((2509.0809287301226727 * r + 33430.575583588128105) * r + 67265.770927008700853) * r + 45921.953931549871457) * r + 13731.693765509461125) * r + 1971.5909503065514427) * r + 133.14166789178437745) * r + 3.387132872796366608)
+      / (((((((5226.495278852854561 * r + 28729.085735721942674) * r + 39307.89580009271061) * r + 21213.794301586595867) * r + 5394.1960214247511077) * r + 687.1870074920579083) * r + 42.313330701600911252) * r + 1);
+  }
+  let r = q < 0 ? p : 1 - p;
+  r = Math.sqrt(-Math.log(r));
+  let x: number;
+  if (r <= 5) {
+    r -= 1.6;
+    x = (((((((7.74545014278341407640e-4 * r + 0.0227238449892691845833) * r + 0.24178072517745061177) * r + 1.27045825245236838258) * r + 3.64784832476320460504) * r + 5.7694972214606914055) * r + 4.6303378461565452959) * r + 1.42343711074968357734)
+      / (((((((1.05075007164441684324e-9 * r + 5.475938084995344946e-4) * r + 0.0151986665636164571966) * r + 0.14810397642748007459) * r + 0.68976733498510000455) * r + 1.6763848301838038494) * r + 2.05319162663775882187) * r + 1);
+  } else {
+    r -= 5;
+    x = (((((((2.01033439929228813265e-7 * r + 2.71155556874348757815e-5) * r + 0.0012426609473880784386) * r + 0.026532189526576123093) * r + 0.29656057182850489123) * r + 1.7848265399172913358) * r + 5.4637849111641143699) * r + 6.6579046435011037772)
+      / (((((((2.04426310338993978564e-15 * r + 1.4215117583164458887e-7) * r + 1.8463183175100546818e-5) * r + 7.868691311456132591e-4) * r + 0.0148753612908506148525) * r + 0.13692988092273580531) * r + 0.59983220655588793769) * r + 1);
+  }
+  return q < 0 ? -x : x;
+}
+
+// ─── ACP via Jacobi (décomposition symétrique) ───────────────────────────────
+
+// Diagonalise une matrice symétrique A (n × n).
+// Retourne { values: λ trié décroissant, vectors: V[i][k] = i-ème composante du k-ème vecteur propre }
+function jacobiEigen(A: number[][]): { values: number[]; vectors: number[][] } {
+  const n = A.length;
+  const D = A.map(r => [...r]);
+  const V: number[][] = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+  const maxSweeps = 100, eps = 1e-14;
+  for (let sweep = 0; sweep < maxSweeps; sweep++) {
+    let off = 0;
+    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) off += Math.abs(D[p][q]);
+    if (off < eps) break;
+    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
+      if (Math.abs(D[p][q]) < eps) continue;
+      const theta = (D[q][q] - D[p][p]) / (2 * D[p][q]);
+      const t = (theta >= 0 ? 1 : -1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+      const c = 1 / Math.sqrt(t * t + 1);
+      const s = t * c;
+      const dpp = D[p][p], dqq = D[q][q], dpq = D[p][q];
+      D[p][p] = dpp - t * dpq;
+      D[q][q] = dqq + t * dpq;
+      D[p][q] = D[q][p] = 0;
+      for (let i = 0; i < n; i++) {
+        if (i !== p && i !== q) {
+          const dip = D[i][p], diq = D[i][q];
+          D[i][p] = D[p][i] = c * dip - s * diq;
+          D[i][q] = D[q][i] = s * dip + c * diq;
+        }
+        const vip = V[i][p], viq = V[i][q];
+        V[i][p] = c * vip - s * viq;
+        V[i][q] = s * vip + c * viq;
+      }
+    }
+  }
+  const values = D.map((_, i) => D[i][i]);
+  const order = values.map((v, i) => [v, i] as [number, number]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
+  return {
+    values: order.map(i => values[i]),
+    vectors: V.map(row => order.map(i => row[i])),
+  };
+}
+
+// ACP sur matrice p × m (lignes = individus, colonnes = variables).
+// Centrage-réduction par colonne → ACP sur matrice de corrélation.
+// Retourne scores p × 2 (CP1, CP2) + variance expliquée.
+function pca2D(X: number[][]): { scores: number[][]; explained: number[]; loadings: number[][] } {
+  const p = X.length, m = X[0]?.length ?? 0;
+  if (p < 2 || m < 2) return { scores: X.map(() => [0, 0]), explained: [0, 0], loadings: [] };
+  // Centrer-réduire
+  const means = Array(m).fill(0).map((_, j) => X.reduce((s, r) => s + r[j], 0) / p);
+  const sds = Array(m).fill(0).map((_, j) => {
+    const v = X.reduce((s, r) => s + (r[j] - means[j]) ** 2, 0) / (p - 1);
+    return Math.sqrt(v) || 1;
+  });
+  const Z: number[][] = X.map(r => r.map((v, j) => (v - means[j]) / sds[j]));
+  // Corrélation = Z^T Z / (p - 1)
+  const C: number[][] = Array.from({ length: m }, () => Array(m).fill(0));
+  for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) {
+    let s = 0;
+    for (let k = 0; k < p; k++) s += Z[k][i] * Z[k][j];
+    C[i][j] = s / (p - 1);
+  }
+  const { values, vectors } = jacobiEigen(C);
+  const totalVar = values.reduce((a, b) => a + Math.max(0, b), 0) || 1;
+  const explained = [Math.max(0, values[0]) / totalVar, Math.max(0, values[1] ?? 0) / totalVar];
+  // Scores = Z · V (2 premières colonnes)
+  const scores: number[][] = Z.map(row => {
+    const s1 = row.reduce((s, v, i) => s + v * vectors[i][0], 0);
+    const s2 = row.reduce((s, v, i) => s + v * (vectors[i][1] ?? 0), 0);
+    return [s1, s2];
+  });
+  // Loadings = vecteurs propres (variables)
+  const loadings = vectors.map(row => [row[0], row[1] ?? 0]);
+  return { scores, explained, loadings };
 }
 
 function wordColor(w: string) {
@@ -118,6 +334,7 @@ function computeTabs(anCfg: any): { id: string; label: string }[] {
   if (qs.some(q => q.type === "triangulaire"))tabs.push({ id: "triangulaire",label: "Triangulaire" });
   if (qs.some(q => q.type === "duo-trio"))    tabs.push({ id: "duo-trio",    label: "Duo-trio" });
   if (qs.some(q => q.type === "a-non-a"))     tabs.push({ id: "a-non-a",     label: "A-non-A" });
+  if (qs.some(q => q.type === "seuil-bet"))   tabs.push({ id: "seuil-bet",   label: "Seuil 3-AFC (BET)" });
   if (qs.some(q => q.type === "text"))        tabs.push({ id: "texte",       label: "Nuage de mots" });
   tabs.push({ id: "jury",    label: "Par jury" });
   tabs.push({ id: "données", label: "Données" });
@@ -200,6 +417,7 @@ export const AnalyseView = ({
             {activeTab === "triangulaire" && <AnalyseDiscrimType data={csvData} type="triangulaire" label="Triangulaire" />}
             {activeTab === "duo-trio"     && <AnalyseDiscrimType data={csvData} type="duo-trio"     label="Duo-trio" />}
             {activeTab === "a-non-a"      && <AnalyseDiscrimType data={csvData} type="a-non-a"      label="A-non-A" />}
+            {activeTab === "seuil-bet"    && <AnalyseSeuilBET    config={anCfg} allAnswers={allAnswers} />}
             {activeTab === "texte"        && <AnalyseWordCloud   data={csvData} />}
             {activeTab === "jury"         && <AnalyseJury        config={anCfg} allAnswers={allAnswers} />}
             {activeTab === "données"      && <AnalyseDonnees     data={csvData} />}
@@ -213,13 +431,24 @@ export const AnalyseView = ({
 // ─── Profil (échelles) ────────────────────────────────────────────────────────
 
 function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
+  void config;
   const scaleData = data.filter(r => r.type === "scale" && r.valeur !== "" && r.valeur != null);
-  const products = [...new Set(scaleData.map(r => r.produit))];
-  const criteria = [...new Set(scaleData.map(r => r.question))];
+  const products = [...new Set(scaleData.map(r => r.produit))] as string[];
+  const criteria = [...new Set(scaleData.map(r => r.question))] as string[];
+  const jurors = [...new Set(scaleData.map(r => r.jury))] as string[];
 
   if (scaleData.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée d&apos;échelle disponible.</div>;
   }
+
+  // Cellule (jury, produit, critère) → note (moyenne si doublons)
+  const getNote = (jury: string, prod: string, crit: string): number | null => {
+    const vals = scaleData
+      .filter(r => r.jury === jury && r.produit === prod && r.question === crit)
+      .map(r => parseFloat(r.valeur))
+      .filter(v => !isNaN(v));
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
 
   const avg = (prod: string, crit: string) => {
     const vals = scaleData.filter(r => r.produit === prod && r.question === crit).map(r => parseFloat(r.valeur));
@@ -237,35 +466,244 @@ function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
     }))
   };
 
+  // ─── ANOVA à deux facteurs (produit × jury) sans répétition, par critère ───
+  // Modèle additif : y_ij = μ + α_i (produit) + β_j (jury) + ε_ij
+  // SS_tot = SS_prod + SS_jury + SS_err
+  // df_prod = p-1, df_jury = j-1, df_err = (p-1)(j-1)
+  const anovaRows = criteria.map(crit => {
+    const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p, crit)));
+    const flat = mat.flat().filter((v): v is number => v !== null);
+    const p = products.length;
+    const jN = jurors.length;
+    if (flat.length < p * jN || p < 2 || jN < 2) {
+      return { crit, ok: false as const, reason: "Données incomplètes" };
+    }
+    const grand = flat.reduce((a, b) => a + b, 0) / flat.length;
+    const prodMeans = mat.map(row => {
+      const v = row.filter((x): x is number => x !== null);
+      return v.reduce((a, b) => a + b, 0) / v.length;
+    });
+    const juryMeans = jurors.map((_, jIdx) => {
+      const col = mat.map(row => row[jIdx]).filter((x): x is number => x !== null);
+      return col.reduce((a, b) => a + b, 0) / col.length;
+    });
+    let ssProd = 0, ssJury = 0, ssTot = 0;
+    for (let i = 0; i < p; i++) ssProd += jN * (prodMeans[i] - grand) ** 2;
+    for (let j = 0; j < jN; j++) ssJury += p * (juryMeans[j] - grand) ** 2;
+    for (let i = 0; i < p; i++) {
+      for (let j = 0; j < jN; j++) {
+        const v = mat[i][j];
+        if (v !== null) ssTot += (v - grand) ** 2;
+      }
+    }
+    const ssErr = Math.max(0, ssTot - ssProd - ssJury);
+    const dfProd = p - 1, dfJury = jN - 1, dfErr = (p - 1) * (jN - 1);
+    const msProd = ssProd / dfProd, msJury = ssJury / dfJury, msErr = ssErr / dfErr;
+    const fProd = msErr > 0 ? msProd / msErr : 0;
+    const fJury = msErr > 0 ? msJury / msErr : 0;
+    const pProd = msErr > 0 ? fPValue(fProd, dfProd, dfErr) : 1;
+    const pJury = msErr > 0 ? fPValue(fJury, dfJury, dfErr) : 1;
+    return { crit, ok: true as const, fProd, pProd, fJury, pJury, dfProd, dfJury, dfErr };
+  });
+
+  // ─── ACP 2D sur matrice produits × critères (moyennes) ───
+  const pcaMatrix = products.map(p => criteria.map(c => avg(p, c)));
+  const canPca = products.length >= 3 && criteria.length >= 2;
+  const pcaRes = canPca ? pca2D(pcaMatrix) : null;
+
+  const pcaChartData = pcaRes ? {
+    datasets: [{
+      label: "Produits",
+      data: products.map((p, i) => ({ x: pcaRes.scores[i][0], y: pcaRes.scores[i][1], label: p })),
+      backgroundColor: products.map((_, i) => COLORS[i % 8]),
+      borderColor: products.map((_, i) => COLORS[i % 8]),
+      pointRadius: 7,
+      pointHoverRadius: 10,
+    }]
+  } : null;
+
+  // ─── Performance individuelle du jury ───
+  // Conformité = corrélation de Pearson entre notes du jury et moyennes du panel
+  // Amplitude = max - min des notes du jury (utilisation de l'échelle)
+  const pearson = (xs: number[], ys: number[]): number => {
+    const n = xs.length;
+    if (n < 2) return 0;
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    let num = 0, dx = 0, dy = 0;
+    for (let i = 0; i < n; i++) {
+      num += (xs[i] - mx) * (ys[i] - my);
+      dx += (xs[i] - mx) ** 2;
+      dy += (ys[i] - my) ** 2;
+    }
+    return dx > 0 && dy > 0 ? num / Math.sqrt(dx * dy) : 0;
+  };
+
+  const juryPerf = jurors.map(j => {
+    const paired: Array<{ self: number; panel: number }> = [];
+    const selfAll: number[] = [];
+    products.forEach(p => {
+      criteria.forEach(c => {
+        const v = getNote(j, p, c);
+        if (v !== null) {
+          paired.push({ self: v, panel: avg(p, c) });
+          selfAll.push(v);
+        }
+      });
+    });
+    const conf = paired.length >= 2 ? pearson(paired.map(x => x.self), paired.map(x => x.panel)) : 0;
+    const range = selfAll.length ? Math.max(...selfAll) - Math.min(...selfAll) : 0;
+    const nNotes = selfAll.length;
+    return { jury: j, conf, range, nNotes };
+  }).sort((a, b) => b.conf - a.conf);
+
+  const pFmt = (p: number) => p < 0.001 ? "< 0,001" : p.toFixed(3);
+  const sigMark = (p: number) => p < 0.001 ? "***" : p < 0.01 ? "**" : p < 0.05 ? "*" : "ns";
+  const sigColor = (p: number) => p < 0.05 ? "#1a6b3a" : "#888";
+
   return (
-    <div className="grid2">
-      <Card title="Radar — Profil moyen">
-        <Radar data={radarData} options={{ scales: { r: { beginAtZero: true } } }} />
-      </Card>
-      <Card title="Moyennes par critère">
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div className="grid2">
+        <Card title="Radar — Profil moyen">
+          <Radar data={radarData} options={{ scales: { r: { beginAtZero: true } } }} />
+        </Card>
+        <Card title="Moyennes par critère">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Critère</th>
+                {products.map(p => <th key={p}>{p}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {criteria.map(c => (
+                <tr key={c}>
+                  <td>{c}</td>
+                  {products.map(p => {
+                    const vals = scaleData.filter(r => r.produit === p && r.question === c).map(r => parseFloat(r.valeur));
+                    const m = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : "—";
+                    const sd = vals.length > 1
+                      ? Math.sqrt(vals.reduce((a, b) => a + (b - parseFloat(m)) ** 2, 0) / (vals.length - 1)).toFixed(2)
+                      : "—";
+                    return <td key={p} className="num">{m}<br /><span style={{ fontSize: "10px", color: "var(--text-muted)" }}>±{sd}</span></td>;
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      </div>
+
+      <Card title="ANOVA à deux facteurs (produit × jury) par critère">
+        <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: 0 }}>
+          Modèle additif sans répétition. F_produit teste l&apos;effet produit, F_jury teste l&apos;effet jury (niveau d&apos;utilisation de l&apos;échelle).
+        </p>
         <table className="data-table">
           <thead>
             <tr>
               <th>Critère</th>
-              {products.map(p => <th key={p}>{p}</th>)}
+              <th>F<sub>produit</sub></th>
+              <th>p<sub>produit</sub></th>
+              <th>F<sub>jury</sub></th>
+              <th>p<sub>jury</sub></th>
+              <th>ddl</th>
             </tr>
           </thead>
           <tbody>
-            {criteria.map(c => (
-              <tr key={c}>
-                <td>{c}</td>
-                {products.map(p => {
-                  const vals = scaleData.filter(r => r.produit === p && r.question === c).map(r => parseFloat(r.valeur));
-                  const m = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : "—";
-                  const sd = vals.length > 1
-                    ? Math.sqrt(vals.reduce((a, b) => a + (b - parseFloat(m)) ** 2, 0) / (vals.length - 1)).toFixed(2)
-                    : "—";
-                  return <td key={p} className="num">{m}<br /><span style={{ fontSize: "10px", color: "var(--text-muted)" }}>±{sd}</span></td>;
-                })}
+            {anovaRows.map(r => (
+              <tr key={r.crit}>
+                <td>{r.crit}</td>
+                {r.ok ? (
+                  <>
+                    <td className="num">{r.fProd.toFixed(2)}</td>
+                    <td className="num" style={{ color: sigColor(r.pProd), fontWeight: r.pProd < 0.05 ? 700 : 400 }}>
+                      {pFmt(r.pProd)} {sigMark(r.pProd)}
+                    </td>
+                    <td className="num">{r.fJury.toFixed(2)}</td>
+                    <td className="num" style={{ color: sigColor(r.pJury), fontWeight: r.pJury < 0.05 ? 700 : 400 }}>
+                      {pFmt(r.pJury)} {sigMark(r.pJury)}
+                    </td>
+                    <td className="num" style={{ fontSize: "11px" }}>{r.dfProd}, {r.dfJury}, {r.dfErr}</td>
+                  </>
+                ) : (
+                  <td colSpan={5} style={{ color: "var(--text-muted)", fontStyle: "italic" }}>{r.reason}</td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+      </Card>
+
+      {pcaRes && pcaChartData && (
+        <Card title={`ACP — Carte produits (CP1 ${pcaRes.explained[0].toFixed(1)}% · CP2 ${pcaRes.explained[1].toFixed(1)}%)`}>
+          <div style={{ height: "360px" }}>
+            <Scatter
+              data={pcaChartData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  x: { title: { display: true, text: `CP1 (${pcaRes.explained[0].toFixed(1)}%)` }, grid: { color: "#eee" } },
+                  y: { title: { display: true, text: `CP2 (${pcaRes.explained[1].toFixed(1)}%)` }, grid: { color: "#eee" } },
+                },
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx: any) => {
+                        const d = ctx.raw;
+                        return `${d.label}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`;
+                      }
+                    }
+                  }
+                }
+              }}
+            />
+          </div>
+          <div style={{ marginTop: "12px", fontSize: "12px", color: "var(--text-muted)" }}>
+            Variance cumulée CP1+CP2 : <strong>{(pcaRes.explained[0] + pcaRes.explained[1]).toFixed(1)}%</strong>
+            {" "}· Saturations (loadings) CP1 : {criteria.map((c, i) => `${c}=${pcaRes.loadings[i][0].toFixed(2)}`).join(", ")}
+          </div>
+        </Card>
+      )}
+
+      <Card title="Performance individuelle des jurys">
+        <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: 0 }}>
+          Conformité = corrélation (Pearson) entre les notes du jury et les moyennes du panel. Amplitude = étendue des notes du jury (utilisation de l&apos;échelle).
+        </p>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Jury</th>
+              <th>n notes</th>
+              <th>Conformité</th>
+              <th>Amplitude</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            {juryPerf.map(p => {
+              const discordant = p.conf < 0.3;
+              const narrow = p.range < 2;
+              const color = discordant ? "#c0392b" : p.conf >= 0.6 ? "#1a6b3a" : "#c8820a";
+              const statut = discordant ? "discordant" : p.conf >= 0.6 ? "conforme" : "modéré";
+              return (
+                <tr key={p.jury}>
+                  <td>{p.jury}</td>
+                  <td className="num">{p.nNotes}</td>
+                  <td className="num" style={{ color, fontWeight: 600 }}>{p.conf.toFixed(2)}</td>
+                  <td className="num" style={{ color: narrow ? "#c8820a" : "inherit" }}>
+                    {p.range.toFixed(1)}{narrow && " ⚠"}
+                  </td>
+                  <td style={{ color, fontWeight: 600 }}>{statut}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--text-muted)" }}>
+          Conformité : ≥ 0,60 conforme · 0,30–0,60 modéré · &lt; 0,30 discordant. ⚠ amplitude &lt; 2 : jury compresse l&apos;échelle.
+        </div>
       </Card>
     </div>
   );
@@ -327,22 +765,25 @@ function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; typ
         const sig = pValue < 0.001 ? "***" : pValue < 0.01 ? "**" : pValue < 0.05 ? "*" : "ns";
         const sigColor = pValue < 0.05 ? "#1a6b3a" : "#888";
 
-        // Correct order comparison
+        // Correct order comparison — Kendall τ vs ordre attendu
         const correctStr = qRows[0]?.correct || "";
         const correctProducts = correctStr ? correctStr.split(">").map((s: string) => s.trim()) : [];
         let matchCount = 0;
-        let avgCorrelation = 0;
-        
+        let avgTau = 0;
+
         if (correctProducts.length > 0) {
           const correctRank: Record<string, number> = {};
           correctProducts.forEach((p: string, idx: number) => { correctRank[p] = idx + 1; });
-          
+
           matrices.forEach(m => {
             if (Object.keys(m).every((p: string) => correctRank[p] === m[p])) matchCount++;
-            avgCorrelation += spearmanRho(correctRank, m, products);
+            avgTau += kendallTau(correctRank, m, products);
           });
-          avgCorrelation /= n;
+          avgTau /= n;
         }
+
+        // Concordance inter-jurys du panel (indépendant de l'ordre attendu)
+        const panelW = kendallW(matrices, products);
 
         // Nemenyi Post-hoc & CLD
         const nemenyiCD = getNemenyiCD(k, n);
@@ -408,7 +849,13 @@ function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; typ
                   <div><strong>Test de Friedman</strong> (α=0,05)</div>
                   <div>n = {n} jurys · k = {k} produits</div>
                   <div>χ² = {chi2.toFixed(3)} · p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)} <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span></div>
-                  
+                  <div title="Coefficient de concordance de Kendall — cohérence inter-jurys du panel. 1 = accord parfait, 0 = désaccord total.">
+                    <span style={{ color: "var(--text-muted)" }}>W de Kendall (concordance panel) = </span>
+                    <span style={{ fontWeight: 600, color: panelW >= 0.7 ? "#1a6b3a" : panelW >= 0.4 ? "#8a6d00" : "var(--danger)" }}>
+                      {panelW.toFixed(2)}
+                    </span>
+                  </div>
+
                   {pValue < 0.05 && (
                     <div style={{ marginTop: "12px" }}>
                       <strong>Post-hoc de Nemenyi</strong> (α=0,10)
@@ -462,7 +909,9 @@ function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; typ
                     <div style={{ marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
                       <strong>Conformité à l&apos;ordre attendu</strong>
                       <div>{matchCount} / {n} jurys exacts ({(matchCount / n * 100).toFixed(0)}%)</div>
-                      <div>Corrélation moyenne ρ = {avgCorrelation.toFixed(2)}</div>
+                      <div title="τ de Kendall — concordance en paires avec l'ordre attendu. 1 = identique, 0 = aléatoire, -1 = inverse.">
+                        τ de Kendall moyen = <span style={{ fontWeight: 600 }}>{avgTau.toFixed(2)}</span>
+                      </div>
                       <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Attendu : {correctProducts.join(" > ")}</div>
                     </div>
                   )}
@@ -540,26 +989,149 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
     return 0;
   };
 
+  if (type === "a-non-a") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {questions.map(q => {
+          const qd = dd.filter(r => r.question === q);
+          // Agrégation en table 2×2 : lignes = stimulus (A / non-A), colonnes = réponse (A / non-A)
+          let hits = 0, misses = 0, fa = 0, cr = 0;
+          const perJury: Array<{ jury: string; hit: number; miss: number; fa: number; cr: number }> = [];
+          qd.forEach(r => {
+            let val: Record<string, string> = {};
+            let cor: Record<string, string> = {};
+            try {
+              val = typeof r.valeur === "string" && r.valeur.startsWith("{") ? JSON.parse(r.valeur) : (r.valeur || {});
+              cor = typeof r.correct === "string" && r.correct.includes(":")
+                ? Object.fromEntries(r.correct.split(",").map((p: string) => p.split(":")))
+                : {};
+            } catch { /* ignore */ }
+            let h = 0, m = 0, f = 0, c = 0;
+            Object.keys(cor).forEach(code => {
+              const stim = cor[code];
+              const resp = val[code];
+              if (!resp) return;
+              if (stim === "A" && resp === "A") h++;
+              else if (stim === "A" && resp === "non-A") m++;
+              else if (stim === "non-A" && resp === "A") f++;
+              else if (stim === "non-A" && resp === "non-A") c++;
+            });
+            hits += h; misses += m; fa += f; cr += c;
+            perJury.push({ jury: r.jury, hit: h, miss: m, fa: f, cr: c });
+          });
+
+          const nA = hits + misses;
+          const nNonA = fa + cr;
+          const total = nA + nNonA;
+          // Macmillan & Kaplan correction to avoid z(0) / z(1)
+          const H = nA > 0 ? Math.min(Math.max(hits / nA, 0.5 / nA), (nA - 0.5) / nA) : 0.5;
+          const F = nNonA > 0 ? Math.min(Math.max(fa / nNonA, 0.5 / nNonA), (nNonA - 0.5) / nNonA) : 0.5;
+          const dPrime = normalInvCDF(H) - normalInvCDF(F);
+
+          // Chi² 2×2 avec correction de Yates
+          const rowA = nA, rowN = nNonA, colA = hits + fa, colN = misses + cr;
+          let chi2 = 0;
+          const cells = [
+            { o: hits,   e: rowA * colA / total },
+            { o: misses, e: rowA * colN / total },
+            { o: fa,     e: rowN * colA / total },
+            { o: cr,     e: rowN * colN / total },
+          ];
+          if (total > 0 && rowA > 0 && rowN > 0 && colA > 0 && colN > 0) {
+            cells.forEach(c => { chi2 += Math.pow(Math.abs(c.o - c.e) - 0.5, 2) / c.e; });
+          }
+          const pVal = total > 0 ? chiSquarePValue(chi2, 1) : 1;
+          const sig = pVal < 0.001 ? "***" : pVal < 0.01 ? "**" : pVal < 0.05 ? "*" : "ns";
+          const sigColor = pVal < 0.05 ? "#1a6b3a" : "#888";
+
+          // Interprétation pédagogique de d' (Green & Swets, Macmillan & Creelman)
+          const dInterp = Math.abs(dPrime) < 0.5 ? "très faible" : Math.abs(dPrime) < 1 ? "faible" : Math.abs(dPrime) < 1.5 ? "modérée" : Math.abs(dPrime) < 2.5 ? "forte" : "très forte";
+
+          return (
+            <Card key={q} title={`${label} — ${q}`}>
+              <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-start" }}>
+                <div style={{ textAlign: "center", minWidth: "140px" }}>
+                  <div style={{ fontSize: "clamp(36px,5vw,52px)", fontWeight: 800, color: sigColor }}>
+                    d&apos; = {dPrime.toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>indice de discrimination</div>
+                  <div style={{ fontSize: "13px", color: sigColor, marginTop: "4px", fontStyle: "italic" }}>{dInterp}</div>
+                </div>
+
+                <div style={{ flex: 1, minWidth: "260px" }}>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Table 2×2 agrégée</div>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Réponse &laquo;&nbsp;A&nbsp;&raquo;</th>
+                        <th>Réponse &laquo;&nbsp;non-A&nbsp;&raquo;</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>Stimulus A</strong></td>
+                        <td className="num" style={{ color: "#1a6b3a", fontWeight: 600 }}>{hits} <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>(hit)</span></td>
+                        <td className="num" style={{ color: "#c0392b" }}>{misses} <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>(miss)</span></td>
+                        <td className="num">{nA}</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Stimulus non-A</strong></td>
+                        <td className="num" style={{ color: "#c0392b" }}>{fa} <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>(FA)</span></td>
+                        <td className="num" style={{ color: "#1a6b3a", fontWeight: 600 }}>{cr} <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>(CR)</span></td>
+                        <td className="num">{nNonA}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div style={{ padding: "12px 14px", background: "var(--bg)", borderRadius: "8px", fontSize: "13px", lineHeight: 1.8, marginTop: "10px" }}>
+                    <div>Taux de détection (hit rate) : <strong>{(H * 100).toFixed(1)}%</strong></div>
+                    <div>Taux de fausse alarme : <strong>{(F * 100).toFixed(1)}%</strong></div>
+                    <div>χ² (Yates, ddl=1) = {chi2.toFixed(2)} &middot; p = {pVal < 0.001 ? "< 0,001" : pVal.toFixed(3)} <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span></div>
+                    {pVal < 0.05
+                      ? <div style={{ color: "#1a6b3a", fontWeight: 600, marginTop: "4px" }}>Discrimination significative entre A et non-A (α=0,05)</div>
+                      : <div style={{ color: "#c0392b", marginTop: "4px" }}>Pas de différence détectée (α=0,05)</div>}
+                  </div>
+                </div>
+              </div>
+
+              <details style={{ marginTop: "14px" }}>
+                <summary style={{ cursor: "pointer", fontSize: "12px", color: "var(--mid)" }}>Détail par jury</summary>
+                <table className="data-table" style={{ marginTop: "8px" }}>
+                  <thead>
+                    <tr><th>Jury</th><th>Hits</th><th>Miss</th><th>FA</th><th>CR</th><th>% correct</th></tr>
+                  </thead>
+                  <tbody>
+                    {perJury.map((j, i) => {
+                      const nj = j.hit + j.miss + j.fa + j.cr;
+                      const pc = nj ? ((j.hit + j.cr) / nj * 100).toFixed(0) : "—";
+                      return (
+                        <tr key={i}>
+                          <td>{j.jury}</td>
+                          <td className="num">{j.hit}</td>
+                          <td className="num">{j.miss}</td>
+                          <td className="num">{j.fa}</td>
+                          <td className="num">{j.cr}</td>
+                          <td className="num">{pc}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </details>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {questions.map(q => {
         const qd = dd.filter(r => r.question === q);
         const n = qd.length;
-        let nc = 0;
-
-        if (type === "a-non-a") {
-          qd.forEach(r => {
-            try {
-              const val = typeof r.valeur === "string" && r.valeur.startsWith("{") ? JSON.parse(r.valeur) : r.valeur;
-              const cor = typeof r.correct === "string" && r.correct.includes(":")
-                ? Object.fromEntries(r.correct.split(",").map((p: string) => p.split(":")))
-                : {};
-              if (JSON.stringify(val) === JSON.stringify(cor)) nc++;
-            } catch { /* ignore */ }
-          });
-        } else {
-          nc = qd.filter(r => r.valeur === r.correct).length;
-        }
+        const nc = qd.filter(r => r.valeur === r.correct).length;
 
         const pVal = binomialPValue(n, nc, pChance);
         const sig = pVal < 0.001 ? "***" : pVal < 0.01 ? "**" : pVal < 0.05 ? "*" : "ns";
@@ -570,7 +1142,6 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
         return (
           <Card key={q} title={`${label} — ${q}`}>
             <div style={{ display: "flex", gap: "32px", flexWrap: "wrap", alignItems: "flex-start" }}>
-              {/* Big result */}
               <div style={{ textAlign: "center", minWidth: "120px" }}>
                 <div style={{ fontSize: "clamp(36px,5vw,52px)", fontWeight: 800, color: nc >= minC ? "#1a6b3a" : "#888" }}>
                   {nc}
@@ -579,7 +1150,6 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
                 <div style={{ fontSize: "22px", fontWeight: 700, color: sigColor, marginTop: "6px" }}>{pct}%</div>
               </div>
 
-              {/* Stats */}
               <div style={{ flex: 1, minWidth: "200px" }}>
                 <div style={{ padding: "12px 14px", background: "var(--bg)", borderRadius: "8px", fontSize: "13px", lineHeight: 1.9 }}>
                   <div><strong>Test binomial</strong> (unilatéral)</div>
@@ -600,7 +1170,6 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
                   }
                 </div>
 
-                {/* Per juror results */}
                 <div style={{ marginTop: "12px", fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>
                   Détail par jury
                 </div>
@@ -610,18 +1179,7 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
                   </thead>
                   <tbody>
                     {qd.map((r, i) => {
-                      let correct = false;
-                      if (type === "a-non-a") {
-                        try {
-                          const val = typeof r.valeur === "string" && r.valeur.startsWith("{") ? JSON.parse(r.valeur) : r.valeur;
-                          const cor = typeof r.correct === "string" && r.correct.includes(":")
-                            ? Object.fromEntries(r.correct.split(",").map((p: string) => p.split(":")))
-                            : {};
-                          correct = JSON.stringify(val) === JSON.stringify(cor);
-                        } catch { /* ignore */ }
-                      } else {
-                        correct = r.valeur === r.correct;
-                      }
+                      const correct = r.valeur === r.correct;
                       return (
                         <tr key={i}>
                           <td>{r.jury}</td>
@@ -640,6 +1198,146 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
                 </table>
               </div>
             </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Seuil BET (3-AFC, ASTM E679) ─────────────────────────────────────────────
+
+function AnalyseSeuilBET({ config, allAnswers }: { config: any; allAnswers: any }) {
+  const questions: any[] = (config?.questions || []).filter((q: any) => q.type === "seuil-bet");
+  const jurors = Object.keys(allAnswers || {});
+
+  if (questions.length === 0 || jurors.length === 0) {
+    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée disponible.</div>;
+  }
+
+  const computeBET = (levels: any[], answers: Record<string, string>): { bet: number | null; censored: "low" | "high" | null; trace: ("+" | "-" | "?")[] } => {
+    const trace: ("+" | "-" | "?")[] = levels.map((lv, i) => {
+      const a = answers?.[String(i)];
+      if (a == null || a === "") return "?";
+      return a === lv.correctAnswer ? "+" : "-";
+    });
+    const n = levels.length;
+    const allCorrect = trace.every(t => t === "+");
+    const allWrong = trace.every(t => t === "-");
+    if (allCorrect) {
+      const step = n > 1 ? levels[1].concentration / levels[0].concentration : Math.SQRT2;
+      return { bet: levels[0].concentration / Math.sqrt(step), censored: "low", trace };
+    }
+    if (allWrong) {
+      const step = n > 1 ? levels[n - 1].concentration / levels[n - 2].concentration : Math.SQRT2;
+      return { bet: levels[n - 1].concentration * Math.sqrt(step), censored: "high", trace };
+    }
+    let lastFail = -1;
+    for (let i = n - 1; i >= 0; i--) {
+      if (trace[i] === "-") { lastFail = i; break; }
+    }
+    if (lastFail === -1 || lastFail === n - 1) return { bet: null, censored: null, trace };
+    const cLow = levels[lastFail].concentration;
+    const cHigh = levels[lastFail + 1].concentration;
+    return { bet: Math.sqrt(cLow * cHigh), censored: null, trace };
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {questions.map((q: any) => {
+        const levels = q.betLevels || [];
+        if (levels.length === 0) {
+          return (
+            <Card key={q.id} title={`Seuil 3-AFC — ${q.label}`}>
+              <div style={{ color: "var(--text-muted)" }}>Aucun niveau défini.</div>
+            </Card>
+          );
+        }
+
+        const perJury = jurors.map(j => {
+          const answers = (allAnswers[j]?._discrim?.[q.id] || {}) as Record<string, string>;
+          const { bet, censored, trace } = computeBET(levels, answers);
+          return { jury: j, bet, censored, trace };
+        });
+
+        const valid = perJury.filter(r => r.bet != null && Number.isFinite(r.bet) && (r.bet as number) > 0);
+        const groupBET = valid.length > 0
+          ? Math.exp(valid.reduce((s, r) => s + Math.log(r.bet as number), 0) / valid.length)
+          : null;
+
+        const levelStats = levels.map((lv: any, i: number) => {
+          const resp = perJury.map(r => r.trace[i]).filter(t => t !== "?");
+          const correct = resp.filter(t => t === "+").length;
+          return { label: lv.label, concentration: lv.concentration, n: resp.length, correct };
+        });
+
+        return (
+          <Card key={q.id} title={`Seuil 3-AFC (BET) — ${q.label}`}>
+            <div style={{ display: "flex", gap: "32px", flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ textAlign: "center", minWidth: "160px" }}>
+                <div style={{ fontSize: "clamp(30px,4vw,44px)", fontWeight: 800, color: "#1a6b3a" }}>
+                  {groupBET != null ? groupBET.toPrecision(3) : "—"}
+                </div>
+                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>seuil de groupe (BET)</div>
+                <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "4px", fontStyle: "italic" }}>
+                  moyenne géométrique sur {valid.length} / {perJury.length} jurys
+                </div>
+              </div>
+
+              <div style={{ flex: 1, minWidth: "260px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Réponses correctes par niveau</div>
+                <table className="data-table">
+                  <thead>
+                    <tr><th>Niveau</th><th>Concentration</th><th>Correctes / N</th><th>%</th></tr>
+                  </thead>
+                  <tbody>
+                    {levelStats.map((lv: any, i: number) => (
+                      <tr key={i}>
+                        <td>{lv.label || `niveau ${i + 1}`}</td>
+                        <td className="num">{lv.concentration}</td>
+                        <td className="num">{lv.correct} / {lv.n}</td>
+                        <td className="num">{lv.n > 0 ? ((lv.correct / lv.n) * 100).toFixed(0) : "—"}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <details style={{ marginTop: "14px" }}>
+              <summary style={{ cursor: "pointer", fontSize: "12px", color: "var(--mid)" }}>Détail par jury (ASTM E679)</summary>
+              <table className="data-table" style={{ marginTop: "8px" }}>
+                <thead>
+                  <tr>
+                    <th>Jury</th>
+                    {levels.map((lv: any, i: number) => <th key={i} title={lv.label}>N{i + 1}</th>)}
+                    <th>BET</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {perJury.map(r => (
+                    <tr key={r.jury}>
+                      <td>{r.jury}</td>
+                      {r.trace.map((t, i) => (
+                        <td key={i} className="num" style={{ color: t === "+" ? "#1a6b3a" : t === "-" ? "#c0392b" : "#888", fontWeight: 600 }}>
+                          {t === "+" ? "✓" : t === "-" ? "✗" : "—"}
+                        </td>
+                      ))}
+                      <td className="num">
+                        {r.bet != null ? r.bet.toPrecision(3) : "—"}
+                        {r.censored === "low" && <span style={{ fontSize: "10px", color: "var(--mid)" }}> (≤)</span>}
+                        {r.censored === "high" && <span style={{ fontSize: "10px", color: "var(--mid)" }}> (≥)</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "8px", fontStyle: "italic" }}>
+                BET = moyenne géométrique des concentrations encadrant la dernière inversion (ASTM E679).
+                (≤) : toutes réponses correctes, seuil censuré sous la plus faible concentration.
+                (≥) : aucune réponse correcte, seuil censuré au-dessus de la plus forte concentration.
+              </div>
+            </details>
           </Card>
         );
       })}
@@ -749,7 +1447,7 @@ function AnalyseJury({ config, allAnswers }: { config: any; allAnswers: any }) {
           <tr>
             <th>Jury</th>
             {products.map(p => <th key={p.code}>{p.code}</th>)}
-            {qs.filter(q => ["classement","seuil","triangulaire","duo-trio","a-non-a"].includes(q.type)).map(q => (
+            {qs.filter(q => ["classement","seuil","seuil-bet","triangulaire","duo-trio","a-non-a"].includes(q.type)).map(q => (
               <th key={q.id} style={{ maxWidth: "80px", overflow: "hidden", textOverflow: "ellipsis" }} title={q.label}>
                 {q.label.length > 12 ? q.label.slice(0, 10) + "…" : q.label}
               </th>
@@ -767,22 +1465,22 @@ function AnalyseJury({ config, allAnswers }: { config: any; allAnswers: any }) {
                   const pa = ja[p.code] || {};
                   const answered = ppQ.some(q => pa[q.id] != null);
                   return (
-                    <td key={p.code} style={{ textAlign: "center", color: answered ? "#1a6b3a" : "#ccc" }}>
-                      {answered ? "✓" : "—"}
+                    <td key={p.code} style={{ textAlign: "center", color: answered ? "#1a6b3a" : "#c0392b", fontWeight: 600 }}>
+                      {answered ? "✓" : "✗"}
                     </td>
                   );
                 })}
-                {qs.filter(q => ["classement","seuil","triangulaire","duo-trio","a-non-a"].includes(q.type)).map(q => {
+                {qs.filter(q => ["classement","seuil","seuil-bet","triangulaire","duo-trio","a-non-a"].includes(q.type)).map(q => {
                   const section = q.type === "classement" || q.type === "seuil" ? "_rank" : "_discrim";
                   const answered = ja[section]?.[q.id] != null;
                   return (
-                    <td key={q.id} style={{ textAlign: "center", color: answered ? "#1a6b3a" : "#ccc" }}>
-                      {answered ? "✓" : "—"}
+                    <td key={q.id} style={{ textAlign: "center", color: answered ? "#1a6b3a" : "#c0392b", fontWeight: 600 }}>
+                      {answered ? "✓" : "✗"}
                     </td>
                   );
                 })}
-                <td style={{ textAlign: "center", color: ja["_global"] && Object.keys(ja["_global"]).length > 0 ? "#1a6b3a" : "#ccc" }}>
-                  {ja["_global"] && Object.keys(ja["_global"]).length > 0 ? "✓" : "—"}
+                <td style={{ textAlign: "center", color: ja["_global"] && Object.keys(ja["_global"]).length > 0 ? "#1a6b3a" : "#c0392b", fontWeight: 600 }}>
+                  {ja["_global"] && Object.keys(ja["_global"]).length > 0 ? "✓" : "✗"}
                 </td>
               </tr>
             );

@@ -1,5 +1,6 @@
+"use client";
 
-
+import { useEffect, useRef } from "react";
 import { QuestionInput } from "./QuestionInput";
 import { Question, Product } from "../../types";
 
@@ -9,10 +10,36 @@ interface QuestionnaireProps {
   ja: any;
   setJa: (newJa: any) => void;
   products?: Product[];
+  jurorName?: string;
 }
 
-export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: QuestionnaireProps) => {
+const stepKey = (step: any, idx: number) => {
+  if (!step) return `s${idx}`;
+  if (step.type === "product") return `product:${step.product.code}`;
+  if (step.type === "ranking" || step.type === "discrim") return `${step.type}:${step.question.id}`;
+  if (step.type === "global") return `global`;
+  return `s${idx}`;
+};
+
+export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products, jurorName }: QuestionnaireProps) => {
   const step = steps[currentStepIdx];
+  const startRef = useRef<number>(Date.now());
+  const jaRef = useRef(ja);
+  jaRef.current = ja;
+
+  useEffect(() => {
+    startRef.current = Date.now();
+    const key = stepKey(step, currentStepIdx);
+    return () => {
+      const elapsed = Date.now() - startRef.current;
+      if (elapsed < 200 || elapsed > 1000 * 60 * 30) return;
+      const cur = jaRef.current || {};
+      const prev = cur["_timing"]?.[key] || 0;
+      setJa({ ...cur, _timing: { ...(cur["_timing"] || {}), [key]: prev + elapsed } });
+    };
+
+  }, [currentStepIdx]);
+
   if (!step) return null;
 
   const handleUpdate = (ctx: string, qid: string, val: any) => {
@@ -22,6 +49,8 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
     };
     setJa(newJa);
   };
+
+  const seed = jurorName || "";
 
   return (
     <div className="product-card">
@@ -35,6 +64,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
               value={ja[step.product.code]?.[q.id]}
               onChange={(val) => handleUpdate(step.product.code, q.id, val)}
               products={products}
+              seedKey={`${seed}:${step.product.code}`}
             />
           ))}
         </>
@@ -47,6 +77,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
             value={ja["_rank"]?.[step.question.id]}
             onChange={(val) => handleUpdate("_rank", step.question.id, val)}
             products={products}
+            seedKey={seed}
           />
         </>
       )}
@@ -58,6 +89,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
             value={ja["_discrim"]?.[step.question.id]}
             onChange={(val) => handleUpdate("_discrim", step.question.id, val)}
             products={products}
+            seedKey={seed}
           />
         </>
       )}
@@ -71,6 +103,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
               value={ja["_global"]?.[q.id]}
               onChange={(val) => handleUpdate("_global", q.id, val)}
               products={products}
+              seedKey={`${seed}:global`}
             />
           ))}
         </>

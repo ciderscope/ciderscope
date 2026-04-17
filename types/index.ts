@@ -1,4 +1,12 @@
-export type QuestionType = "scale" | "classement" | "seuil" | "text" | "qcm" | "triangulaire" | "duo-trio" | "a-non-a";
+export type QuestionType = "scale" | "classement" | "seuil" | "seuil-bet" | "text" | "qcm" | "triangulaire" | "duo-trio" | "a-non-a";
+
+// Niveau d'un test de seuil BET (3-AFC) : concentration + 3 codes + réponse correcte.
+export interface BetLevel {
+  label: string;        // libellé libre (ex. "0,1 g/L")
+  concentration: number; // valeur numérique pour calcul BET (unité cohérente dans la série)
+  codes: [string, string, string];
+  correctAnswer: string; // code de l'échantillon "différent"
+}
 
 export interface Question {
   id: string;
@@ -17,6 +25,7 @@ export interface Question {
   codes?: string[];
   correctAnswer?: string;
   refCode?: string;
+  betLevels?: BetLevel[];
 }
 
 export interface Product {
@@ -43,3 +52,11 @@ export interface SessionListItem {
   productCount?: number;
   questionCount?: number;
 }
+
+export type AnswerValue = number | string | string[] | Record<string, string> | null;
+
+// Structure logique des réponses d'un jury.
+// Les clés "_rank", "_discrim", "_global", "_timing" sont réservées ; les autres sont des codes échantillon.
+export type JurorAnswers = {
+  [key: string]: Record<string, AnswerValue | number | string[]>;
+};

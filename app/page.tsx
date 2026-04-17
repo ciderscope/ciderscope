@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { hsh } from "../lib/utils";
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -19,6 +20,7 @@ import { ParticipantView } from "../components/views/ParticipantView";
 import { AdminView } from "../components/views/AdminView";
 import { AdminLoginView } from "../components/views/AdminLoginView";
 import { useSenso } from "../hooks/useSenso";
+import { validateSession } from "../lib/validation";
 
 ChartJS.register(
   RadialLinearScale,
@@ -42,9 +44,12 @@ const downloadCSV = (rows: any[], name: string) => {
   a.click();
 };
 
+const fingerprint = (cfg: unknown) => hsh(JSON.stringify(cfg));
+
 export default function CiderScope() {
   // null = pas encore vérifié (évite le flash du formulaire de connexion)
   const [adminAuth, setAdminAuth] = useState<boolean | null>(null);
+  const editFingerprintRef = useRef<number | null>(null);
 
   useEffect(() => {
     setAdminAuth(sessionStorage.getItem("admin_auth") === "1");
@@ -70,6 +75,9 @@ export default function CiderScope() {
     loadSessions,
     loadSessionConfig,
     online,
+    saveStatus,
+    pendingCount,
+    isStepComplete,
   } = useSenso();
 
   return (
@@ -93,12 +101,15 @@ export default function CiderScope() {
             cj={cj}
             ja={ja}
             cs={cs}
+            saveStatus={saveStatus}
+            pendingCount={pendingCount}
             onSelectSession={handleSelectSession}
             onLoginJury={handleLoginJury}
             onSetJa={handleSetJa}
             onPrevStep={() => setCs(cs - 1)}
             onNextStep={() => {
               const steps = buildSteps(curSess!, cj);
+              if (!isStepComplete(cs)) return;
               if (cs >= steps.length - 1) setScreen("done");
               else setCs(cs + 1);
             }}
@@ -106,6 +117,7 @@ export default function CiderScope() {
             onHome={() => setScreen("landing")}
             onReviewAnswers={() => handleLoginJury(cj)}
             buildSteps={buildSteps}
+            isStepComplete={isStepComplete}
           />
         )}
 
@@ -123,6 +135,7 @@ export default function CiderScope() {
             onNewSession={() => {
               setEditCfg({ name: "", date: new Date().toISOString().slice(0, 10), products: [], questions: [], presMode: "latin" });
               setEditSessId(null);
+              editFingerprintRef.current = null;
               setCurEditTab("session");
               setScreen("edit");
             }}
@@ -130,6 +143,7 @@ export default function CiderScope() {
               const cfg = await loadSessionConfig(id);
               setEditCfg(cfg);
               setEditSessId(id);
+              editFingerprintRef.current = cfg ? fingerprint(cfg) : null;
               setCurEditTab("session");
               setScreen("edit");
             }}
@@ -152,9 +166,18 @@ export default function CiderScope() {
             onHome={() => setScreen("landing")}
             onSaveEdit={async () => {
               if (!editCfg) return;
-              if (!editCfg.name.trim()) {
-                alert("Veuillez donner un nom à la séance.");
+              const errs = validateSession(editCfg);
+              if (errs.length > 0) {
+                alert("Configuration incomplète :\n\n• " + errs.join("\n• "));
                 return;
+              }
+              // Verrouillage optimiste : on vérifie que la version serveur n'a pas changé depuis l'ouverture.
+              if (editSessId && editFingerprintRef.current !== null) {
+                const current = await loadSessionConfig(editSessId);
+                if (current && fingerprint(current) !== editFingerprintRef.current) {
+                  const ok = confirm("Cette séance a été modifiée ailleurs depuis que vous l'avez ouverte. Écraser ces modifications ?");
+                  if (!ok) return;
+                }
               }
               const id = editSessId || "s" + Date.now();
               const existing = sessions.find(s => s.id === id);
@@ -163,6 +186,7 @@ export default function CiderScope() {
                 jurorCount: existing?.jurorCount ?? 0,
               });
               if (res.success) {
+                editFingerprintRef.current = fingerprint(editCfg);
                 await loadSessions();
                 setScreen("landing");
               } else {

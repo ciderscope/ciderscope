@@ -1,21 +1,44 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Badge } from "../ui/Badge";
 import { Question, Product } from "../../types";
 import { FiChevronLeft } from "react-icons/fi";
+import { hsh } from "../../lib/utils";
 
 interface QuestionInputProps {
   q: Question;
   value: any;
   onChange: (val: any) => void;
   products?: Product[];
+  seedKey?: string;
+}
+
+// Graine → ordre aléatoire déterministe (anti-ancrage)
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const a = [...arr];
+  let s = seed || 1;
+  for (let k = a.length - 1; k > 0; k--) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const j = s % (k + 1);
+    [a[k], a[j]] = [a[j], a[k]];
+  }
+  return a;
 }
 
 // Horizontal draggable rank for classement / seuil
-function HorizontalRank({ items, value, onChange }: { items: string[]; value: any; onChange: (v: any) => void }) {
-  const ordered: string[] = Array.isArray(value) && value.length === items.length
-    ? value
-    : [...items];
+function HorizontalRank({ items, value, onChange, seedKey }: { items: string[]; value: any; onChange: (v: any) => void; seedKey?: string }) {
+  const initialOrder = useMemo(
+    () => seedKey ? seededShuffle(items, hsh(seedKey)) : [...items],
+    [items, seedKey]
+  );
+  const hasValue = Array.isArray(value) && value.length === items.length;
+  const ordered: string[] = hasValue ? value : initialOrder;
+
+  // Commit l'ordre aléatoire initial à la première présentation (lève la gate Suivant)
+  useEffect(() => {
+    if (!hasValue) onChange(initialOrder);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
@@ -85,7 +108,7 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: an
   );
 }
 
-export const QuestionInput = ({ q, value, onChange, products }: QuestionInputProps) => {
+export const QuestionInput = ({ q, value, onChange, products, seedKey }: QuestionInputProps) => {
   if (q.type === "scale") {
     const mn = q.min ?? 0;
     const mx = q.max ?? 10;
@@ -101,15 +124,27 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
               min={mn}
               max={mx}
               value={isNR ? Math.round((mn + mx) / 2) : value}
-              onChange={(e) => onChange(parseInt(e.target.value))}
-              style={{ opacity: isNR ? 0.4 : 1 }}
+              onChange={(e) => { if (!isNR) onChange(parseInt(e.target.value)); }}
+              onPointerDown={(e) => { if (isNR) e.preventDefault(); }}
+              disabled={isNR}
+              style={{ opacity: isNR ? 0.35 : 1, cursor: isNR ? "not-allowed" : "pointer" }}
+              aria-disabled={isNR}
             />
             <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "DM Mono, monospace" }}>{q.labelMax || mx}</span>
             <span className="scale-value">{isNR ? "—" : value}</span>
           </div>
           <label className="scale-not-rated">
-            <input type="checkbox" checked={isNR} onChange={(e) => onChange(e.target.checked ? null : Math.round((mn + mx) / 2))} /> Non évalué
+            <input
+              type="checkbox"
+              checked={isNR}
+              onChange={(e) => onChange(e.target.checked ? null : Math.round((mn + mx) / 2))}
+            /> Non évalué
           </label>
+          {isNR && (
+            <div style={{ fontSize: "11px", color: "var(--mid)", fontStyle: "italic", marginTop: "4px" }}>
+              Décochez &laquo;&nbsp;Non évalué&nbsp;&raquo; pour saisir une note.
+            </div>
+          )}
         </div>
       </div>
     );
@@ -152,7 +187,7 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
       <div className="q-block">
         <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">{label}</Badge></span>
         {codes.length > 0 ? (
-          <HorizontalRank items={codes} value={value} onChange={onChange} />
+          <HorizontalRank items={codes} value={value} onChange={onChange} seedKey={seedKey ? `${seedKey}:${q.id}` : q.id} />
         ) : (
           <p style={{ fontSize: "13px", color: "var(--mid)" }}>Aucun échantillon défini.</p>
         )}
@@ -191,6 +226,39 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
           {[refA, refB].map(opt => (
             <div key={opt} className={`triangle-choice ${value === opt ? "selected" : ""}`} onClick={() => onChange(opt)}>
               <div className="code">{opt}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (q.type === "seuil-bet") {
+    const levels = q.betLevels || [];
+    const currentVal: Record<string, string> = (typeof value === "object" && value !== null) ? value : {};
+    return (
+      <div className="q-block">
+        <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">seuil 3-AFC</Badge></span>
+        <p className="discrim-ref">
+          Pour chaque niveau, identifiez <strong>le verre différent des deux autres</strong>. Les niveaux sont présentés dans l&apos;ordre.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {levels.map((lv, idx) => (
+            <div key={idx} style={{ padding: "12px", background: "var(--paper2)", borderRadius: "8px" }}>
+              <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px" }}>
+                Niveau {idx + 1} · {lv.label}
+              </div>
+              <div className="triangle-grid">
+                {lv.codes.map(code => (
+                  <div
+                    key={code}
+                    className={`triangle-choice ${currentVal[String(idx)] === code ? "selected" : ""}`}
+                    onClick={() => onChange({ ...currentVal, [String(idx)]: code })}
+                  >
+                    <div className="code">{code}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>

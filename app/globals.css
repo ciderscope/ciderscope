@@ -1686,3 +1686,8 @@ canvas { max-width: 100%; }
 
   #landingContent { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

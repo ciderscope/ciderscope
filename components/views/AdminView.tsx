@@ -1,11 +1,12 @@
 "use client";
 import React, { useState, useRef } from "react";
-import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPrinter } from "react-icons/fi";
+import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPrinter } from "react-icons/fi";
+import { QuestionInput } from "../features/QuestionInput";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { AnalyseView } from "./AnalyseView";
-import { Question, QuestionType, Product } from "../../types";
+import { Question, QuestionType, Product, BetLevel } from "../../types";
 import { wlm } from "../../lib/utils";
 
 // ─── Fiche de service ─────────────────────────────────────────────────────────
@@ -611,6 +612,84 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
 // ─────────────────────────────────────────────
 // Triangulaire builder
 // ─────────────────────────────────────────────
+// Seuil BET (3-AFC) : liste ordonnée de niveaux croissants
+// ─────────────────────────────────────────────
+function SeuilBetBuilder({ levels, onChange }: {
+  levels: BetLevel[];
+  onChange: (l: BetLevel[]) => void;
+}) {
+  const addLevel = () => {
+    onChange([...levels, { label: `Niveau ${levels.length + 1}`, concentration: 0, codes: ["", "", ""], correctAnswer: "" }]);
+  };
+  const updateLevel = (i: number, patch: Partial<BetLevel>) => {
+    const n = [...levels];
+    n[i] = { ...n[i], ...patch };
+    onChange(n);
+  };
+  const removeLevel = (i: number) => onChange(levels.filter((_, idx) => idx !== i));
+
+  return (
+    <div>
+      <div className="builder-section-label">NIVEAUX DE SEUIL (ordre croissant de concentration)</div>
+      <p style={{ fontSize: "11px", color: "var(--mid)", marginTop: "4px" }}>
+        À chaque niveau, 3 codes (2 identiques + 1 différent). Le jury doit identifier le verre différent (3-AFC).
+        Le BET individuel est la moyenne géométrique entre les deux concentrations encadrant le premier passage d&apos;erreur → succès (ASTM E679).
+      </p>
+
+      {levels.map((lv, i) => (
+        <div key={i} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "12px", marginTop: "10px", background: "var(--paper)" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontWeight: 700, fontSize: "12px", color: "var(--mid)" }}>#{i + 1}</span>
+            <input
+              value={lv.label}
+              placeholder="Libellé (ex. 0,1 g/L)"
+              onChange={e => updateLevel(i, { label: e.target.value })}
+              style={{ flex: 1, padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "13px" }}
+            />
+            <input
+              type="number"
+              value={lv.concentration}
+              step="any"
+              placeholder="conc."
+              onChange={e => updateLevel(i, { concentration: parseFloat(e.target.value) || 0 })}
+              style={{ width: "90px", padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "13px" }}
+              title="Valeur numérique (unité cohérente sur toute la série) utilisée pour le calcul BET"
+            />
+            <button className="q-del" title="Supprimer le niveau" onClick={() => removeLevel(i)}><FiX /></button>
+          </div>
+
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {[0, 1, 2].map(j => (
+              <input
+                key={j}
+                value={lv.codes[j] || ""}
+                placeholder={`Code ${j + 1}`}
+                onChange={e => {
+                  const newCodes: [string, string, string] = [lv.codes[0], lv.codes[1], lv.codes[2]];
+                  newCodes[j] = e.target.value.trim().toUpperCase();
+                  updateLevel(i, { codes: newCodes });
+                }}
+                style={{ width: "80px", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "13px", fontFamily: "DM Mono, monospace", textAlign: "center" }}
+              />
+            ))}
+            <span style={{ fontSize: "11px", color: "var(--mid)", marginLeft: "6px" }}>différent :</span>
+            <div style={{ display: "flex", gap: "4px" }}>
+              {lv.codes.filter(Boolean).map(code => (
+                <Chip key={code} code={code} active={lv.correctAnswer === code} onClick={() => updateLevel(i, { correctAnswer: code })} />
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <Button variant="secondary" size="sm" onClick={addLevel} className="mt8">
+        <FiPlus /> Ajouter un niveau
+      </Button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 function TriangulaireBuilder({ products, codes, correctAnswer, onChangeCodes, onChangeCorrect }: {
   products: Product[];
   codes: string[];
@@ -934,7 +1013,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
       id,
       type,
       label: type === "triangulaire" ? "Quel échantillon est différent des deux autres ?" : "Nouvelle question",
-      scope: ["classement", "seuil", "triangulaire", "duo-trio", "a-non-a"].includes(type) ? "standalone" : "per-product",
+      scope: ["classement", "seuil", "seuil-bet", "triangulaire", "duo-trio", "a-non-a"].includes(type) ? "standalone" : "per-product",
     };
     if (type === "scale") { newQ.min = 0; newQ.max = 10; }
     if (type === "qcm") newQ.options = ["Excellent", "Bon", "Moyen", "Mauvais"];
@@ -942,6 +1021,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
     if (type === "duo-trio") newQ.codes = allCodes.slice(0, 3);
     if (type === "a-non-a") { newQ.codes = allCodes; newQ.correctAnswer = ""; }
     if (type === "classement" || type === "seuil") { newQ.codes = []; newQ.correctOrder = []; }
+    if (type === "seuil-bet") { newQ.betLevels = []; }
     
     onSetEditCfg((prev: any) => ({ ...prev, questions: [...prev.questions, newQ] }));
   };
@@ -954,11 +1034,26 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
     });
   };
 
-  const TYPES: QuestionType[] = ["scale", "classement", "seuil", "text", "qcm", "triangulaire", "duo-trio", "a-non-a"];
+  const duplicateQ = (i: number) => {
+    onSetEditCfg((prev: any) => {
+      const src: Question = prev.questions[i];
+      const copy: Question = {
+        ...JSON.parse(JSON.stringify(src)) as Question,
+        id: "q" + Date.now(),
+        label: `${src.label} (copie)`,
+      };
+      const n = [...prev.questions];
+      n.splice(i + 1, 0, copy);
+      return { ...prev, questions: n };
+    });
+  };
+
+  const TYPES: QuestionType[] = ["scale", "classement", "seuil", "seuil-bet", "text", "qcm", "triangulaire", "duo-trio", "a-non-a"];
   const TYPE_LABELS: Record<string, string> = {
     scale: "échelle",
     classement: "classement",
-    seuil: "seuil",
+    seuil: "seuil (rang)",
+    "seuil-bet": "seuil (3-AFC)",
     text: "texte",
     qcm: "qcm",
     triangulaire: "triangulaire",
@@ -969,85 +1064,16 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
   return (
     <div>
       {editCfg.questions.map((q: Question, i: number) => (
-        <div key={q.id} className={`q-builder q-builder-${q.type}`}>
-          <div className="q-builder-header">
-            <span className="q-num">Q{i + 1}</span>
-            <Badge variant="ns">{TYPE_LABELS[q.type] || q.type}</Badge>
-            <span style={{ flex: 1 }} />
-            <button className="q-del" onClick={() => onSetEditCfg((prev: any) => ({ ...prev, questions: prev.questions.filter((_: any, idx: number) => idx !== i) }))}>
-              <FiX />
-            </button>
-          </div>
-
-          {/* Libellé — always shown */}
-          <div className="q-fields">
-            <div className="field-wrap full">
-              <label>LIBELLÉ</label>
-              <input value={q.label} onChange={(e) => updateQ(i, { label: e.target.value })} />
-            </div>
-          </div>
-
-          {/* Type-specific UI */}
-          <div className="q-type-body">
-
-            {q.type === "scale" && (
-              <div className="q-fields">
-                <div className="field-wrap"><label>MIN</label><input type="number" value={q.min ?? 0} onChange={(e) => updateQ(i, { min: +e.target.value })} /></div>
-                <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => updateQ(i, { max: +e.target.value })} /></div>
-                <div className="field-wrap"><label>LABEL MIN</label><input value={q.labelMin || ""} onChange={(e) => updateQ(i, { labelMin: e.target.value })} /></div>
-                <div className="field-wrap"><label>LABEL MAX</label><input value={q.labelMax || ""} onChange={(e) => updateQ(i, { labelMax: e.target.value })} /></div>
-              </div>
-            )}
-
-            {(q.type === "classement" || q.type === "seuil") && (
-              <ClassementBuilder
-                type={q.type}
-                products={products}
-                codes={q.codes || []}
-                correctOrder={q.correctOrder || []}
-                onChangeCodes={(c) => updateQ(i, { codes: c })}
-                onChangeOrder={(o) => updateQ(i, { correctOrder: o })}
-              />
-            )}
-
-            {q.type === "triangulaire" && (
-              <TriangulaireBuilder
-                products={products}
-                codes={q.codes || []}
-                correctAnswer={q.correctAnswer || ""}
-                onChangeCodes={(c) => updateQ(i, { codes: c })}
-                onChangeCorrect={(v) => updateQ(i, { correctAnswer: v })}
-              />
-            )}
-
-            {q.type === "duo-trio" && (
-              <DuoTrioBuilder
-                products={products}
-                codes={q.codes || []}
-                correctAnswer={q.correctAnswer || ""}
-                onChangeCodes={(c) => updateQ(i, { codes: c })}
-                onChangeCorrect={(v) => updateQ(i, { correctAnswer: v })}
-              />
-            )}
-
-            {q.type === "a-non-a" && (
-              <ANonABuilder
-                products={products}
-                codes={q.codes || []}
-                correctAnswer={q.correctAnswer || ""}
-                refCode={q.refCode || ""}
-                onChangeCodes={(c) => updateQ(i, { codes: c })}
-                onChangeCorrect={(v) => updateQ(i, { correctAnswer: v })}
-                onChangeRef={(v) => updateQ(i, { refCode: v })}
-              />
-            )}
-
-            {q.type === "qcm" && (
-              <QCMOptions options={q.options || []} onChange={(o) => updateQ(i, { options: o })} />
-            )}
-
-          </div>
-        </div>
+        <QuestionEditor
+          key={q.id}
+          q={q}
+          index={i}
+          products={products}
+          typeLabel={TYPE_LABELS[q.type] || q.type}
+          onUpdate={(patch) => updateQ(i, patch)}
+          onDuplicate={() => duplicateQ(i)}
+          onDelete={() => onSetEditCfg((prev: any) => ({ ...prev, questions: prev.questions.filter((_: any, idx: number) => idx !== i) }))}
+        />
       ))}
 
       {/* Add question buttons */}
@@ -1062,5 +1088,135 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
         </div>
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Single question editor (éditeur + aperçu)
+// ─────────────────────────────────────────────
+function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, onDelete }: {
+  q: Question;
+  index: number;
+  products: Product[];
+  typeLabel: string;
+  onUpdate: (patch: Partial<Question>) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const [preview, setPreview] = useState(false);
+  const [previewVal, setPreviewVal] = useState<any>(undefined);
+  return (
+    <div className={`q-builder q-builder-${q.type}`}>
+          <div className="q-builder-header">
+            <span className="q-num">Q{index + 1}</span>
+            <Badge variant="ns">{typeLabel}</Badge>
+            <span style={{ flex: 1 }} />
+            <button
+              className="q-del"
+              title={preview ? "Masquer l'aperçu" : "Aperçu participant"}
+              style={{ color: preview ? "var(--accent)" : undefined }}
+              onClick={() => setPreview(p => !p)}
+            >
+              {preview ? <FiEyeOff /> : <FiEye />}
+            </button>
+            <button className="q-del" title="Dupliquer la question" onClick={onDuplicate}>
+              <FiCopy />
+            </button>
+            <button className="q-del" title="Supprimer" onClick={onDelete}>
+              <FiX />
+            </button>
+          </div>
+
+          {/* Libellé — always shown */}
+          <div className="q-fields">
+            <div className="field-wrap full">
+              <label>LIBELLÉ</label>
+              <input value={q.label} onChange={(e) => onUpdate({ label: e.target.value })} />
+            </div>
+          </div>
+
+          {/* Type-specific UI */}
+          <div className="q-type-body">
+
+            {q.type === "scale" && (
+              <div className="q-fields">
+                <div className="field-wrap"><label>MIN</label><input type="number" value={q.min ?? 0} onChange={(e) => onUpdate({ min: +e.target.value })} /></div>
+                <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
+                <div className="field-wrap"><label>LABEL MIN</label><input value={q.labelMin || ""} onChange={(e) => onUpdate({ labelMin: e.target.value })} /></div>
+                <div className="field-wrap"><label>LABEL MAX</label><input value={q.labelMax || ""} onChange={(e) => onUpdate({ labelMax: e.target.value })} /></div>
+              </div>
+            )}
+
+            {(q.type === "classement" || q.type === "seuil") && (
+              <ClassementBuilder
+                type={q.type}
+                products={products}
+                codes={q.codes || []}
+                correctOrder={q.correctOrder || []}
+                onChangeCodes={(c) => onUpdate({ codes: c })}
+                onChangeOrder={(o) => onUpdate({ correctOrder: o })}
+              />
+            )}
+
+            {q.type === "triangulaire" && (
+              <TriangulaireBuilder
+                products={products}
+                codes={q.codes || []}
+                correctAnswer={q.correctAnswer || ""}
+                onChangeCodes={(c) => onUpdate({ codes: c })}
+                onChangeCorrect={(v) => onUpdate({ correctAnswer: v })}
+              />
+            )}
+
+            {q.type === "duo-trio" && (
+              <DuoTrioBuilder
+                products={products}
+                codes={q.codes || []}
+                correctAnswer={q.correctAnswer || ""}
+                onChangeCodes={(c) => onUpdate({ codes: c })}
+                onChangeCorrect={(v) => onUpdate({ correctAnswer: v })}
+              />
+            )}
+
+            {q.type === "a-non-a" && (
+              <ANonABuilder
+                products={products}
+                codes={q.codes || []}
+                correctAnswer={q.correctAnswer || ""}
+                refCode={q.refCode || ""}
+                onChangeCodes={(c) => onUpdate({ codes: c })}
+                onChangeCorrect={(v) => onUpdate({ correctAnswer: v })}
+                onChangeRef={(v) => onUpdate({ refCode: v })}
+              />
+            )}
+
+            {q.type === "qcm" && (
+              <QCMOptions options={q.options || []} onChange={(o) => onUpdate({ options: o })} />
+            )}
+
+            {q.type === "seuil-bet" && (
+              <SeuilBetBuilder
+                levels={q.betLevels || []}
+                onChange={(l) => onUpdate({ betLevels: l })}
+              />
+            )}
+
+          </div>
+
+          {preview && (
+            <div style={{ marginTop: "12px", padding: "14px", background: "var(--paper2)", borderLeft: "3px solid var(--accent)", borderRadius: "6px" }}>
+              <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--mid)", marginBottom: "8px" }}>
+                Aperçu participant
+              </div>
+              <QuestionInput
+                q={q}
+                value={previewVal}
+                onChange={setPreviewVal}
+                products={products}
+                seedKey={`preview:${q.id}`}
+              />
+            </div>
+          )}
+        </div>
   );
 }

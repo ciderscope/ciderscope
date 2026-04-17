@@ -6,14 +6,28 @@ interface AdminLoginViewProps {
   onSuccess: () => void;
 }
 
+// SHA-256("IFPC:ifpc") — empêche la divulgation triviale par lecture du bundle.
+// Pour une vraie sécurité, migrer vers Supabase Auth (auth serveur).
+const ADMIN_HASH = "c1c0bc5db72a4f46df22bf877e91df1d26578e097728f41bca4fec55058d18c0";
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
   const [login, setLogin] = useState("");
   const [mdp, setMdp] = useState("");
   const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (login.trim().toUpperCase() === "IFPC" && mdp === "ifpc") {
+    setBusy(true);
+    const hash = await sha256Hex(`${login.trim().toUpperCase()}:${mdp}`);
+    setBusy(false);
+    if (hash === ADMIN_HASH) {
       sessionStorage.setItem("admin_auth", "1");
       setError(false);
       onSuccess();
@@ -108,8 +122,8 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
             </div>
           )}
 
-          <Button type="submit" style={{ marginTop: "4px", width: "100%" }}>
-            Se connecter
+          <Button type="submit" disabled={busy} style={{ marginTop: "4px", width: "100%", opacity: busy ? 0.6 : 1 }}>
+            {busy ? "Vérification…" : "Se connecter"}
           </Button>
         </form>
       </div>
