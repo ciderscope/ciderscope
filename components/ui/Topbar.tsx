@@ -1,9 +1,10 @@
-import { FiUsers, FiSettings } from "react-icons/fi";
+import { FiUsers, FiSettings, FiLogOut } from "react-icons/fi";
 
 interface TopbarProps {
   mode: "participant" | "admin";
   onModeChange: (mode: "participant" | "admin") => void;
   online?: boolean;
+  onLogout?: () => void;
 }
 
 const NAV = [
@@ -11,7 +12,7 @@ const NAV = [
   { id: "admin"       as const, label: "Admin",        icon: FiSettings },
 ];
 
-export const Topbar = ({ mode, onModeChange, online = false }: TopbarProps) => (
+export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarProps) => (
   <div className="topbar">
     <div className="topbar-logo">
       <img src="/Logo.jpg" alt="Logo" style={{ height: "24px", marginRight: "8px", borderRadius: "4px" }} />
@@ -34,6 +35,16 @@ export const Topbar = ({ mode, onModeChange, online = false }: TopbarProps) => (
           {label}
         </button>
       ))}
+      {mode === "admin" && onLogout && (
+        <button
+          className="topbar-navbtn topbar-logout"
+          onClick={onLogout}
+          title="Se déconnecter"
+        >
+          <FiLogOut size={13} />
+          Déconnexion
+        </button>
+      )}
     </div>
   </div>
 );

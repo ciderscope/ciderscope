@@ -108,46 +108,94 @@ function HorizontalRank({ items, value, onChange, seedKey }: { items: string[]; 
   );
 }
 
+// ── ScaleInput (extracted to allow hooks usage) ─────────────────────────────
+function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange: (v: any) => void }) {
+  const mn = q.min ?? 0;
+  const mx = q.max ?? 10;
+  const mid = Math.round((mn + mx) / 2);
+  const hasSubCriteria = !!(q.subCriteria && q.subCriteria.length > 0);
+
+  const mainValue: number = (() => {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) return (value as Record<string, number>)._ ?? mid;
+    if (typeof value === "number") return value;
+    return mid;
+  })();
+
+  const getSubValue = (label: string): number => {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      const v = (value as Record<string, number>)[label];
+      return typeof v === "number" ? v : mid;
+    }
+    return mid;
+  };
+
+  useEffect(() => {
+    if (value == null) {
+      onChange(hasSubCriteria ? { _: mid } : mid);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const updateMain = (v: number) => {
+    if (!hasSubCriteria) { onChange(v); return; }
+    const prev = typeof value === "object" && value !== null ? { ...(value as object) } : { _: mid };
+    onChange({ ...prev, _: v });
+  };
+
+  const updateSub = (label: string, v: number) => {
+    const prev = typeof value === "object" && value !== null ? { ...(value as object) } : { _: mainValue };
+    onChange({ ...prev, [label]: v });
+  };
+
+  const monoStyle: React.CSSProperties = { fontSize: "11px", color: "var(--mid)", fontFamily: "DM Mono, monospace" };
+
+  return (
+    <div className="q-block">
+      <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">échelle</Badge></span>
+      <div className="scale-wrap">
+        <div className="scale-track">
+          <span style={monoStyle}>{q.labelMin || mn}</span>
+          <input
+            type="range"
+            min={mn}
+            max={mx}
+            value={mainValue}
+            onChange={(e) => updateMain(parseInt(e.target.value))}
+            style={{ cursor: "pointer" }}
+          />
+          <span style={monoStyle}>{q.labelMax || mx}</span>
+          <span className="scale-value">{mainValue}</span>
+        </div>
+        {hasSubCriteria && (
+          <div className="scale-subcriteria">
+            {q.subCriteria!.map(label => (
+              <div key={label} className="scale-subcriterion">
+                <span className="scale-sub-label">{label}</span>
+                <div className="scale-track scale-track-sub">
+                  <span style={{ ...monoStyle, minWidth: "20px" }}>{mn}</span>
+                  <input
+                    type="range"
+                    min={mn}
+                    max={mx}
+                    value={getSubValue(label)}
+                    onChange={(e) => updateSub(label, parseInt(e.target.value))}
+                    style={{ cursor: "pointer" }}
+                  />
+                  <span style={{ ...monoStyle, minWidth: "20px" }}>{mx}</span>
+                  <span className="scale-value scale-value-sub">{getSubValue(label)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export const QuestionInput = ({ q, value, onChange, products, seedKey }: QuestionInputProps) => {
   if (q.type === "scale") {
-    const mn = q.min ?? 0;
-    const mx = q.max ?? 10;
-    const isNR = value == null;
-    return (
-      <div className="q-block">
-        <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">échelle</Badge></span>
-        <div className="scale-wrap">
-          <div className="scale-track">
-            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "DM Mono, monospace" }}>{q.labelMin || mn}</span>
-            <input
-              type="range"
-              min={mn}
-              max={mx}
-              value={isNR ? Math.round((mn + mx) / 2) : value}
-              onChange={(e) => { if (!isNR) onChange(parseInt(e.target.value)); }}
-              onPointerDown={(e) => { if (isNR) e.preventDefault(); }}
-              disabled={isNR}
-              style={{ opacity: isNR ? 0.35 : 1, cursor: isNR ? "not-allowed" : "pointer" }}
-              aria-disabled={isNR}
-            />
-            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "DM Mono, monospace" }}>{q.labelMax || mx}</span>
-            <span className="scale-value">{isNR ? "—" : value}</span>
-          </div>
-          <label className="scale-not-rated">
-            <input
-              type="checkbox"
-              checked={isNR}
-              onChange={(e) => onChange(e.target.checked ? null : Math.round((mn + mx) / 2))}
-            /> Non évalué
-          </label>
-          {isNR && (
-            <div style={{ fontSize: "11px", color: "var(--mid)", fontStyle: "italic", marginTop: "4px" }}>
-              Décochez &laquo;&nbsp;Non évalué&nbsp;&raquo; pour saisir une note.
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <ScaleInput q={q} value={value} onChange={onChange} />;
   }
 
   if (q.type === "text") {
@@ -220,7 +268,10 @@ export const QuestionInput = ({ q, value, onChange, products, seedKey }: Questio
       <div className="q-block">
         <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">duo-trio</Badge></span>
         <p className="discrim-ref">
-          Vous avez deux verres de référence <strong>{refA}</strong> et <strong>{refB}</strong>. À quel verre le verre <strong>{testCode}</strong> est-il identique ?
+          {q.questionText?.trim()
+            ? q.questionText
+            : <>Vous avez deux verres de référence <strong>{refA}</strong> et <strong>{refB}</strong>. À quel verre le verre <strong>{testCode}</strong> est-il identique ?</>
+          }
         </p>
         <div className="triangle-grid">
           {[refA, refB].map(opt => (
@@ -274,7 +325,10 @@ export const QuestionInput = ({ q, value, onChange, products, seedKey }: Questio
       <div className="q-block">
         <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">A / non-A</Badge></span>
         <p className="discrim-ref">
-          Vous avez un verre de référence <strong>{ref}</strong> devant vous. Dites, pour chacun des verres ci-dessous, s&apos;il est identique ou différent du verre <strong>{ref}</strong>.
+          {q.questionText?.trim()
+            ? q.questionText
+            : <>Vous avez un verre de référence <strong>{ref}</strong> devant vous. Dites, pour chacun des verres ci-dessous, s&apos;il est identique ou différent du verre <strong>{ref}</strong>.</>
+          }
         </p>
         <div className="anona-grid">
           {codes.map(code => (

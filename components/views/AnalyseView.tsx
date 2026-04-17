@@ -418,7 +418,7 @@ export const AnalyseView = ({
             {activeTab === "duo-trio"     && <AnalyseDiscrimType data={csvData} type="duo-trio"     label="Duo-trio" />}
             {activeTab === "a-non-a"      && <AnalyseDiscrimType data={csvData} type="a-non-a"      label="A-non-A" />}
             {activeTab === "seuil-bet"    && <AnalyseSeuilBET    config={anCfg} allAnswers={allAnswers} />}
-            {activeTab === "texte"        && <AnalyseWordCloud   data={csvData} />}
+            {activeTab === "texte"        && <AnalyseWordCloud   data={csvData} config={anCfg} />}
             {activeTab === "jury"         && <AnalyseJury        config={anCfg} allAnswers={allAnswers} />}
             {activeTab === "données"      && <AnalyseDonnees     data={csvData} />}
           </div>
@@ -1347,82 +1347,97 @@ function AnalyseSeuilBET({ config, allAnswers }: { config: any; allAnswers: any 
 
 // ─── Nuage de mots ────────────────────────────────────────────────────────────
 
-function AnalyseWordCloud({ data }: { data: any[] }) {
+const STOP_WORDS = new Set(["le","la","les","de","du","des","un","une","en","et","à","au","aux","ce","se","sa","son","ses","je","tu","il","elle","nous","vous","ils","elles","que","qui","ne","pas","par","sur","avec","dans","est","sont","été","être","avoir","plus","ou","mais","donc","car","si","comme","tout","très","bien","aussi","pour","cette","cet","ces","leur","leurs","même","autre","autres","dont","peu","fait","faire","non","oui","ça","on","lui"]);
+
+function buildWordFreq(rows: any[]): [string, number][] {
+  const wordFreq: Record<string, number> = {};
+  rows.forEach(r => {
+    (r.valeur as string)
+      .toLowerCase()
+      .split(/[\s,;.!?''"()\[\]]+/)
+      .map((w: string) => w.replace(/[^a-zàâäéèêëîïôùûüç-]/g, ""))
+      .filter((w: string) => w.length > 2 && !STOP_WORDS.has(w))
+      .forEach((w: string) => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
+  });
+  return Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 60);
+}
+
+function WordCloudDisplay({ rows, title }: { rows: any[]; title: string }) {
+  const sorted = buildWordFreq(rows);
+  const maxFreq = sorted[0]?.[1] || 1;
+  if (sorted.length === 0) return null;
+  return (
+    <Card title={title}>
+      <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
+        {rows.length} réponse{rows.length > 1 ? "s" : ""} · {sorted.length} mots distincts
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 12px", padding: "16px", justifyContent: "center", alignItems: "center", lineHeight: 1.4 }}>
+        {sorted.map(([word, freq]) => (
+          <span
+            key={word}
+            title={`${freq} occurrence${freq > 1 ? "s" : ""}`}
+            style={{
+              fontSize: `${Math.round(11 + (freq / maxFreq) * 28)}px`,
+              fontWeight: freq >= maxFreq * 0.6 ? 700 : freq >= maxFreq * 0.3 ? 600 : 400,
+              color: wordColor(word),
+              opacity: 0.55 + (freq / maxFreq) * 0.45,
+              cursor: "default",
+              transition: "opacity 0.15s",
+            }}
+          >
+            {word}
+          </span>
+        ))}
+      </div>
+      <details style={{ marginTop: "12px" }}>
+        <summary style={{ fontSize: "12px", color: "var(--text-muted)", cursor: "pointer" }}>Tableau des fréquences</summary>
+        <table className="data-table" style={{ marginTop: "8px" }}>
+          <thead><tr><th>Mot</th><th>Occurrences</th></tr></thead>
+          <tbody>
+            {sorted.slice(0, 20).map(([w, f]) => <tr key={w}><td>{w}</td><td className="num">{f}</td></tr>)}
+          </tbody>
+        </table>
+      </details>
+    </Card>
+  );
+}
+
+function AnalyseWordCloud({ data, config }: { data: any[]; config?: any }) {
   const textRows = data.filter(r => r.type === "text" && r.valeur && r.valeur.trim());
-  const questions = [...new Set(textRows.map(r => r.question))];
+  const questionLabels = [...new Set(textRows.map(r => r.question))] as string[];
 
   if (textRows.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune réponse textuelle disponible.</div>;
   }
 
-  // French stop words
-  const stopWords = new Set(["le","la","les","de","du","des","un","une","en","et","à","au","aux","ce","se","sa","son","ses","je","tu","il","elle","nous","vous","ils","elles","que","qui","ne","pas","par","sur","avec","dans","est","sont","été","être","avoir","plus","ou","mais","donc","car","si","comme","tout","très","bien","aussi","pour","cette","cet","ces","leur","leurs","même","autre","autres","dont","peu","fait","faire","plus","non","oui","ça","on","lui"]);
+  const qs: any[] = config?.questions || [];
+  const products: any[] = config?.products || [];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {questions.map(q => {
-        const qRows = textRows.filter(r => r.question === q);
-        const wordFreq: Record<string, number> = {};
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {questionLabels.map(qLabel => {
+        const qConfig = qs.find((qq: any) => qq.label === qLabel);
+        const isPerProduct = qConfig?.scope === "per-product" && products.length > 0;
+        const qRows = textRows.filter(r => r.question === qLabel);
 
-        qRows.forEach(r => {
-          (r.valeur as string)
-            .toLowerCase()
-            .split(/[\s,;.!?''"()\[\]]+/)
-            .map(w => w.replace(/[^a-zàâäéèêëîïôùûüç-]/g, ""))
-            .filter(w => w.length > 2 && !stopWords.has(w))
-            .forEach(w => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
-        });
-
-        const sorted = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 60);
-        const maxFreq = sorted[0]?.[1] || 1;
-
-        return (
-          <Card key={q} title={`Texte — ${q}`}>
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
-              {qRows.length} réponse{qRows.length > 1 ? "s" : ""} · {sorted.length} mots distincts
+        if (isPerProduct) {
+          return (
+            <div key={qLabel}>
+              <div className="builder-section-label" style={{ marginBottom: "14px" }}>{qLabel}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "16px" }}>
+                {products.map((p: any) => {
+                  const pRows = qRows.filter(r => r.produit === p.code);
+                  if (pRows.length === 0) return null;
+                  return (
+                    <WordCloudDisplay key={p.code} rows={pRows} title={`${p.code}${p.label ? ` — ${p.label}` : ""}`} />
+                  );
+                })}
+              </div>
             </div>
-            <div style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "8px 12px",
-              padding: "16px",
-              justifyContent: "center",
-              alignItems: "center",
-              lineHeight: 1.4,
-            }}>
-              {sorted.map(([word, freq]) => (
-                <span
-                  key={word}
-                  title={`${freq} occurrence${freq > 1 ? "s" : ""}`}
-                  style={{
-                    fontSize: `${Math.round(11 + (freq / maxFreq) * 28)}px`,
-                    fontWeight: freq >= maxFreq * 0.6 ? 700 : freq >= maxFreq * 0.3 ? 600 : 400,
-                    color: wordColor(word),
-                    opacity: 0.55 + (freq / maxFreq) * 0.45,
-                    cursor: "default",
-                    transition: "opacity 0.15s",
-                  }}
-                >
-                  {word}
-                </span>
-              ))}
-            </div>
-            {/* Frequency table */}
-            <details style={{ marginTop: "12px" }}>
-              <summary style={{ fontSize: "12px", color: "var(--text-muted)", cursor: "pointer" }}>
-                Tableau des fréquences
-              </summary>
-              <table className="data-table" style={{ marginTop: "8px" }}>
-                <thead><tr><th>Mot</th><th>Occurrences</th></tr></thead>
-                <tbody>
-                  {sorted.slice(0, 20).map(([w, f]) => (
-                    <tr key={w}><td>{w}</td><td className="num">{f}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          </Card>
-        );
+          );
+        }
+
+        return <WordCloudDisplay key={qLabel} rows={qRows} title={`Texte — ${qLabel}`} />;
       })}
     </div>
   );
@@ -1493,9 +1508,33 @@ function AnalyseJury({ config, allAnswers }: { config: any; allAnswers: any }) {
 
 // ─── Données brutes ───────────────────────────────────────────────────────────
 
+function computeResultat(r: any): string {
+  if (!r.correct || !r.valeur) return "";
+  const type: string = r.type || "";
+  if (type === "scale" || type === "text" || type === "seuil-bet") return "";
+  if (type === "a-non-a") {
+    // valeur is JSON string of {code: "A"|"non-A"}, correct is "CODE:A,CODE2:non-A"
+    try {
+      const valObj: Record<string, string> = JSON.parse(r.valeur);
+      const corrObj: Record<string, string> = Object.fromEntries(
+        (r.correct as string).split(",").map((p: string) => p.split(":")).filter((a: string[]) => a.length === 2)
+      );
+      const codes = Object.keys(corrObj);
+      if (codes.length === 0) return "";
+      const allCorrect = codes.every(c => valObj[c] === corrObj[c]);
+      const someCorrect = codes.some(c => valObj[c] === corrObj[c]);
+      return allCorrect ? "✓" : someCorrect ? "~" : "✗";
+    } catch { return ""; }
+  }
+  return String(r.valeur) === String(r.correct) ? "✓" : "✗";
+}
+
 function AnalyseDonnees({ data }: { data: any[] }) {
   if (data.length === 0) return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée.</div>;
-  const headers = Object.keys(data[0]);
+
+  const enriched = data.map(r => ({ ...r, résultat: computeResultat(r) }));
+  const headers = Object.keys(enriched[0]);
+
   return (
     <Card title="Données brutes">
       <div style={{ overflowX: "auto", maxHeight: "500px", overflowY: "auto" }}>
@@ -1504,8 +1543,16 @@ function AnalyseDonnees({ data }: { data: any[] }) {
             <tr>{headers.map(h => <th key={h}>{h}</th>)}</tr>
           </thead>
           <tbody>
-            {data.slice(0, 200).map((r, i) => (
-              <tr key={i}>{headers.map(h => <td key={h}>{r[h]}</td>)}</tr>
+            {enriched.slice(0, 200).map((r, i) => (
+              <tr key={i}>{headers.map(h => (
+                <td key={h} style={h === "résultat" ? {
+                  textAlign: "center",
+                  fontWeight: 700,
+                  color: r[h] === "✓" ? "var(--ok)" : r[h] === "✗" ? "var(--danger)" : r[h] === "~" ? "var(--warn)" : undefined
+                } : undefined}>
+                  {r[h]}
+                </td>
+              ))}</tr>
             ))}
           </tbody>
         </table>

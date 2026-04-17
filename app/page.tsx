@@ -80,6 +80,11 @@ export default function CiderScope() {
     isStepComplete,
   } = useSenso();
 
+  const handleLogout = () => {
+    sessionStorage.removeItem("admin_auth");
+    setAdminAuth(false);
+  };
+
   return (
     <div>
       <Topbar
@@ -89,6 +94,7 @@ export default function CiderScope() {
           setMode(m);
           setScreen("landing");
         }}
+        onLogout={adminAuth === true ? handleLogout : undefined}
       />
 
       <main>

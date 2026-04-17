@@ -29,5 +29,7 @@ export const formatVal = (v: any, t: string) => {
   if (v == null) return '';
   if ((t === 'rank' || t === 'seuil') && Array.isArray(v)) return v.join('>');
   if (Array.isArray(v)) return v.join('|');
+  // scale with sub-criteria stored as { _: number, "sub": number, ... }
+  if (t === 'scale' && typeof v === 'object') return String((v as Record<string, number>)._ ?? '');
   return String(v);
 };

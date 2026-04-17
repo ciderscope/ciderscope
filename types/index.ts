@@ -26,6 +26,8 @@ export interface Question {
   correctAnswer?: string;
   refCode?: string;
   betLevels?: BetLevel[];
+  subCriteria?: string[];   // scale: sous-critères pour évaluation fine
+  questionText?: string;    // duo-trio, a-non-a: consigne personnalisée
 }
 
 export interface Product {

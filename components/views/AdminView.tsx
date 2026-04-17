@@ -570,6 +570,9 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
       <div className="builder-section-label" style={{ marginTop: "16px" }}>
         SÉRIE — {codes.length} échantillon{codes.length > 1 ? "s" : ""} · glissez pour réordonner · × pour retirer
       </div>
+      <div style={{ fontSize: "11px", color: "var(--mid)", fontStyle: "italic", marginBottom: "6px" }}>
+        Position 1 = valeur la plus faible{codes.length > 1 ? ` · Position ${codes.length} = valeur la plus élevée` : ""}
+      </div>
       <DraggableSerie codes={codes} onChange={onChangeCodes} onRemove={removeFromSerie} onAdd={addToSerie} />
 
       {/* Correct order — classement only, optional */}
@@ -978,17 +981,36 @@ function ANonABuilder({ products, codes, correctAnswer, refCode, onChangeCodes, 
 // ─────────────────────────────────────────────
 // QCM options list
 // ─────────────────────────────────────────────
-function QCMOptions({ options, onChange }: { options: string[]; onChange: (o: string[]) => void }) {
+function QCMOptions({ options, correctAnswer, onChange, onChangeCorrect }: {
+  options: string[];
+  correctAnswer?: string;
+  onChange: (o: string[]) => void;
+  onChangeCorrect: (v: string) => void;
+}) {
   return (
     <div className="qcm-options-builder">
+      <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px" }}>
+        Cliquez sur <FiCheck size={11} style={{ verticalAlign: "middle" }} /> pour marquer la bonne réponse (utilisée en analyse pour calculer le score)
+      </div>
       {options.map((opt, i) => (
         <div key={i} className="qcm-option-row">
+          <button
+            type="button"
+            className={`qcm-correct-btn${correctAnswer === opt ? " active" : ""}`}
+            title={correctAnswer === opt ? "Bonne réponse (cliquer pour désélectionner)" : "Marquer comme bonne réponse"}
+            onClick={() => onChangeCorrect(correctAnswer === opt ? "" : opt)}
+          >
+            <FiCheck size={12} />
+          </button>
           <input
             value={opt}
             onChange={(e) => { const n = [...options]; n[i] = e.target.value; onChange(n); }}
             placeholder={`Option ${i + 1}`}
           />
-          <button className="chip-x" onClick={() => onChange(options.filter((_, idx) => idx !== i))} type="button">
+          <button className="chip-x" onClick={() => {
+            onChange(options.filter((_, idx) => idx !== i));
+            if (correctAnswer === opt) onChangeCorrect("");
+          }} type="button">
             <FiX />
           </button>
         </div>
@@ -1139,12 +1161,39 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
           <div className="q-type-body">
 
             {q.type === "scale" && (
-              <div className="q-fields">
-                <div className="field-wrap"><label>MIN</label><input type="number" value={q.min ?? 0} onChange={(e) => onUpdate({ min: +e.target.value })} /></div>
-                <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
-                <div className="field-wrap"><label>LABEL MIN</label><input value={q.labelMin || ""} onChange={(e) => onUpdate({ labelMin: e.target.value })} /></div>
-                <div className="field-wrap"><label>LABEL MAX</label><input value={q.labelMax || ""} onChange={(e) => onUpdate({ labelMax: e.target.value })} /></div>
-              </div>
+              <>
+                <div className="q-fields">
+                  <div className="field-wrap"><label>MIN</label><input type="number" value={q.min ?? 0} onChange={(e) => onUpdate({ min: +e.target.value })} /></div>
+                  <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
+                  <div className="field-wrap"><label>LABEL MIN</label><input value={q.labelMin || ""} onChange={(e) => onUpdate({ labelMin: e.target.value })} /></div>
+                  <div className="field-wrap"><label>LABEL MAX</label><input value={q.labelMax || ""} onChange={(e) => onUpdate({ labelMax: e.target.value })} /></div>
+                </div>
+                <div style={{ marginTop: "12px" }}>
+                  <div className="builder-section-label">SOUS-CRITÈRES (optionnel)</div>
+                  <p style={{ fontSize: "11px", color: "var(--mid)", margin: "4px 0 8px" }}>
+                    Ajoutez des sous-composantes pour une évaluation plus fine (ex : fruité → agrumes, fruits rouges…)
+                  </p>
+                  {(q.subCriteria || []).map((sc: string, i: number) => (
+                    <div key={i} className="qcm-option-row" style={{ marginBottom: "6px" }}>
+                      <input
+                        value={sc}
+                        onChange={(e) => {
+                          const n = [...(q.subCriteria || [])];
+                          n[i] = e.target.value;
+                          onUpdate({ subCriteria: n });
+                        }}
+                        placeholder={`Sous-critère ${i + 1} (ex: agrumes)`}
+                      />
+                      <button className="chip-x" onClick={() => onUpdate({ subCriteria: (q.subCriteria || []).filter((_: string, idx: number) => idx !== i) })} type="button">
+                        <FiX size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <Button variant="ghost" size="sm" onClick={() => onUpdate({ subCriteria: [...(q.subCriteria || []), ""] })} style={{ marginTop: "4px" }}>
+                    <FiPlus /> Sous-critère
+                  </Button>
+                </div>
+              </>
             )}
 
             {(q.type === "classement" || q.type === "seuil") && (
@@ -1169,29 +1218,58 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
             )}
 
             {q.type === "duo-trio" && (
-              <DuoTrioBuilder
-                products={products}
-                codes={q.codes || []}
-                correctAnswer={q.correctAnswer || ""}
-                onChangeCodes={(c) => onUpdate({ codes: c })}
-                onChangeCorrect={(v) => onUpdate({ correctAnswer: v })}
-              />
+              <>
+                <div className="q-fields" style={{ marginBottom: "12px" }}>
+                  <div className="field-wrap full">
+                    <label>CONSIGNE PERSONNALISÉE (laisser vide pour la consigne par défaut)</label>
+                    <input
+                      value={q.questionText || ""}
+                      onChange={(e) => onUpdate({ questionText: e.target.value })}
+                      placeholder="Ex : À quel cidre de référence l'échantillon test est-il similaire ?"
+                    />
+                  </div>
+                </div>
+                <DuoTrioBuilder
+                  products={products}
+                  codes={q.codes || []}
+                  correctAnswer={q.correctAnswer || ""}
+                  onChangeCodes={(c) => onUpdate({ codes: c })}
+                  onChangeCorrect={(v) => onUpdate({ correctAnswer: v })}
+                />
+              </>
             )}
 
             {q.type === "a-non-a" && (
-              <ANonABuilder
-                products={products}
-                codes={q.codes || []}
-                correctAnswer={q.correctAnswer || ""}
-                refCode={q.refCode || ""}
-                onChangeCodes={(c) => onUpdate({ codes: c })}
-                onChangeCorrect={(v) => onUpdate({ correctAnswer: v })}
-                onChangeRef={(v) => onUpdate({ refCode: v })}
-              />
+              <>
+                <div className="q-fields" style={{ marginBottom: "12px" }}>
+                  <div className="field-wrap full">
+                    <label>CONSIGNE PERSONNALISÉE (laisser vide pour la consigne par défaut)</label>
+                    <input
+                      value={q.questionText || ""}
+                      onChange={(e) => onUpdate({ questionText: e.target.value })}
+                      placeholder="Ex : Les échantillons tests sont-ils différents de l'échantillon de référence ?"
+                    />
+                  </div>
+                </div>
+                <ANonABuilder
+                  products={products}
+                  codes={q.codes || []}
+                  correctAnswer={q.correctAnswer || ""}
+                  refCode={q.refCode || ""}
+                  onChangeCodes={(c) => onUpdate({ codes: c })}
+                  onChangeCorrect={(v) => onUpdate({ correctAnswer: v })}
+                  onChangeRef={(v) => onUpdate({ refCode: v })}
+                />
+              </>
             )}
 
             {q.type === "qcm" && (
-              <QCMOptions options={q.options || []} onChange={(o) => onUpdate({ options: o })} />
+              <QCMOptions
+                options={q.options || []}
+                correctAnswer={q.correctAnswer}
+                onChange={(o) => onUpdate({ options: o })}
+                onChangeCorrect={(v) => onUpdate({ correctAnswer: v })}
+              />
             )}
 
             {q.type === "seuil-bet" && (
