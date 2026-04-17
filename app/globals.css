@@ -640,12 +640,12 @@ input[type=range]::-webkit-slider-thumb {
   gap: 6px;
 }
 
-/* ── Scale sub-criteria ── */
+/* ── Scale sub-criteria (jury-driven) ── */
 .scale-subcriteria {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 6px;
   padding: 12px 14px;
   background: var(--paper2);
   border-radius: 10px;
@@ -655,13 +655,13 @@ input[type=range]::-webkit-slider-thumb {
 .scale-subcriterion {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .scale-sub-label {
   font-family: 'DM Mono', monospace;
   font-size: clamp(10px, 1.1vw, 12px);
-  color: var(--mid);
+  color: var(--ink);
   min-width: clamp(80px, 12vw, 140px);
   font-weight: 600;
 }
@@ -672,6 +672,63 @@ input[type=range]::-webkit-slider-thumb {
   font-size: clamp(14px, 1.6vw, 17px);
   min-width: 28px;
 }
+
+.scale-sub-remove {
+  flex-shrink: 0;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--mid);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.scale-sub-remove:hover { border-color: var(--danger); color: var(--danger); background: rgba(192,57,43,.08); }
+
+/* Add-sub row */
+.scale-add-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.scale-add-sub-input {
+  flex: 1;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: clamp(12px, 1.4vw, 14px);
+  font-family: 'DM Sans', sans-serif;
+  background: #fff;
+  outline: none;
+  transition: border-color .15s;
+  min-height: 38px;
+}
+.scale-add-sub-input:focus { border-color: var(--t-scale); }
+
+.scale-add-sub-btn {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--t-scale);
+  background: transparent;
+  color: var(--t-scale);
+  font-size: clamp(12px, 1.3vw, 14px);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 38px;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.scale-add-sub-btn:hover:not(:disabled) { background: var(--t-scale); color: #fff; }
+.scale-add-sub-btn:disabled { opacity: .35; cursor: not-allowed; }
 
 /* ── Rank list (unused legacy) ── */
 .rank-list { display: flex; flex-direction: column; gap: 8px; }

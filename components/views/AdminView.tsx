@@ -1169,9 +1169,9 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
                   <div className="field-wrap"><label>LABEL MAX</label><input value={q.labelMax || ""} onChange={(e) => onUpdate({ labelMax: e.target.value })} /></div>
                 </div>
                 <div style={{ marginTop: "12px" }}>
-                  <div className="builder-section-label">SOUS-CRITÈRES (optionnel)</div>
+                  <div className="builder-section-label">SOUS-CRITÈRES PAR DÉFAUT (optionnel)</div>
                   <p style={{ fontSize: "11px", color: "var(--mid)", margin: "4px 0 8px" }}>
-                    Ajoutez des sous-composantes pour une évaluation plus fine (ex : fruité → agrumes, fruits rouges…)
+                    Pré-remplissez des sous-critères suggérés au jury. Le jury pourra les modifier et en ajouter librement durant l&apos;évaluation.
                   </p>
                   {(q.subCriteria || []).map((sc: string, i: number) => (
                     <div key={i} className="qcm-option-row" style={{ marginBottom: "6px" }}>

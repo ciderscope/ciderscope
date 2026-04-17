@@ -109,42 +109,50 @@ function HorizontalRank({ items, value, onChange, seedKey }: { items: string[]; 
 }
 
 // ── ScaleInput (extracted to allow hooks usage) ─────────────────────────────
+// Answer format: number (no subs) OR { _: number, _subs: string[], [label]: number }
 function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange: (v: any) => void }) {
   const mn = q.min ?? 0;
   const mx = q.max ?? 10;
   const mid = Math.round((mn + mx) / 2);
-  const hasSubCriteria = !!(q.subCriteria && q.subCriteria.length > 0);
+  const [newLabel, setNewLabel] = useState("");
 
-  const mainValue: number = (() => {
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) return (value as Record<string, number>)._ ?? mid;
-    if (typeof value === "number") return value;
-    return mid;
+  // Normalise value → always work as object internally
+  const valObj: Record<string, any> = (() => {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) return value as Record<string, any>;
+    if (typeof value === "number") return { _: value, _subs: [] };
+    return { _: mid, _subs: [] };
   })();
 
-  const getSubValue = (label: string): number => {
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      const v = (value as Record<string, number>)[label];
-      return typeof v === "number" ? v : mid;
-    }
-    return mid;
-  };
+  const mainValue: number = typeof valObj._ === "number" ? valObj._ : mid;
+  const activeSubs: string[] = Array.isArray(valObj._subs) ? valObj._subs : [];
 
+  // Init on mount: if no value yet, seed with admin-defined suggestions
   useEffect(() => {
-    if (value == null) {
-      onChange(hasSubCriteria ? { _: mid } : mid);
+    if (value == null || typeof value === "number") {
+      const defaults = q.subCriteria || [];
+      const init: Record<string, any> = { _: typeof value === "number" ? value : mid, _subs: [...defaults] };
+      defaults.forEach(s => { init[s] = mid; });
+      onChange(init);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const updateMain = (v: number) => {
-    if (!hasSubCriteria) { onChange(v); return; }
-    const prev = typeof value === "object" && value !== null ? { ...(value as object) } : { _: mid };
-    onChange({ ...prev, _: v });
+  const updateMain = (v: number) => onChange({ ...valObj, _: v });
+
+  const updateSub = (label: string, v: number) => onChange({ ...valObj, [label]: v });
+
+  const removeSub = (label: string) => {
+    const newSubs = activeSubs.filter(s => s !== label);
+    const next: Record<string, any> = { ...valObj, _subs: newSubs };
+    delete next[label];
+    onChange(next);
   };
 
-  const updateSub = (label: string, v: number) => {
-    const prev = typeof value === "object" && value !== null ? { ...(value as object) } : { _: mainValue };
-    onChange({ ...prev, [label]: v });
+  const addSub = () => {
+    const label = newLabel.trim();
+    if (!label || activeSubs.includes(label)) return;
+    onChange({ ...valObj, _subs: [...activeSubs, label], [label]: mid });
+    setNewLabel("");
   };
 
   const monoStyle: React.CSSProperties = { fontSize: "11px", color: "var(--mid)", fontFamily: "DM Mono, monospace" };
@@ -166,28 +174,49 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange:
           <span style={monoStyle}>{q.labelMax || mx}</span>
           <span className="scale-value">{mainValue}</span>
         </div>
-        {hasSubCriteria && (
-          <div className="scale-subcriteria">
-            {q.subCriteria!.map(label => (
-              <div key={label} className="scale-subcriterion">
-                <span className="scale-sub-label">{label}</span>
-                <div className="scale-track scale-track-sub">
-                  <span style={{ ...monoStyle, minWidth: "20px" }}>{mn}</span>
-                  <input
-                    type="range"
-                    min={mn}
-                    max={mx}
-                    value={getSubValue(label)}
-                    onChange={(e) => updateSub(label, parseInt(e.target.value))}
-                    style={{ cursor: "pointer" }}
-                  />
-                  <span style={{ ...monoStyle, minWidth: "20px" }}>{mx}</span>
-                  <span className="scale-value scale-value-sub">{getSubValue(label)}</span>
-                </div>
+
+        {/* Sub-criteria — jury-driven */}
+        <div className="scale-subcriteria">
+          {activeSubs.map(label => (
+            <div key={label} className="scale-subcriterion">
+              <span className="scale-sub-label">{label}</span>
+              <div className="scale-track scale-track-sub">
+                <span style={{ ...monoStyle, minWidth: "20px" }}>{mn}</span>
+                <input
+                  type="range"
+                  min={mn}
+                  max={mx}
+                  value={typeof valObj[label] === "number" ? valObj[label] : mid}
+                  onChange={(e) => updateSub(label, parseInt(e.target.value))}
+                  style={{ cursor: "pointer" }}
+                />
+                <span style={{ ...monoStyle, minWidth: "20px" }}>{mx}</span>
+                <span className="scale-value scale-value-sub">{typeof valObj[label] === "number" ? valObj[label] : mid}</span>
               </div>
-            ))}
+              <button className="scale-sub-remove" onClick={() => removeSub(label)} type="button" title="Retirer">×</button>
+            </div>
+          ))}
+
+          {/* Add row */}
+          <div className="scale-add-sub">
+            <input
+              type="text"
+              className="scale-add-sub-input"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSub(); } }}
+              placeholder="Préciser (ex : agrumes, fruits rouges…)"
+            />
+            <button
+              className="scale-add-sub-btn"
+              onClick={addSub}
+              type="button"
+              disabled={!newLabel.trim() || activeSubs.includes(newLabel.trim())}
+            >
+              + Ajouter
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
