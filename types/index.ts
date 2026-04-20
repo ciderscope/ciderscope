@@ -1,4 +1,4 @@
-export type QuestionType = "scale" | "classement" | "seuil" | "seuil-bet" | "text" | "qcm" | "triangulaire" | "duo-trio" | "a-non-a";
+export type QuestionType = "scale" | "radar" | "classement" | "seuil" | "seuil-bet" | "text" | "qcm" | "triangulaire" | "duo-trio" | "a-non-a";
 
 // Niveau d'un test de seuil BET (3-AFC) : concentration + 3 codes + réponse correcte.
 export interface BetLevel {
@@ -6,6 +6,18 @@ export interface BetLevel {
   concentration: number; // valeur numérique pour calcul BET (unité cohérente dans la série)
   codes: [string, string, string];
   correctAnswer: string; // code de l'échantillon "différent"
+}
+
+// Un axe d'un radar = un critère noté 0→max, avec précisions optionnelles (équivalent d'un scale sub).
+export interface RadarAxis {
+  label: string;
+  subCriteria?: string[];  // précisions par défaut (éditables par le jury)
+}
+
+export interface RadarGroup {
+  id: string;           // stable key (ex: "main", "fruits", "autres")
+  title: string;        // titre du radar (affiché au participant)
+  axes: RadarAxis[];
 }
 
 export interface Question {
@@ -28,6 +40,7 @@ export interface Question {
   betLevels?: BetLevel[];
   subCriteria?: string[];   // scale: sous-critères pour évaluation fine
   questionText?: string;    // duo-trio, a-non-a: consigne personnalisée
+  radarGroups?: RadarGroup[]; // radar: liste des groupes de critères (toile d'araignée par groupe)
 }
 
 export interface Product {

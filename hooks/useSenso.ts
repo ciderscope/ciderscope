@@ -343,7 +343,27 @@ export const useSenso = () => {
     Object.entries(allAnswers).forEach(([j, jans]: [string, any]) => {
       anCfg.products.forEach((p: any) => {
         const pa = jans[p.code] || {};
-        ppQ.forEach((q: any) => rows.push({ jury: j, produit: p.code, question: q.label, type: q.type, valeur: formatVal(pa[q.id], q.type), correct: q.correctAnswer || "", ...emptyPos }));
+        ppQ.forEach((q: any) => {
+          if (q.type === "radar") {
+            // Explose chaque axe en ligne "scale" pour compat AnalyseProfil
+            const answer = pa[q.id];
+            if (answer && typeof answer === "object") {
+              (q.radarGroups || []).forEach((g: any) => {
+                (g.axes || []).forEach((ax: any) => {
+                  const axAns = answer[ax.label];
+                  const main = (typeof axAns === "object" && axAns !== null) ? axAns._ : axAns;
+                  rows.push({
+                    jury: j, produit: p.code, question: ax.label, type: "scale",
+                    valeur: typeof main === "number" ? String(main) : "",
+                    correct: "", ...emptyPos,
+                  });
+                });
+              });
+            }
+            return;
+          }
+          rows.push({ jury: j, produit: p.code, question: q.label, type: q.type, valeur: formatVal(pa[q.id], q.type), correct: q.correctAnswer || "", ...emptyPos });
+        });
       });
       const ra = jans["_rank"] || {};
       rkQ.forEach((q: any) => {

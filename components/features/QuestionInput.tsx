@@ -1,7 +1,7 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../ui/Badge";
-import { Question, Product } from "../../types";
+import { Question, Product, RadarAxis } from "../../types";
 import { FiChevronLeft } from "react-icons/fi";
 import { hsh } from "../../lib/utils";
 
@@ -255,9 +255,394 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange:
   );
 }
 
+// ── RadarInput ──────────────────────────────────────────────────────────────
+// Answer format: { [axisLabel]: { _: number, _subs: string[], [precision]: number } }
+// Représentation visuelle type toile d'araignée (même structure que l'analyse).
+
+type RadarAnswer = Record<string, { _: number; _subs: string[]; [key: string]: any }>;
+
+function normalizeRadarValue(value: any, axes: RadarAxis[], mid: number): RadarAnswer {
+  const out: RadarAnswer = {};
+  const src = (typeof value === "object" && value !== null && !Array.isArray(value)) ? value : {};
+  axes.forEach(a => {
+    const cur = src[a.label];
+    if (typeof cur === "object" && cur !== null) {
+      const subs: string[] = Array.isArray(cur._subs) ? cur._subs : (a.subCriteria || []);
+      const entry: any = { _: typeof cur._ === "number" ? cur._ : mid, _subs: subs };
+      subs.forEach(s => { entry[s] = typeof cur[s] === "number" ? cur[s] : mid; });
+      out[a.label] = entry;
+    } else if (typeof cur === "number") {
+      const subs = a.subCriteria || [];
+      const entry: any = { _: cur, _subs: [...subs] };
+      subs.forEach(s => { entry[s] = mid; });
+      out[a.label] = entry;
+    } else {
+      const subs = a.subCriteria || [];
+      const entry: any = { _: mid, _subs: [...subs] };
+      subs.forEach(s => { entry[s] = mid; });
+      out[a.label] = entry;
+    }
+  });
+  return out;
+}
+
+function RadarSVG({ axes, values, max, onChange }: {
+  axes: RadarAxis[];
+  values: number[];   // length = axes.length
+  max: number;
+  onChange: (axisIdx: number, v: number) => void;
+}) {
+  const N = axes.length;
+  const cx = 200, cy = 200, R = 140;
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  const angleFor = (i: number) => -Math.PI / 2 + (2 * Math.PI * i) / N;
+  const pointFor = (i: number, v: number) => {
+    const a = angleFor(i);
+    const r = (Math.max(0, Math.min(max, v)) / max) * R;
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  };
+
+  const gridLevels = 5;
+  const gridPolys = Array.from({ length: gridLevels }, (_, k) => {
+    const lvl = (k + 1) / gridLevels;
+    return axes.map((_, i) => {
+      const a = angleFor(i);
+      return `${cx + lvl * R * Math.cos(a)},${cy + lvl * R * Math.sin(a)}`;
+    }).join(" ");
+  });
+
+  const valuePoly = axes.map((_, i) => {
+    const p = pointFor(i, values[i] ?? 0);
+    return `${p.x},${p.y}`;
+  }).join(" ");
+
+  // Projette les coordonnées SVG d'un pointer sur l'axe i pour obtenir la valeur correspondante
+  const valueFromPointer = (i: number, clientX: number, clientY: number): number => {
+    const svg = svgRef.current;
+    if (!svg) return 0;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX; pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return 0;
+    const loc = pt.matrixTransform(ctm.inverse());
+    const a = angleFor(i);
+    const dx = loc.x - cx, dy = loc.y - cy;
+    const proj = dx * Math.cos(a) + dy * Math.sin(a); // projection sur l'axe radial
+    const v = (proj / R) * max;
+    return Math.max(0, Math.min(max, Math.round(v)));
+  };
+
+  const handlePointerDown = (i: number) => (e: React.PointerEvent<SVGCircleElement>) => {
+    e.preventDefault();
+    (e.target as SVGCircleElement).setPointerCapture(e.pointerId);
+    setDragIdx(i);
+    onChange(i, valueFromPointer(i, e.clientX, e.clientY));
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<SVGCircleElement>) => {
+    if (dragIdx === null) return;
+    onChange(dragIdx, valueFromPointer(dragIdx, e.clientX, e.clientY));
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<SVGCircleElement>) => {
+    if (dragIdx === null) return;
+    try { (e.target as SVGCircleElement).releasePointerCapture(e.pointerId); } catch {}
+    setDragIdx(null);
+  };
+
+  // Clic sur l'axe (en dehors de la poignée) pour positionner directement
+  const handleAxisClick = (i: number) => (e: React.MouseEvent<SVGLineElement>) => {
+    onChange(i, valueFromPointer(i, e.clientX, e.clientY));
+  };
+
+  return (
+    <svg ref={svgRef} viewBox="0 0 400 400" className="radar-svg" role="img">
+      {/* grille concentrique */}
+      {gridPolys.map((pts, k) => (
+        <polygon key={k} points={pts} className="radar-grid" />
+      ))}
+      {/* axes */}
+      {axes.map((_, i) => {
+        const a = angleFor(i);
+        const ex = cx + R * Math.cos(a);
+        const ey = cy + R * Math.sin(a);
+        return (
+          <line
+            key={`ax${i}`}
+            x1={cx} y1={cy} x2={ex} y2={ey}
+            className="radar-axis"
+            onClick={handleAxisClick(i)}
+            style={{ cursor: "pointer" }}
+          />
+        );
+      })}
+      {/* polygone valeurs */}
+      <polygon points={valuePoly} className="radar-value" />
+      {/* poignées */}
+      {axes.map((_, i) => {
+        const p = pointFor(i, values[i] ?? 0);
+        return (
+          <circle
+            key={`h${i}`}
+            cx={p.x} cy={p.y} r={9}
+            className={`radar-handle ${dragIdx === i ? "dragging" : ""}`}
+            onPointerDown={handlePointerDown(i)}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
+        );
+      })}
+      {/* labels */}
+      {axes.map((ax, i) => {
+        const a = angleFor(i);
+        const lx = cx + (R + 22) * Math.cos(a);
+        const ly = cy + (R + 22) * Math.sin(a);
+        const anchor = Math.abs(Math.cos(a)) < 0.2 ? "middle" : (Math.cos(a) > 0 ? "start" : "end");
+        return (
+          <text key={`l${i}`} x={lx} y={ly} className="radar-label" textAnchor={anchor} dominantBaseline="middle">
+            {ax.label}
+          </text>
+        );
+      })}
+      {/* valeur centrale (texte) */}
+      {axes.map((_, i) => {
+        const p = pointFor(i, values[i] ?? 0);
+        const a = angleFor(i);
+        const tx = p.x + 14 * Math.cos(a);
+        const ty = p.y + 14 * Math.sin(a);
+        return (
+          <text key={`v${i}`} x={tx} y={ty} className="radar-value-text" textAnchor="middle" dominantBaseline="middle">
+            {values[i] ?? 0}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+function RadarGroupBlock({ group, min, max, answer, onChange }: {
+  group: { title: string; axes: RadarAxis[] };
+  min: number;
+  max: number;
+  answer: RadarAnswer;
+  onChange: (next: RadarAnswer) => void;
+}) {
+  const values = group.axes.map(a => answer[a.label]?._ ?? Math.round((min + max) / 2));
+
+  const setAxis = (i: number, v: number) => {
+    const axisLabel = group.axes[i].label;
+    const cur = answer[axisLabel] || { _: v, _subs: [] };
+    const next: any = { ...cur, _: v };
+    // clamp des précisions éventuelles
+    (cur._subs || []).forEach((s: string) => {
+      if (typeof next[s] === "number" && next[s] > v) next[s] = v;
+    });
+    onChange({ ...answer, [axisLabel]: next });
+  };
+
+  const setSub = (axisLabel: string, sub: string, v: number) => {
+    const cur = answer[axisLabel] || { _: Math.round((min + max) / 2), _subs: [] };
+    const clamped = Math.min(v, cur._);
+    onChange({ ...answer, [axisLabel]: { ...cur, [sub]: clamped } });
+  };
+
+  const addSub = (axisLabel: string, label: string) => {
+    const cleaned = label.trim();
+    if (!cleaned) return;
+    const cur = answer[axisLabel] || { _: Math.round((min + max) / 2), _subs: [] };
+    if (cur._subs.includes(cleaned)) return;
+    onChange({ ...answer, [axisLabel]: { ...cur, _subs: [...cur._subs, cleaned], [cleaned]: Math.min(cur._, Math.round((min + max) / 2)) } });
+  };
+
+  const removeSub = (axisLabel: string, sub: string) => {
+    const cur = answer[axisLabel];
+    if (!cur) return;
+    const next: any = { ...cur, _subs: cur._subs.filter((s: string) => s !== sub) };
+    delete next[sub];
+    onChange({ ...answer, [axisLabel]: next });
+  };
+
+  const [newSubFor, setNewSubFor] = useState<{ axis: string; label: string } | null>(null);
+  const [openAxis, setOpenAxis] = useState<string | null>(null);
+
+  return (
+    <div className="radar-group-block-participant">
+      <h4 className="radar-group-title">{group.title}</h4>
+      <div className="radar-group-body">
+        <div className="radar-svg-wrap">
+          <RadarSVG axes={group.axes} values={values} max={max} onChange={setAxis} />
+        </div>
+        <div className="radar-sliders">
+          {group.axes.map((ax, i) => {
+            const v = values[i];
+            const axisAnswer = answer[ax.label] || { _: v, _subs: [] };
+            const isOpen = openAxis === ax.label;
+            return (
+              <div key={ax.label} className="radar-slider-row">
+                <div className="radar-slider-main">
+                  <span className="radar-slider-label">{ax.label}</span>
+                  <input
+                    type="range" min={min} max={max} value={v}
+                    onChange={(e) => setAxis(i, parseInt(e.target.value))}
+                  />
+                  <span className="radar-slider-val">{v}</span>
+                  <button
+                    type="button"
+                    className="radar-precise-toggle"
+                    onClick={() => setOpenAxis(isOpen ? null : ax.label)}
+                    title="Préciser"
+                  >{isOpen ? "−" : "+"}</button>
+                </div>
+                {isOpen && (
+                  <div className="radar-subs">
+                    {(axisAnswer._subs || []).map((s: string) => (
+                      <div key={s} className="radar-sub-row">
+                        <span className="radar-sub-label">{s}</span>
+                        <input
+                          type="range" min={min} max={v}
+                          value={Math.min(axisAnswer[s] ?? v, v)}
+                          onChange={(e) => setSub(ax.label, s, parseInt(e.target.value))}
+                        />
+                        <span className="radar-sub-val">{Math.min(axisAnswer[s] ?? v, v)}</span>
+                        <button type="button" className="scale-sub-remove" onClick={() => removeSub(ax.label, s)}>×</button>
+                      </div>
+                    ))}
+                    <div className="scale-add-sub">
+                      <input
+                        type="text"
+                        className="scale-add-sub-input"
+                        value={newSubFor?.axis === ax.label ? newSubFor.label : ""}
+                        onChange={(e) => setNewSubFor({ axis: ax.label, label: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (newSubFor?.axis === ax.label) {
+                              addSub(ax.label, newSubFor.label);
+                              setNewSubFor(null);
+                            }
+                          }
+                        }}
+                        placeholder="Préciser (saisie libre)"
+                      />
+                      <button
+                        type="button"
+                        className="scale-add-sub-btn"
+                        onClick={() => {
+                          if (newSubFor?.axis === ax.label) {
+                            addSub(ax.label, newSubFor.label);
+                            setNewSubFor(null);
+                          }
+                        }}
+                        disabled={!newSubFor || newSubFor.axis !== ax.label || !newSubFor.label.trim()}
+                      >+ Ajouter</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RadarInput({ q, value, onChange }: { q: Question; value: any; onChange: (v: any) => void }) {
+  const mn = q.min ?? 0;
+  const mx = q.max ?? 10;
+  const mid = Math.round((mn + mx) / 2);
+  const groups = q.radarGroups || [];
+  const allAxes = useMemo(() => groups.flatMap(g => g.axes), [groups]);
+
+  const [mode, setMode] = useState<"radar" | "sliders">("radar");
+
+  const answer: RadarAnswer = useMemo(
+    () => normalizeRadarValue(value, allAxes, mid),
+    [value, allAxes, mid]
+  );
+
+  // init/seed at mount if no value
+  useEffect(() => {
+    if (value == null || (typeof value === "object" && Object.keys(value).length === 0)) {
+      onChange(answer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="q-block">
+      <span className="q-label">
+        {q.label}
+        <Badge variant="ns" className="q-type-badge">radar</Badge>
+      </span>
+      <div className="radar-mode-switch">
+        <button
+          type="button"
+          className={`radar-mode-btn ${mode === "radar" ? "active" : ""}`}
+          onClick={() => setMode("radar")}
+        >Toile d&apos;araignée</button>
+        <button
+          type="button"
+          className={`radar-mode-btn ${mode === "sliders" ? "active" : ""}`}
+          onClick={() => setMode("sliders")}
+        >Curseurs</button>
+      </div>
+      {mode === "radar" ? (
+        <div className="radar-groups">
+          {groups.map(g => (
+            <RadarGroupBlock
+              key={g.id}
+              group={g}
+              min={mn}
+              max={mx}
+              answer={answer}
+              onChange={onChange}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="radar-sliders-only">
+          {groups.map(g => (
+            <div key={g.id} className="radar-group-sliders-section">
+              <h4 className="radar-group-title">{g.title}</h4>
+              {g.axes.map(ax => {
+                const a = answer[ax.label] || { _: mid, _subs: [] };
+                return (
+                  <div key={ax.label} className="scale-track" style={{ marginBottom: 6 }}>
+                    <span className="radar-slider-label">{ax.label}</span>
+                    <input
+                      type="range" min={mn} max={mx} value={a._}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value);
+                        const next: any = { ...a, _: v };
+                        (a._subs || []).forEach((s: string) => {
+                          if (typeof next[s] === "number" && next[s] > v) next[s] = v;
+                        });
+                        onChange({ ...answer, [ax.label]: next });
+                      }}
+                    />
+                    <span className="scale-value">{a._}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const QuestionInput = ({ q, value, onChange, products, seedKey }: QuestionInputProps) => {
   if (q.type === "scale") {
     return <ScaleInput q={q} value={value} onChange={onChange} />;
+  }
+
+  if (q.type === "radar") {
+    return <RadarInput q={q} value={value} onChange={onChange} />;
   }
 
   if (q.type === "text") {

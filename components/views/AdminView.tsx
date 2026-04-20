@@ -6,7 +6,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { AnalyseView } from "./AnalyseView";
-import { Question, QuestionType, Product, BetLevel } from "../../types";
+import { Question, QuestionType, Product, BetLevel, RadarGroup, RadarAxis } from "../../types";
 import { wlm } from "../../lib/utils";
 
 // ─── Fiche de service ─────────────────────────────────────────────────────────
@@ -1023,6 +1023,90 @@ function QCMOptions({ options, correctAnswer, onChange, onChangeCorrect }: {
 }
 
 // ─────────────────────────────────────────────
+// Radar builder (toile d'araignée)
+// ─────────────────────────────────────────────
+function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<Question>) => void }) {
+  const groups: RadarGroup[] = q.radarGroups || [];
+
+  const updateGroup = (gi: number, patch: Partial<RadarGroup>) => {
+    const n = groups.map((g, i) => i === gi ? { ...g, ...patch } : g);
+    onUpdate({ radarGroups: n });
+  };
+
+  const updateAxis = (gi: number, ai: number, patch: Partial<RadarAxis>) => {
+    const group = groups[gi];
+    const axes = group.axes.map((a, i) => i === ai ? { ...a, ...patch } : a);
+    updateGroup(gi, { axes });
+  };
+
+  const addAxis = (gi: number) => updateGroup(gi, { axes: [...groups[gi].axes, { label: "" }] });
+  const removeAxis = (gi: number, ai: number) => updateGroup(gi, { axes: groups[gi].axes.filter((_, i) => i !== ai) });
+
+  const addGroup = () => {
+    const id = "g" + Date.now();
+    onUpdate({ radarGroups: [...groups, { id, title: "Nouveau groupe", axes: [{ label: "" }] }] });
+  };
+  const removeGroup = (gi: number) => onUpdate({ radarGroups: groups.filter((_, i) => i !== gi) });
+
+  return (
+    <div className="radar-builder">
+      <div className="q-fields">
+        <div className="field-wrap"><label>MIN</label><input type="number" value={q.min ?? 0} onChange={(e) => onUpdate({ min: +e.target.value })} /></div>
+        <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
+      </div>
+
+      <p style={{ fontSize: "11px", color: "var(--mid)", margin: "8px 0 4px" }}>
+        Chaque groupe = une toile d&apos;araignée. Le jury peut ajouter des précisions sous chaque axe durant l&apos;évaluation.
+      </p>
+
+      {groups.map((g, gi) => (
+        <div key={g.id} className="radar-group-block">
+          <div className="radar-group-header">
+            <input
+              value={g.title}
+              onChange={(e) => updateGroup(gi, { title: e.target.value })}
+              placeholder="Titre du radar"
+              style={{ fontWeight: 600, flex: 1 }}
+            />
+            <button className="chip-x" onClick={() => removeGroup(gi)} type="button" title="Supprimer le groupe">
+              <FiX size={12} />
+            </button>
+          </div>
+          {g.axes.map((ax, ai) => (
+            <div key={ai} className="radar-axis-row">
+              <input
+                value={ax.label}
+                onChange={(e) => updateAxis(gi, ai, { label: e.target.value })}
+                placeholder={`Axe ${ai + 1}`}
+                className="radar-axis-label-input"
+              />
+              <input
+                value={(ax.subCriteria || []).join(", ")}
+                onChange={(e) => updateAxis(gi, ai, {
+                  subCriteria: e.target.value.split(",").map(s => s.trim()).filter(Boolean)
+                })}
+                placeholder="Précisions par défaut (ex : abricot, pêche)"
+                className="radar-axis-subs-input"
+              />
+              <button className="chip-x" onClick={() => removeAxis(gi, ai)} type="button">
+                <FiX size={12} />
+              </button>
+            </div>
+          ))}
+          <Button variant="ghost" size="sm" onClick={() => addAxis(gi)} style={{ marginTop: "4px" }}>
+            <FiPlus /> Axe
+          </Button>
+        </div>
+      ))}
+
+      <Button variant="ghost" size="sm" onClick={addGroup} style={{ marginTop: "8px" }}>
+        <FiPlus /> Ajouter un groupe radar
+      </Button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Main question builder
 // ─────────────────────────────────────────────
 function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg: (val: any) => void }) {
@@ -1038,6 +1122,28 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
       scope: ["classement", "seuil", "seuil-bet", "triangulaire", "duo-trio", "a-non-a"].includes(type) ? "standalone" : "per-product",
     };
     if (type === "scale") { newQ.min = 0; newQ.max = 10; }
+    if (type === "radar") {
+      newQ.min = 0; newQ.max = 10;
+      newQ.scope = "per-product";
+      newQ.radarGroups = [
+        { id: "main", title: "Critères principaux", axes: [
+          { label: "acidité" },
+          { label: "amertume" },
+          { label: "astringence" },
+          { label: "sucrosité" },
+          { label: "fruité" },
+        ]},
+        { id: "fruits", title: "Fruité — décomposition", axes: [
+          { label: "fruit jaune", subCriteria: ["abricot", "pêche"] },
+          { label: "fruit blanc", subCriteria: ["poire", "pomme", "coing"] },
+          { label: "fruit exotique", subCriteria: ["banane", "fruit de la passion", "litchi"] },
+        ]},
+        { id: "autres", title: "Autres arômes", axes: [
+          { label: "cuir" }, { label: "fumé" }, { label: "solvant" },
+          { label: "épice" }, { label: "terreux" }, { label: "champignon" },
+        ]},
+      ];
+    }
     if (type === "qcm") newQ.options = ["Excellent", "Bon", "Moyen", "Mauvais"];
     if (type === "triangulaire") newQ.codes = allCodes.slice(0, 3);
     if (type === "duo-trio") newQ.codes = allCodes.slice(0, 3);
@@ -1070,9 +1176,10 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
     });
   };
 
-  const TYPES: QuestionType[] = ["scale", "classement", "seuil", "seuil-bet", "text", "qcm", "triangulaire", "duo-trio", "a-non-a"];
+  const TYPES: QuestionType[] = ["scale", "radar", "classement", "seuil", "seuil-bet", "text", "qcm", "triangulaire", "duo-trio", "a-non-a"];
   const TYPE_LABELS: Record<string, string> = {
     scale: "échelle",
+    radar: "radar (toile d'araignée)",
     classement: "classement",
     seuil: "seuil (rang)",
     "seuil-bet": "seuil (3-AFC)",
@@ -1194,6 +1301,10 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
                   </Button>
                 </div>
               </>
+            )}
+
+            {q.type === "radar" && (
+              <RadarBuilder q={q} onUpdate={onUpdate} />
             )}
 
             {(q.type === "classement" || q.type === "seuil") && (
