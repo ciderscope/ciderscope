@@ -253,7 +253,7 @@ body {
    LANDING (participant)
    ══════════════════════════════════════════ */
 .landing {
-  max-width: 700px;
+  max-width: min(94%, 1500px);
   margin: 0 auto;
   padding: clamp(36px, 5.5vw, 64px) clamp(18px, 3.5vw, 36px);
   text-align: center;
@@ -431,7 +431,7 @@ body {
    FORM SHELL (questionnaire)
    ══════════════════════════════════════════ */
 .form-shell {
-  max-width: 760px;
+  max-width: min(94%, 1280px);
   margin: 0 auto;
   padding: clamp(22px, 2.8vw, 36px) clamp(14px, 2.5vw, 28px) 100px;
 }
@@ -697,7 +697,7 @@ textarea.q-text:focus { border-color: var(--accent); }
    ADMIN
    ══════════════════════════════════════════ */
 .admin-shell {
-  max-width: 960px; margin: 0 auto;
+  max-width: min(95%, 1900px); margin: 0 auto;
   padding: clamp(22px, 2.8vw, 36px) clamp(14px, 2.5vw, 28px) 60px;
 }
 
@@ -865,7 +865,7 @@ textarea.q-text:focus { border-color: var(--accent); }
 /* ══════════════════════════════════════════
    ANALYSE
    ══════════════════════════════════════════ */
-.analyse-shell { max-width: 1200px; margin: 0 auto; padding: clamp(18px, 2.8vw, 32px); }
+.analyse-shell { max-width: min(95%, 2200px); margin: 0 auto; padding: clamp(18px, 2.8vw, 32px); }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
@@ -1138,20 +1138,12 @@ canvas { max-width: 100%; }
 /* ── Desktop ── */
 @media (min-width: 901px) {
   #landingContent { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; text-align: left; }
-  .landing { max-width: 960px; }
-  .admin-shell { max-width: 1200px; }
-  .form-shell { max-width: 900px; }
-  .analyse-shell { max-width: 1300px; }
   #sessList { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .q-fields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 }
 
 /* ── Wide ── */
 @media (min-width: 1280px) {
-  .admin-shell { max-width: 1400px; }
-  .analyse-shell { max-width: 1600px; }
-  .form-shell { max-width: 1000px; }
-  .landing { max-width: 1100px; }
   #sessList { grid-template-columns: repeat(3, 1fr); }
   #landingContent { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
   .scale-sub-label { min-width: 150px; }
