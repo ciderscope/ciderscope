@@ -95,6 +95,22 @@ function HorizontalRank({ items, value, onChange, seedKey }: { items: string[]; 
             >
               <span className="h-rank-pos">{i + 1}</span>
               <span className="h-rank-code">{code}</span>
+              <div className="h-rank-nav" aria-hidden="true">
+                <button
+                  type="button"
+                  className="h-rank-nav-btn"
+                  onClick={(e) => { e.stopPropagation(); if (i > 0) applyReorder(i, i - 1); }}
+                  disabled={i === 0}
+                  aria-label="Déplacer à gauche"
+                >◀</button>
+                <button
+                  type="button"
+                  className="h-rank-nav-btn"
+                  onClick={(e) => { e.stopPropagation(); if (i < ordered.length - 1) applyReorder(i, i + 1); }}
+                  disabled={i === ordered.length - 1}
+                  aria-label="Déplacer à droite"
+                >▶</button>
+              </div>
             </div>
             {i < ordered.length - 1 && (
               <div className="h-rank-sep" aria-hidden="true">
@@ -137,9 +153,18 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const updateMain = (v: number) => onChange({ ...valObj, _: v });
+  const updateMain = (v: number) => {
+    const next: Record<string, any> = { ...valObj, _: v };
+    activeSubs.forEach(label => {
+      if (typeof next[label] === "number" && next[label] > v) next[label] = v;
+    });
+    onChange(next);
+  };
 
-  const updateSub = (label: string, v: number) => onChange({ ...valObj, [label]: v });
+  const updateSub = (label: string, v: number) => {
+    const clamped = Math.min(v, mainValue);
+    onChange({ ...valObj, [label]: clamped });
+  };
 
   const removeSub = (label: string) => {
     const newSubs = activeSubs.filter(s => s !== label);
@@ -177,25 +202,33 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange:
 
         {/* Sub-criteria — jury-driven */}
         <div className="scale-subcriteria">
-          {activeSubs.map(label => (
-            <div key={label} className="scale-subcriterion">
-              <span className="scale-sub-label">{label}</span>
-              <div className="scale-track scale-track-sub">
-                <span style={{ ...monoStyle, minWidth: "20px" }}>{mn}</span>
-                <input
-                  type="range"
-                  min={mn}
-                  max={mx}
-                  value={typeof valObj[label] === "number" ? valObj[label] : mid}
-                  onChange={(e) => updateSub(label, parseInt(e.target.value))}
-                  style={{ cursor: "pointer" }}
-                />
-                <span style={{ ...monoStyle, minWidth: "20px" }}>{mx}</span>
-                <span className="scale-value scale-value-sub">{typeof valObj[label] === "number" ? valObj[label] : mid}</span>
+          {activeSubs.length > 0 && (
+            <p className="scale-subs-hint">
+              Pour la catégorisation des sous-catégories, vous ne pouvez pas aller plus haut que le critère évalué.
+            </p>
+          )}
+          {activeSubs.map(label => {
+            const subVal = typeof valObj[label] === "number" ? valObj[label] : mid;
+            return (
+              <div key={label} className="scale-subcriterion">
+                <span className="scale-sub-label">{label}</span>
+                <div className="scale-track scale-track-sub">
+                  <span style={{ ...monoStyle, minWidth: "20px" }}>{mn}</span>
+                  <input
+                    type="range"
+                    min={mn}
+                    max={mainValue}
+                    value={Math.min(subVal, mainValue)}
+                    onChange={(e) => updateSub(label, parseInt(e.target.value))}
+                    style={{ cursor: "pointer" }}
+                  />
+                  <span style={{ ...monoStyle, minWidth: "20px" }}>{mainValue}</span>
+                  <span className="scale-value scale-value-sub">{Math.min(subVal, mainValue)}</span>
+                </div>
+                <button className="scale-sub-remove" onClick={() => removeSub(label)} type="button" title="Retirer">×</button>
               </div>
-              <button className="scale-sub-remove" onClick={() => removeSub(label)} type="button" title="Retirer">×</button>
-            </div>
-          ))}
+            );
+          })}
 
           {/* Add row */}
           <div className="scale-add-sub">
