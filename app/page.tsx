@@ -72,6 +72,7 @@ export default function CiderScope() {
     saveSession,
     deleteSession,
     deleteJury,
+    listJurorsForSession,
     toggleActive,
     loadSessions,
     loadSessionConfig,
@@ -125,8 +126,6 @@ export default function CiderScope() {
             onReviewAnswers={() => handleLoginJury(cj)}
             buildSteps={buildSteps}
             isStepComplete={isStepComplete}
-            isAdmin={adminAuth === true}
-            onDeleteJury={deleteJury}
           />
         )}
 
@@ -213,6 +212,8 @@ export default function CiderScope() {
             }}
             downloadCSV={downloadCSV}
             loadSessionConfig={loadSessionConfig}
+            listJurorsForSession={listJurorsForSession}
+            deleteJury={deleteJury}
             allAnswers={allAnswers}
             anSessId={anSessId}
             anCfg={anCfg}

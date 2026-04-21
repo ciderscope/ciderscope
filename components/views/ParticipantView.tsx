@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud, FiAlertCircle, FiLoader, FiX } from "react-icons/fi";
+import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud, FiAlertCircle, FiLoader } from "react-icons/fi";
 import { Button } from "../ui/Button";
 import { SessionCard } from "../features/SessionCard";
 import { Questionnaire } from "../features/Questionnaire";
@@ -25,8 +24,6 @@ interface ParticipantViewProps {
   onReviewAnswers: () => void;
   buildSteps: (cfg: any, name: string) => any[];
   isStepComplete: (idx: number) => boolean;
-  isAdmin?: boolean;
-  onDeleteJury?: (name: string) => Promise<{ success: boolean } | undefined> | void;
 }
 
 const stepShortLabel = (step: any) => {
@@ -73,10 +70,8 @@ const SaveIndicator = ({ status, pendingCount }: { status: "idle" | "saving" | "
 export const ParticipantView = ({
   screen, sessions, curSess, jurors, cj, ja, cs, saveStatus, pendingCount,
   onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, onReviewAnswers, buildSteps, isStepComplete,
-  isAdmin, onDeleteJury,
 }: ParticipantViewProps) => {
   const activeSessions = sessions.filter(s => s.active);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   if (screen === "landing") {
     return (
@@ -128,74 +123,12 @@ export const ParticipantView = ({
             <div className="jury-existing-title">Reprendre :</div>
             <div className="jury-existing-grid">
               {jurors.map(n => (
-                <div key={n} style={{ position: "relative", display: "inline-block" }}>
-                  <button className="jury-existing-btn" onClick={() => onLoginJury(n)}>{n}</button>
-                  {isAdmin && onDeleteJury && (
-                    <button
-                      type="button"
-                      aria-label={`Supprimer les réponses de ${n}`}
-                      title="Supprimer ce participant"
-                      onClick={(e) => { e.stopPropagation(); setConfirmDelete(n); }}
-                      style={{
-                        position: "absolute", top: "-6px", right: "-6px",
-                        width: "20px", height: "20px", padding: 0,
-                        borderRadius: "50%", border: "1px solid var(--border)",
-                        background: "var(--paper)", color: "var(--danger)",
-                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                      }}
-                    >
-                      <FiX size={12} />
-                    </button>
-                  )}
-                </div>
+                <button key={n} className="jury-existing-btn" onClick={() => onLoginJury(n)}>{n}</button>
               ))}
             </div>
           </div>
         )}
         <Button variant="ghost" size="sm" className="mt16" onClick={onHome}><FiArrowLeft /> Retour</Button>
-
-        {confirmDelete && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            onClick={() => setConfirmDelete(null)}
-            style={{
-              position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-              display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                background: "var(--paper)", borderRadius: "12px",
-                padding: "22px 24px", maxWidth: "360px", width: "90%",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-              }}
-            >
-              <div style={{ fontSize: "15px", fontWeight: 700, marginBottom: "8px" }}>
-                Supprimer ce participant ?
-              </div>
-              <div style={{ fontSize: "13px", color: "var(--mid)", marginBottom: "18px" }}>
-                Toutes les réponses de <strong>{confirmDelete}</strong> seront définitivement supprimées.
-              </div>
-              <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>Annuler</Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={async () => {
-                    const name = confirmDelete;
-                    setConfirmDelete(null);
-                    await onDeleteJury?.(name);
-                  }}
-                >
-                  Supprimer
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }

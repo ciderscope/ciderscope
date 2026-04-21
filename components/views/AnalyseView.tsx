@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card } from "../ui/Card";
 import { Radar, Bar, Scatter } from "react-chartjs-2";
 
@@ -319,6 +319,44 @@ function wordColor(w: string) {
   let h = 0;
   for (const c of w) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
   return COLORS[h % COLORS.length];
+}
+
+// ─── Sub-tab nav pour sélectionner une question parmi plusieurs d'un même type ──
+function QuestionSubNav({ questions, current, onChange }: {
+  questions: string[];
+  current: string;
+  onChange: (q: string) => void;
+}) {
+  if (questions.length <= 1) return null;
+  return (
+    <div style={{
+      display: "flex", gap: "6px", flexWrap: "wrap",
+      marginBottom: "14px", paddingBottom: "8px",
+      borderBottom: "1px solid var(--border)",
+    }}>
+      {questions.map(q => {
+        const active = q === current;
+        return (
+          <button
+            key={q}
+            type="button"
+            onClick={() => onChange(q)}
+            title={q}
+            style={{
+              padding: "6px 12px", borderRadius: "8px",
+              border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+              background: active ? "var(--accent)" : "var(--paper)",
+              color: active ? "#fff" : "var(--text)",
+              fontSize: "12px", fontWeight: 600, cursor: "pointer",
+              maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}
+          >
+            {q}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── Dynamic tab computation ──────────────────────────────────────────────────
@@ -713,8 +751,10 @@ function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
 
 function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; type: "classement" | "seuil" }) {
   const rankRows = data.filter(r => r.type === type && r.valeur);
-  const questions = [...new Set(rankRows.map(r => r.question))];
+  const questions = [...new Set(rankRows.map(r => r.question))] as string[];
   const title = type === "seuil" ? "Seuil" : "Classement";
+  const [activeQ, setActiveQ] = useState<string | null>(null);
+  const current = activeQ && questions.includes(activeQ) ? activeQ : (questions[0] as string);
 
   if (rankRows.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée de {type} disponible.</div>;
@@ -722,7 +762,8 @@ function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; typ
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {questions.map(q => {
+      <QuestionSubNav questions={questions} current={current} onChange={setActiveQ} />
+      {questions.filter(q => q === current).map(q => {
         const qRows = rankRows.filter(r => r.question === q && r.valeur);
         // Parse "A>B>C" → {A:1, B:2, C:3}
         const matrices: Record<string, number>[] = qRows
@@ -951,7 +992,9 @@ function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; typ
 
 function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; label: string }) {
   const dd = data.filter(r => r.type === type);
-  const questions = [...new Set(dd.map(r => r.question))];
+  const questions = [...new Set(dd.map(r => r.question))] as string[];
+  const [activeQ, setActiveQ] = useState<string | null>(null);
+  const current = activeQ && questions.includes(activeQ) ? activeQ : (questions[0] as string);
 
   if (dd.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée disponible.</div>;
@@ -992,7 +1035,8 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
   if (type === "a-non-a") {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        {questions.map(q => {
+        <QuestionSubNav questions={questions} current={current} onChange={setActiveQ} />
+        {questions.filter(q => q === current).map(q => {
           const qd = dd.filter(r => r.question === q);
           // Agrégation en table 2×2 : lignes = stimulus (A / non-A), colonnes = réponse (A / non-A)
           let hits = 0, misses = 0, fa = 0, cr = 0;
@@ -1128,7 +1172,8 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {questions.map(q => {
+      <QuestionSubNav questions={questions} current={current} onChange={setActiveQ} />
+      {questions.filter(q => q === current).map(q => {
         const qd = dd.filter(r => r.question === q);
         const n = qd.length;
         const nc = qd.filter(r => r.valeur === r.correct).length;
@@ -1210,6 +1255,9 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
 function AnalyseSeuilBET({ config, allAnswers }: { config: any; allAnswers: any }) {
   const questions: any[] = (config?.questions || []).filter((q: any) => q.type === "seuil-bet");
   const jurors = Object.keys(allAnswers || {});
+  const labels = questions.map((q: any) => q.label) as string[];
+  const [activeQ, setActiveQ] = useState<string | null>(null);
+  const current = activeQ && labels.includes(activeQ) ? activeQ : (labels[0] as string);
 
   if (questions.length === 0 || jurors.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée disponible.</div>;
@@ -1244,7 +1292,8 @@ function AnalyseSeuilBET({ config, allAnswers }: { config: any; allAnswers: any 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {questions.map((q: any) => {
+      <QuestionSubNav questions={labels} current={current} onChange={setActiveQ} />
+      {questions.filter((q: any) => q.label === current).map((q: any) => {
         const levels = q.betLevels || [];
         if (levels.length === 0) {
           return (

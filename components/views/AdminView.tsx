@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPrinter } from "react-icons/fi";
 import { QuestionInput } from "../features/QuestionInput";
 import { Button } from "../ui/Button";
@@ -12,14 +12,106 @@ import { wlm } from "../../lib/utils";
 // ─── Fiche de service ─────────────────────────────────────────────────────────
 function printServiceSheet(sessionName: string, cfg: any) {
   const products: Product[] = cfg.products || [];
+  const allQs: any[] = cfg.questions || [];
   const n = products.length;
   if (n === 0) { alert("Aucun échantillon dans cette séance."); return; }
 
-  const sq = wlm(n); // sq[juryIdx][position] = productIdx
-  const rows = sq.map((order, juryIdx) => ({
-    jury: juryIdx + 1,
-    order: order.map((pi: number) => products[pi]?.code ?? "?"),
-  }));
+  type Section = { title: string; subtitle?: string; note?: string; rows: { jury: number; order: string[] }[] };
+  const sections: Section[] = [];
+
+  const buildRows = (codes: string[]): { jury: number; order: string[] }[] => {
+    if (codes.length === 0) return [];
+    const sq = wlm(codes.length);
+    return sq.map((order: number[], juryIdx: number) => ({
+      jury: juryIdx + 1,
+      order: order.map((pi: number) => codes[pi] || "?"),
+    }));
+  };
+
+  // 1. Section produits (questions scope=per-product)
+  const ppQs = allQs.filter((q: any) => q.scope === "per-product");
+  if (ppQs.length > 0) {
+    sections.push({
+      title: "Présentation des échantillons",
+      subtitle: `Questions évaluées par produit : ${ppQs.map((q: any) => q.label).join(" · ")}`,
+      rows: buildRows(products.map(p => p.code)),
+    });
+  }
+
+  // 2. Séries standalone (classement, seuil, triangulaire, duo-trio, a-non-a)
+  const typeLabel: Record<string, string> = {
+    classement: "Classement",
+    seuil: "Seuil (rang)",
+    triangulaire: "Triangulaire (3-AFC)",
+    "duo-trio": "Duo-trio",
+    "a-non-a": "A / non-A",
+  };
+
+  allQs.forEach((q: any) => {
+    if (["classement", "seuil", "triangulaire", "duo-trio"].includes(q.type) && Array.isArray(q.codes) && q.codes.length > 0) {
+      sections.push({
+        title: `Q · ${q.label}`,
+        subtitle: typeLabel[q.type],
+        rows: buildRows(q.codes),
+      });
+    } else if (q.type === "a-non-a" && Array.isArray(q.codes) && q.codes.length > 0) {
+      sections.push({
+        title: `Q · ${q.label}`,
+        subtitle: typeLabel[q.type],
+        note: q.refCode ? `Référence A présentée en premier : <strong>${q.refCode}</strong>` : undefined,
+        rows: buildRows(q.codes),
+      });
+    }
+  });
+
+  // 3. Seuil-BET : une sous-section par niveau
+  allQs.filter((q: any) => q.type === "seuil-bet").forEach((q: any) => {
+    (q.betLevels || []).forEach((lv: any, i: number) => {
+      const codes: string[] = (lv.codes || []).filter(Boolean);
+      if (codes.length === 0) return;
+      sections.push({
+        title: `Q · ${q.label} — niveau ${i + 1}${lv.label ? ` (${lv.label})` : ""}`,
+        subtitle: "Seuil 3-AFC (BET)",
+        rows: buildRows(codes),
+      });
+    });
+  });
+
+  // Fallback si aucune question n'est définie
+  if (sections.length === 0) {
+    sections.push({
+      title: "Présentation des échantillons",
+      rows: buildRows(products.map(p => p.code)),
+    });
+  }
+
+  const presLabel = cfg.presMode === "latin" ? "Carré latin" : cfg.presMode === "random" ? "Aléatoire" : "Fixe";
+
+  const renderSection = (s: Section) => {
+    if (s.rows.length === 0) return "";
+    const positions = s.rows[0].order.length;
+    return `
+<section class="serie">
+  <h2>${s.title}</h2>
+  ${s.subtitle ? `<div class="sub">${s.subtitle}</div>` : ""}
+  ${s.note ? `<div class="note">${s.note}</div>` : ""}
+  <table>
+    <thead>
+      <tr>
+        <th>Jury n°</th>
+        ${Array.from({ length: positions }, (_, i) => `<th>Position ${i + 1}</th>`).join("")}
+      </tr>
+    </thead>
+    <tbody>
+      ${s.rows.map(r => `
+      <tr>
+        <td class="jury">${r.jury}</td>
+        ${r.order.map((c: string) => `<td class="code">${c}</td>`).join("")}
+      </tr>`).join("")}
+    </tbody>
+  </table>
+</section>`;
+  };
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -28,36 +120,30 @@ function printServiceSheet(sessionName: string, cfg: any) {
 <title>Fiche de service — ${sessionName}</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 20px; }
-  h1 { font-size: 18px; margin-bottom: 4px; }
-  .meta { color: #666; font-size: 12px; margin-bottom: 20px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
+  .meta { color: #666; font-size: 12px; margin-bottom: 12px; }
+  .sub { color: #666; font-size: 12px; margin-bottom: 4px; font-style: italic; }
+  .note { font-size: 12px; margin: 4px 0 6px; padding: 6px 10px; background: #fafae0; border-left: 3px solid #c8820a; }
+  section.serie { page-break-inside: avoid; margin-bottom: 18px; }
   table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; }
   th { background: #f4f4f4; font-weight: 700; }
   td.jury { font-weight: 700; background: #fafafa; }
   .code { font-family: "Courier New", monospace; font-size: 15px; font-weight: 700; }
-  @media print { body { padding: 0; } button { display: none; } }
+  @media print {
+    body { padding: 0; }
+    button { display: none; }
+    section.serie + section.serie { page-break-before: auto; }
+  }
 </style>
 </head>
 <body>
 <h1>Fiche de service — ${sessionName}</h1>
 <div class="meta">
-  ${cfg.date || ""} · Présentation : ${cfg.presMode === "latin" ? "Carré latin" : cfg.presMode === "random" ? "Aléatoire" : "Fixe"} · ${n} échantillons · ${rows.length} positions de jury
+  ${cfg.date || ""} · Présentation : ${presLabel} · ${n} échantillon${n > 1 ? "s" : ""} · ${sections.length} série${sections.length > 1 ? "s" : ""}
 </div>
-<table>
-  <thead>
-    <tr>
-      <th>Jury n°</th>
-      ${rows[0].order.map((_: any, i: number) => `<th>Position ${i + 1}</th>`).join("")}
-    </tr>
-  </thead>
-  <tbody>
-    ${rows.map(r => `
-    <tr>
-      <td class="jury">${r.jury}</td>
-      ${r.order.map((c: string) => `<td class="code">${c}</td>`).join("")}
-    </tr>`).join("")}
-  </tbody>
-</table>
+${sections.map(renderSection).join("")}
 <br>
 <button onclick="window.print()">🖨 Imprimer</button>
 </body>
@@ -85,6 +171,8 @@ interface AdminViewProps {
   buildCSVRows: (cfg: any, ans: any) => any[];
   downloadCSV: (rows: any[], filename: string) => void;
   loadSessionConfig: (id: string) => Promise<any>;
+  listJurorsForSession: (id: string) => Promise<string[]>;
+  deleteJury: (sessionId: string, name: string) => Promise<{ success: boolean } | undefined>;
   // Analyse props
   allAnswers: any;
   anSessId: string | null;
@@ -99,6 +187,7 @@ export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
   onNewSession, onEditSession, onToggleActive, onDuplicateSession, onDeleteSession,
   onSetEditCfg, onSetEditTab, onSaveEdit, onHome, buildCSVRows, downloadCSV, loadSessionConfig,
+  listJurorsForSession, deleteJury,
   allAnswers, anSessId, anCfg, csvData, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
   const [adminSection, setAdminSection] = useState<"seances" | "analyse">("seances");
@@ -191,7 +280,10 @@ export const AdminView = ({
     return (
       <div className="admin-shell">
         <div className="admin-tabs">
-          {["session", "questions", "présentation", "données"].map(t => (
+          {(editSessId
+            ? ["session", "questions", "présentation", "participants", "données"]
+            : ["session", "questions", "présentation", "données"]
+          ).map(t => (
             <div key={t} className={`admin-tab ${t === curEditTab ? "active" : ""}`} onClick={() => onSetEditTab(t)}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </div>
@@ -257,6 +349,13 @@ export const AdminView = ({
           {curEditTab === "questions" && (
             <QuestionBuilder editCfg={editCfg} onSetEditCfg={onSetEditCfg} />
           )}
+          {curEditTab === "participants" && editSessId && (
+            <ParticipantsTab
+              sessionId={editSessId}
+              listJurorsForSession={listJurorsForSession}
+              deleteJury={deleteJury}
+            />
+          )}
           {curEditTab === "données" && (
             <Card title="Export des données">
               <Button onClick={() => {
@@ -278,6 +377,113 @@ export const AdminView = ({
 
   return null;
 };
+
+// ─────────────────────────────────────────────
+// Participants tab — list + delete jury answers
+// ─────────────────────────────────────────────
+function ParticipantsTab({ sessionId, listJurorsForSession, deleteJury }: {
+  sessionId: string;
+  listJurorsForSession: (id: string) => Promise<string[]>;
+  deleteJury: (sessionId: string, name: string) => Promise<{ success: boolean } | undefined>;
+}) {
+  const [jurors, setJurors] = useState<string[] | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = async () => {
+    const list = await listJurorsForSession(sessionId);
+    setJurors(list);
+  };
+
+  useEffect(() => { void reload(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  return (
+    <Card title="Participants ayant répondu">
+      {jurors === null ? (
+        <div style={{ color: "var(--mid)" }}>Chargement…</div>
+      ) : jurors.length === 0 ? (
+        <div style={{ color: "var(--mid)" }}>Aucun participant n&apos;a encore répondu à cette séance.</div>
+      ) : (
+        <>
+          <p style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "10px" }}>
+            Cliquez sur la croix pour supprimer définitivement les réponses d&apos;un participant.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {jurors.map(n => (
+              <div key={n} style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                padding: "8px 12px", background: "var(--paper2)", borderRadius: "8px",
+                border: "1px solid var(--border)",
+              }}>
+                <span style={{ flex: 1, fontWeight: 600 }}>{n}</span>
+                <button
+                  type="button"
+                  className="chip-x"
+                  title="Supprimer ce participant"
+                  onClick={() => setConfirmDelete(n)}
+                  style={{ color: "var(--danger)" }}
+                >
+                  <FiX size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {confirmDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => { if (!busy) setConfirmDelete(null); }}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--paper)", borderRadius: "12px",
+              padding: "22px 24px", maxWidth: "380px", width: "90%",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+            }}
+          >
+            <div style={{ fontSize: "15px", fontWeight: 700, marginBottom: "8px" }}>
+              Supprimer ce participant ?
+            </div>
+            <div style={{ fontSize: "13px", color: "var(--mid)", marginBottom: "18px" }}>
+              Toutes les réponses de <strong>{confirmDelete}</strong> seront définitivement supprimées de cette séance.
+            </div>
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(null)} disabled={busy}>Annuler</Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={busy}
+                onClick={async () => {
+                  if (!confirmDelete) return;
+                  setBusy(true);
+                  const res = await deleteJury(sessionId, confirmDelete);
+                  setBusy(false);
+                  if (res?.success) {
+                    setJurors(prev => (prev || []).filter(j => j !== confirmDelete));
+                  } else {
+                    alert("Erreur lors de la suppression.");
+                  }
+                  setConfirmDelete(null);
+                }}
+              >
+                {busy ? "Suppression…" : "Supprimer"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 // ─────────────────────────────────────────────
 // Shared primitive: a draggable / clickable chip

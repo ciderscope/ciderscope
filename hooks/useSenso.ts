@@ -316,30 +316,46 @@ export const useSenso = () => {
     if (error) console.error("Erreur lors de la suppression:", error);
   };
 
-  const deleteJury = async (name: string) => {
-    if (!curSessId) return { success: false };
+  const listJurorsForSession = async (sessionId: string): Promise<string[]> => {
+    const { data, error } = await supabase
+      .from("answers")
+      .select("juror_name")
+      .eq("session_id", sessionId);
+    if (error || !data) return [];
+    return data.map((r: { juror_name: string }) => r.juror_name);
+  };
+
+  const deleteJury = async (sessionId: string, name: string) => {
+    if (!sessionId) return { success: false };
     const { error } = await supabase
       .from("answers")
       .delete()
-      .eq("session_id", curSessId)
+      .eq("session_id", sessionId)
       .eq("juror_name", name);
     if (error) {
       console.error("Erreur lors de la suppression du jury:", error);
       return { success: false };
     }
-    const newJurors = jurors.filter(j => j !== name);
-    setJurors(newJurors);
+    if (sessionId === curSessId) {
+      const newJurors = jurors.filter(j => j !== name);
+      setJurors(newJurors);
+      if (cj === name) { setCj(""); setJa({}); }
+    }
+    const remaining = await listJurorsForSession(sessionId);
     await supabase
       .from("sessions")
-      .update({ juror_count: newJurors.length })
-      .eq("id", curSessId);
-    setSessions(sessions.map(s =>
-      s.id === curSessId ? { ...s, jurorCount: newJurors.length } : s
+      .update({ juror_count: remaining.length })
+      .eq("id", sessionId);
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, jurorCount: remaining.length } : s
     ));
-    if (cj === name) {
-      setCj("");
-      setJa({});
-    }
+    // Remove from in-memory allAnswers if loaded
+    setAllAnswers(prev => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
     return { success: true };
   };
 
@@ -431,6 +447,7 @@ export const useSenso = () => {
     saveSession,
     deleteSession,
     deleteJury,
+    listJurorsForSession,
     toggleActive,
     loadSessions,
     allAnswers,
