@@ -12,7 +12,7 @@ export const wlm = (n: number) => {
   if (n % 2 === 0) {
     for (let i = 0; i < n; i++) {
       const r: number[] = [];
-      for (let j = 0; j < n; j++) r.push(j === 0 ? 0 : j % 2 === 1 ? (i + Math.ceil(j / 2)) % n : (n - Math.ceil(j / 2) + i) % n);
+      for (let j = 0; j < n; j++) r.push(j === 0 ? i : j % 2 === 1 ? (i + Math.ceil(j / 2)) % n : (n - Math.ceil(j / 2) + i) % n);
       R.push(r);
     }
   } else {
