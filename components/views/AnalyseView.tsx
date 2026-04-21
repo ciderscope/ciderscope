@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Card } from "../ui/Card";
 import { Radar, Bar, Scatter } from "react-chartjs-2";
 
@@ -321,59 +321,39 @@ function wordColor(w: string) {
   return COLORS[h % COLORS.length];
 }
 
-// ─── Sub-tab nav pour sélectionner une question parmi plusieurs d'un même type ──
-function QuestionSubNav({ questions, current, onChange }: {
-  questions: string[];
-  current: string;
-  onChange: (q: string) => void;
-}) {
-  if (questions.length <= 1) return null;
-  return (
-    <div style={{
-      display: "flex", gap: "6px", flexWrap: "wrap",
-      marginBottom: "14px", paddingBottom: "8px",
-      borderBottom: "1px solid var(--border)",
-    }}>
-      {questions.map(q => {
-        const active = q === current;
-        return (
-          <button
-            key={q}
-            type="button"
-            onClick={() => onChange(q)}
-            title={q}
-            style={{
-              padding: "6px 12px", borderRadius: "8px",
-              border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-              background: active ? "var(--accent)" : "var(--paper)",
-              color: active ? "#fff" : "var(--text)",
-              fontSize: "12px", fontWeight: 600, cursor: "pointer",
-              maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}
-          >
-            {q}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── Dynamic tab computation ──────────────────────────────────────────────────
 
-function computeTabs(anCfg: any): { id: string; label: string }[] {
+type Tab = { id: string; label: string; questionId?: string; qType?: string };
+
+const STATS_QTYPES: Record<string, string> = {
+  classement: "Classement",
+  seuil: "Seuil",
+  triangulaire: "Triangulaire",
+  "duo-trio": "Duo-trio",
+  "a-non-a": "A-non-A",
+  "seuil-bet": "Seuil 3-AFC",
+};
+
+function computeTabs(anCfg: any): Tab[] {
   if (!anCfg) return [{ id: "données", label: "Données" }];
   const qs: any[] = anCfg.questions || [];
-  const tabs: { id: string; label: string }[] = [];
+  const tabs: Tab[] = [];
 
-  if (qs.some(q => q.type === "scale"))       tabs.push({ id: "profil",      label: "Profil" });
-  if (qs.some(q => q.type === "classement"))  tabs.push({ id: "classement",  label: "Classement" });
-  if (qs.some(q => q.type === "seuil"))       tabs.push({ id: "seuil",       label: "Seuil" });
-  if (qs.some(q => q.type === "triangulaire"))tabs.push({ id: "triangulaire",label: "Triangulaire" });
-  if (qs.some(q => q.type === "duo-trio"))    tabs.push({ id: "duo-trio",    label: "Duo-trio" });
-  if (qs.some(q => q.type === "a-non-a"))     tabs.push({ id: "a-non-a",     label: "A-non-A" });
-  if (qs.some(q => q.type === "seuil-bet"))   tabs.push({ id: "seuil-bet",   label: "Seuil 3-AFC (BET)" });
-  if (qs.some(q => q.type === "text"))        tabs.push({ id: "texte",       label: "Nuage de mots" });
+  if (qs.some(q => q.type === "scale")) tabs.push({ id: "profil", label: "Profil" });
+
+  qs.forEach((q: any) => {
+    const prefix = STATS_QTYPES[q.type];
+    if (prefix) {
+      tabs.push({
+        id: `q:${q.id}`,
+        label: `${prefix} — ${q.label}`,
+        questionId: q.id,
+        qType: q.type,
+      });
+    }
+  });
+
+  if (qs.some(q => q.type === "text")) tabs.push({ id: "texte", label: "Nuage de mots" });
   tabs.push({ id: "jury",    label: "Par jury" });
   tabs.push({ id: "données", label: "Données" });
   return tabs;
@@ -449,16 +429,26 @@ export const AnalyseView = ({
           </div>
 
           <div id="anContent">
-            {activeTab === "profil"       && <AnalyseProfil      config={anCfg} data={csvData} />}
-            {activeTab === "classement"   && <AnalyseFriedman    config={anCfg} data={csvData} type="classement" />}
-            {activeTab === "seuil"        && <AnalyseFriedman    config={anCfg} data={csvData} type="seuil" />}
-            {activeTab === "triangulaire" && <AnalyseDiscrimType data={csvData} type="triangulaire" label="Triangulaire" />}
-            {activeTab === "duo-trio"     && <AnalyseDiscrimType data={csvData} type="duo-trio"     label="Duo-trio" />}
-            {activeTab === "a-non-a"      && <AnalyseDiscrimType data={csvData} type="a-non-a"      label="A-non-A" />}
-            {activeTab === "seuil-bet"    && <AnalyseSeuilBET    config={anCfg} allAnswers={allAnswers} />}
-            {activeTab === "texte"        && <AnalyseWordCloud   data={csvData} config={anCfg} />}
-            {activeTab === "jury"         && <AnalyseJury        config={anCfg} allAnswers={allAnswers} />}
-            {activeTab === "données"      && <AnalyseDonnees     data={csvData} />}
+            {activeTab === "profil"  && <AnalyseProfil    config={anCfg} data={csvData} />}
+            {activeTab === "texte"   && <AnalyseWordCloud data={csvData} config={anCfg} />}
+            {activeTab === "jury"    && <AnalyseJury      config={anCfg} allAnswers={allAnswers} />}
+            {activeTab === "données" && <AnalyseDonnees   data={csvData} />}
+            {activeTab.startsWith("q:") && (() => {
+              const tab = tabs.find(t => t.id === activeTab);
+              const q = tab?.questionId ? (anCfg.questions || []).find((x: any) => x.id === tab.questionId) : null;
+              if (!q) return null;
+              if (q.type === "classement" || q.type === "seuil")
+                return <AnalyseFriedman config={anCfg} data={csvData} type={q.type} questionLabel={q.label} />;
+              if (q.type === "triangulaire")
+                return <AnalyseDiscrimType data={csvData} type="triangulaire" label="Triangulaire" questionLabel={q.label} />;
+              if (q.type === "duo-trio")
+                return <AnalyseDiscrimType data={csvData} type="duo-trio" label="Duo-trio" questionLabel={q.label} />;
+              if (q.type === "a-non-a")
+                return <AnalyseDiscrimType data={csvData} type="a-non-a" label="A-non-A" questionLabel={q.label} />;
+              if (q.type === "seuil-bet")
+                return <AnalyseSeuilBET config={anCfg} allAnswers={allAnswers} questionId={q.id} />;
+              return null;
+            })()}
           </div>
         </>
       )}
@@ -749,12 +739,9 @@ function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
 
 // ─── Classement & Seuil → Friedman + Nemenyi ──────────────────────────────────
 
-function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; type: "classement" | "seuil" }) {
-  const rankRows = data.filter(r => r.type === type && r.valeur);
-  const questions = [...new Set(rankRows.map(r => r.question))] as string[];
+function AnalyseFriedman({ config, data, type, questionLabel }: { config: any; data: any[]; type: "classement" | "seuil"; questionLabel: string }) {
+  const rankRows = data.filter(r => r.type === type && r.valeur && r.question === questionLabel);
   const title = type === "seuil" ? "Seuil" : "Classement";
-  const [activeQ, setActiveQ] = useState<string | null>(null);
-  const current = activeQ && questions.includes(activeQ) ? activeQ : (questions[0] as string);
 
   if (rankRows.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée de {type} disponible.</div>;
@@ -762,8 +749,7 @@ function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; typ
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <QuestionSubNav questions={questions} current={current} onChange={setActiveQ} />
-      {questions.filter(q => q === current).map(q => {
+      {[questionLabel].map(q => {
         const qRows = rankRows.filter(r => r.question === q && r.valeur);
         // Parse "A>B>C" → {A:1, B:2, C:3}
         const matrices: Record<string, number>[] = qRows
@@ -990,11 +976,8 @@ function AnalyseFriedman({ config, data, type }: { config: any; data: any[]; typ
 
 // ─── Tests discriminatifs (un type à la fois) ─────────────────────────────────
 
-function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; label: string }) {
-  const dd = data.filter(r => r.type === type);
-  const questions = [...new Set(dd.map(r => r.question))] as string[];
-  const [activeQ, setActiveQ] = useState<string | null>(null);
-  const current = activeQ && questions.includes(activeQ) ? activeQ : (questions[0] as string);
+function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: any[]; type: string; label: string; questionLabel: string }) {
+  const dd = data.filter(r => r.type === type && r.question === questionLabel);
 
   if (dd.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée disponible.</div>;
@@ -1035,8 +1018,7 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
   if (type === "a-non-a") {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <QuestionSubNav questions={questions} current={current} onChange={setActiveQ} />
-        {questions.filter(q => q === current).map(q => {
+        {[questionLabel].map(q => {
           const qd = dd.filter(r => r.question === q);
           // Agrégation en table 2×2 : lignes = stimulus (A / non-A), colonnes = réponse (A / non-A)
           let hits = 0, misses = 0, fa = 0, cr = 0;
@@ -1172,8 +1154,7 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <QuestionSubNav questions={questions} current={current} onChange={setActiveQ} />
-      {questions.filter(q => q === current).map(q => {
+      {[questionLabel].map(q => {
         const qd = dd.filter(r => r.question === q);
         const n = qd.length;
         const nc = qd.filter(r => r.valeur === r.correct).length;
@@ -1252,12 +1233,9 @@ function AnalyseDiscrimType({ data, type, label }: { data: any[]; type: string; 
 
 // ─── Seuil BET (3-AFC, ASTM E679) ─────────────────────────────────────────────
 
-function AnalyseSeuilBET({ config, allAnswers }: { config: any; allAnswers: any }) {
-  const questions: any[] = (config?.questions || []).filter((q: any) => q.type === "seuil-bet");
+function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: any; allAnswers: any; questionId: string }) {
+  const questions: any[] = (config?.questions || []).filter((q: any) => q.type === "seuil-bet" && q.id === questionId);
   const jurors = Object.keys(allAnswers || {});
-  const labels = questions.map((q: any) => q.label) as string[];
-  const [activeQ, setActiveQ] = useState<string | null>(null);
-  const current = activeQ && labels.includes(activeQ) ? activeQ : (labels[0] as string);
 
   if (questions.length === 0 || jurors.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée disponible.</div>;
@@ -1292,8 +1270,7 @@ function AnalyseSeuilBET({ config, allAnswers }: { config: any; allAnswers: any 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <QuestionSubNav questions={labels} current={current} onChange={setActiveQ} />
-      {questions.filter((q: any) => q.label === current).map((q: any) => {
+      {questions.map((q: any) => {
         const levels = q.betLevels || [];
         if (levels.length === 0) {
           return (
