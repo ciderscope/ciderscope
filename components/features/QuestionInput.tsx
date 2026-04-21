@@ -3,42 +3,23 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../ui/Badge";
 import { Question, Product, RadarAxis } from "../../types";
 import { FiChevronLeft } from "react-icons/fi";
-import { hsh } from "../../lib/utils";
-
 interface QuestionInputProps {
   q: Question;
   value: any;
   onChange: (val: any) => void;
   products?: Product[];
-  seedKey?: string;
-}
-
-// Graine → ordre aléatoire déterministe (anti-ancrage)
-function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const a = [...arr];
-  let s = seed || 1;
-  for (let k = a.length - 1; k > 0; k--) {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    const j = s % (k + 1);
-    [a[k], a[j]] = [a[j], a[k]];
-  }
-  return a;
 }
 
 // Horizontal draggable rank for classement / seuil
-function HorizontalRank({ items, value, onChange, seedKey }: { items: string[]; value: any; onChange: (v: any) => void; seedKey?: string }) {
-  const initialOrder = useMemo(
-    () => seedKey ? seededShuffle(items, hsh(seedKey)) : [...items],
-    [items, seedKey]
-  );
+function HorizontalRank({ items, value, onChange }: { items: string[]; value: any; onChange: (v: any) => void }) {
   const hasValue = Array.isArray(value) && value.length === items.length;
-  const ordered: string[] = hasValue ? value : initialOrder;
+  const ordered: string[] = hasValue ? value : items;
 
-  // Commit l'ordre aléatoire initial à la première présentation (lève la gate Suivant)
+  // Commit the initial order (already randomized by buildSteps)
   useEffect(() => {
-    if (!hasValue) onChange(initialOrder);
+    if (!hasValue) onChange(items);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [items]);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
@@ -682,7 +663,7 @@ export const QuestionInput = ({ q, value, onChange, products, seedKey }: Questio
       <div className="q-block">
         <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">{label}</Badge></span>
         {codes.length > 0 ? (
-          <HorizontalRank items={codes} value={value} onChange={onChange} seedKey={seedKey ? `${seedKey}:${q.id}` : q.id} />
+          <HorizontalRank items={codes} value={value} onChange={onChange} />
         ) : (
           <p style={{ fontSize: "13px", color: "var(--mid)" }}>Aucun échantillon défini.</p>
         )}

@@ -400,7 +400,7 @@ export const AnalyseView = ({
         {anCfg && (
           <button
             onClick={() => downloadCSV(csvData, anCfg.name)}
-            style={{ fontSize: "12px", padding: "5px 10px", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", background: "var(--surface)", color: "var(--text-primary)" }}
+            style={{ fontSize: "12px", padding: "5px 10px", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", background: "var(--paper)", color: "var(--ink)" }}
           >
             ↓ CSV
           </button>

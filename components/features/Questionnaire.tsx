@@ -50,8 +50,6 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products, juro
     setJa(newJa);
   };
 
-  const seed = jurorName || "";
-
   return (
     <div className="product-card">
       {step.type === "product" && (
@@ -64,7 +62,6 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products, juro
               value={ja[step.product.code]?.[q.id]}
               onChange={(val) => handleUpdate(step.product.code, q.id, val)}
               products={products}
-              seedKey={`${seed}:${step.product.code}`}
             />
           ))}
         </>
@@ -77,7 +74,6 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products, juro
             value={ja["_rank"]?.[step.question.id]}
             onChange={(val) => handleUpdate("_rank", step.question.id, val)}
             products={products}
-            seedKey={seed}
           />
         </>
       )}
@@ -89,7 +85,6 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products, juro
             value={ja["_discrim"]?.[step.question.id]}
             onChange={(val) => handleUpdate("_discrim", step.question.id, val)}
             products={products}
-            seedKey={seed}
           />
         </>
       )}
@@ -103,7 +98,6 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products, juro
               value={ja["_global"]?.[q.id]}
               onChange={(val) => handleUpdate("_global", q.id, val)}
               products={products}
-              seedKey={`${seed}:global`}
             />
           ))}
         </>

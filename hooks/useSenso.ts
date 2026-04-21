@@ -110,18 +110,25 @@ export const useSenso = () => {
     return false;
   };
 
-  const getOrderedProducts = (cfg: SessionConfig, name: string, jurorList: string[]) => {
-    const ps = cfg.products;
-    const m = cfg.presMode || "fixed";
-    if (m === "fixed") return [...ps];
-    const ji = jurorList.indexOf(name);
-    const idx = ji >= 0 ? ji : jurorList.length;
-    if (m === "latin") {
-      const sq = wlm(ps.length);
-      return sq[idx % sq.length].map((i: number) => ps[i]);
+  const getJurorIndex = (name: string, jurorList: string[]) => {
+    const idx = jurorList.indexOf(name);
+    return idx >= 0 ? idx : jurorList.length;
+  };
+
+  const getOrderedItems = (items: any[], mode: string, name: string, jurorList: string[], sessionName: string) => {
+    if (!items || items.length === 0) return [];
+    if (mode === "fixed") return [...items];
+    
+    const idx = getJurorIndex(name, jurorList);
+    
+    if (mode === "latin") {
+      const sq = wlm(items.length);
+      return sq[idx % sq.length].map((i: number) => items[i]);
     }
-    const a = [...ps];
-    let sd = hsh((cfg.name || "") + name);
+    
+    // Random mode: use a stable seed based on session + juror name
+    const a = [...items];
+    let sd = hsh((sessionName || "") + name);
     for (let k = a.length - 1; k > 0; k--) {
       sd = ((sd * 1103515245 + 12345) & 0x7fffffff);
       [a[k], a[sd % (k + 1)]] = [a[sd % (k + 1)], a[k]];
@@ -132,27 +139,45 @@ export const useSenso = () => {
   const buildSteps = (cfg: SessionConfig, jurorName: string, jurorList?: string[]) => {
     if (!cfg) return [];
     const jl = jurorList || jurors;
-    const st: any[] = [];
+    const mode = cfg.presMode || "fixed";
+    
     const ppQ = cfg.questions.filter((q: Question) => q.scope === "per-product");
     const rankQ = cfg.questions.filter((q: Question) => q.type === "classement" || q.type === "seuil");
     const discQ = cfg.questions.filter((q: Question) => ["triangulaire", "duo-trio", "a-non-a", "seuil-bet"].includes(q.type));
     const glQ = cfg.questions.filter((q: Question) => q.scope === "global" && !["classement", "seuil", "seuil-bet", "triangulaire", "duo-trio", "a-non-a"].includes(q.type));
     
-    const products = getOrderedProducts(cfg, jurorName, jl);
-    const productOrder = products.map(p => p.code);
+    const steps: any[] = [];
 
-    // Helper to sort codes of a question according to juror's specific order
-    const sortCodes = (q: Question) => {
-      if (!q.codes || q.codes.length === 0) return q;
-      const sorted = productOrder.filter(c => q.codes?.includes(c));
-      return { ...q, codes: sorted };
+    // 1. Per-product evaluation
+    if (ppQ.length > 0) {
+      const products = getOrderedItems(cfg.products, mode, jurorName, jl, cfg.name);
+      products.forEach(p => steps.push({ type: "product", product: p, questions: ppQ }));
+    }
+
+    // 2. Ranking / Standalone questions
+    // Each of these should have its own randomization if codes are defined
+    const handleStandalone = (q: Question, type: "ranking" | "discrim") => {
+      let finalCodes = q.codes || [];
+      if (finalCodes.length === 0 && (q.type === "classement" || q.type === "seuil")) {
+        // Fallback to all session products if no specific codes defined
+        const products = getOrderedItems(cfg.products, mode, jurorName, jl, cfg.name);
+        finalCodes = products.map(p => p.code);
+      } else if (finalCodes.length > 0) {
+        // Randomize the specific codes of this question
+        finalCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id);
+      }
+      steps.push({ type, question: { ...q, codes: finalCodes } });
     };
 
-    if (ppQ.length) products.forEach(p => st.push({ type: "product", product: p, questions: ppQ }));
-    rankQ.forEach(q => st.push({ type: "ranking", question: sortCodes(q) }));
-    discQ.forEach(q => st.push({ type: "discrim", question: sortCodes(q) }));
-    if (glQ.length) st.push({ type: "global", questions: glQ });
-    return st;
+    rankQ.forEach(q => handleStandalone(q, "ranking"));
+    discQ.forEach(q => handleStandalone(q, "discrim"));
+
+    // 3. Global questions
+    if (glQ.length > 0) {
+      steps.push({ type: "global", questions: glQ });
+    }
+
+    return steps;
   };
 
   const handleLoginJury = async (name: string) => {

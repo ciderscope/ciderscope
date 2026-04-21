@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Button } from "../ui/Button";
 
 interface AdminLoginViewProps {
@@ -44,7 +44,7 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
       justifyContent: "center",
     }}>
       <div style={{
-        background: "var(--surface)",
+        background: "#fff",
         border: "1.5px solid var(--border)",
         borderRadius: "16px",
         padding: "40px 36px",
@@ -56,17 +56,17 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
           fontWeight: 800,
           fontSize: "clamp(18px, 2.5vw, 22px)",
           marginBottom: "6px",
-          color: "var(--text-primary)",
+          color: "var(--ink)",
         }}>
           Accès administration
         </h2>
-        <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "28px" }}>
+        <p style={{ color: "var(--mid)", fontSize: "13px", marginBottom: "28px" }}>
           Identifiez-vous pour accéder à la gestion des séances.
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--mid)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Identifiant
             </label>
             <input
@@ -78,8 +78,8 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
                 padding: "10px 14px",
                 borderRadius: "8px",
                 border: error ? "1.5px solid #e74c3c" : "1.5px solid var(--border)",
-                background: "var(--bg)",
-                color: "var(--text-primary)",
+                background: "var(--paper)",
+                color: "var(--ink)",
                 fontSize: "15px",
                 outline: "none",
                 fontFamily: "inherit",
@@ -88,7 +88,7 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--mid)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Mot de passe
             </label>
             <input
@@ -100,8 +100,8 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
                 padding: "10px 14px",
                 borderRadius: "8px",
                 border: error ? "1.5px solid #e74c3c" : "1.5px solid var(--border)",
-                background: "var(--bg)",
-                color: "var(--text-primary)",
+                background: "var(--paper)",
+                color: "var(--ink)",
                 fontSize: "15px",
                 outline: "none",
                 fontFamily: "inherit",

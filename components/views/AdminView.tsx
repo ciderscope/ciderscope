@@ -1609,7 +1609,6 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
                 value={previewVal}
                 onChange={setPreviewVal}
                 products={products}
-                seedKey={`preview:${q.id}`}
               />
             </div>
           )}
