@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
-const nextConfig = {
-  eslint: { ignoreDuringBuilds: true },
-} satisfies NextConfig & { eslint?: { ignoreDuringBuilds?: boolean } };
+const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+};
 
 export default nextConfig;

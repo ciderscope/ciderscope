@@ -5,9 +5,9 @@
 /* ── Bloc question ── */
 .q-block { margin-bottom: 26px; }
 .q-block:last-child { margin-bottom: 0; }
-.q-label { font-weight: 600; font-size: clamp(14px, 1.6vw, 17px); margin-bottom: 12px; display: block; line-height: 1.4; }
+.q-label { font-weight: 600; font-size: 16px; margin-bottom: 12px; display: block; line-height: 1.4; }
 .q-label .q-type-badge {
-  font-family: 'DM Mono', monospace; font-weight: 400; font-size: clamp(9px, .95vw, 11px);
+  font-family: 'DM Mono', monospace; font-weight: 400; font-size: 10px;
   color: var(--mid); text-transform: uppercase; letter-spacing: .5px;
   background: var(--paper2); padding: 2px 6px; border-radius: 3px;
   margin-left: 7px; vertical-align: middle;
@@ -26,8 +26,8 @@ input[type=range]::-webkit-slider-thumb {
   background: var(--ink); border: 2px solid var(--accent);
   box-shadow: 0 1px 4px rgba(0,0,0,.15);
 }
-.scale-value { font-family: 'Roboto', sans-serif; font-weight: 800; font-size: clamp(16px, 2vw, 22px); color: var(--accent); min-width: 28px; text-align: center; }
-.scale-not-rated { font-family: 'DM Mono', monospace; font-size: clamp(10px, 1.1vw, 12px); color: var(--mid); display: flex; align-items: center; gap: 5px; }
+.scale-value { font-family: 'Roboto', sans-serif; font-weight: 800; font-size: 20px; color: var(--accent); min-width: 28px; text-align: center; }
+.scale-not-rated { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--mid); display: flex; align-items: center; gap: 5px; }
 
 /* Sous-critères scale */
 .scale-subcriteria {
@@ -35,11 +35,11 @@ input[type=range]::-webkit-slider-thumb {
   padding: 10px 12px; background: var(--paper2); border-radius: 6px;
   border-left: 2px solid var(--t-scale);
 }
-.scale-subs-hint { font-family: 'DM Mono', monospace; font-size: clamp(10px, 1.05vw, 12px); color: var(--mid); line-height: 1.35; margin: 0 0 4px; }
+.scale-subs-hint { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--mid); line-height: 1.35; margin: 0 0 4px; }
 .scale-subcriterion { display: flex; align-items: center; gap: 7px; }
-.scale-sub-label { font-family: 'DM Mono', monospace; font-size: clamp(10px, 1vw, 11px); color: var(--ink); min-width: clamp(76px, 11vw, 130px); font-weight: 500; }
+.scale-sub-label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink); min-width: 100px; font-weight: 500; }
 .scale-track-sub { flex: 1; }
-.scale-value-sub { font-size: clamp(13px, 1.5vw, 15px); min-width: 26px; }
+.scale-value-sub { font-size: 14px; min-width: 26px; }
 .scale-sub-remove {
   flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
   border: 1px solid var(--border); background: transparent; color: var(--mid);
@@ -50,14 +50,14 @@ input[type=range]::-webkit-slider-thumb {
 .scale-add-sub { display: flex; align-items: center; gap: 7px; margin-top: 4px; padding-top: 7px; border-top: 1px dashed var(--border); }
 .scale-add-sub-input {
   flex: 1; border: 1px solid var(--border); border-radius: 6px;
-  padding: 6px 10px; font-size: clamp(12px, 1.3vw, 13px);
+  padding: 6px 10px; font-size: 13px;
   font-family: 'Roboto', sans-serif; background: #fff; outline: none; min-height: 36px; transition: border-color .12s;
 }
 .scale-add-sub-input:focus { border-color: var(--t-scale); }
 .scale-add-sub-btn {
   flex-shrink: 0; padding: 6px 12px; border-radius: 6px;
   border: 1px solid var(--t-scale); background: transparent; color: var(--t-scale);
-  font-size: clamp(11px, 1.2vw, 13px); font-family: 'Roboto', sans-serif; font-weight: 600;
+  font-size: 12px; font-family: 'Roboto', sans-serif; font-weight: 600;
   cursor: pointer; min-height: 36px; transition: all .12s; white-space: nowrap;
 }
 .scale-add-sub-btn:hover:not(:disabled) { background: var(--t-scale); color: #fff; }
@@ -77,7 +77,7 @@ input[type=range]::-webkit-slider-thumb {
 
 .radar-groups { display: flex; flex-direction: column; gap: 22px; }
 .radar-group-block-participant { background: var(--paper2); border-radius: 10px; padding: 14px 14px 18px; border-left: 3px solid var(--t-scale); }
-.radar-group-title { font-family: 'DM Mono', monospace; font-size: clamp(12px, 1.3vw, 14px); font-weight: 600; color: var(--ink); margin: 0 0 10px; text-transform: uppercase; letter-spacing: .5px; }
+.radar-group-title { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 600; color: var(--ink); margin: 0 0 10px; text-transform: uppercase; letter-spacing: .5px; }
 .radar-group-body { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(240px, 1fr); gap: 18px; align-items: start; }
 
 .radar-svg-wrap { display: flex; justify-content: center; }
@@ -95,14 +95,14 @@ input[type=range]::-webkit-slider-thumb {
 .radar-sliders { display: flex; flex-direction: column; gap: 8px; }
 .radar-slider-row { display: flex; flex-direction: column; gap: 4px; }
 .radar-slider-main { display: flex; align-items: center; gap: 8px; }
-.radar-slider-label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink); min-width: clamp(70px, 10vw, 110px); font-weight: 500; }
+.radar-slider-label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink); min-width: 90px; font-weight: 500; }
 .radar-slider-main input[type=range] { flex: 1; }
 .radar-slider-val { font-family: 'Roboto', sans-serif; font-weight: 700; font-size: 14px; color: var(--accent); min-width: 22px; text-align: center; }
 .radar-precise-toggle { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--mid); font-size: 14px; line-height: 1; cursor: pointer; }
 .radar-precise-toggle:hover { border-color: var(--accent); color: var(--accent); }
-.radar-subs { margin-left: clamp(70px, 10vw, 110px); padding: 8px 10px; background: #fff; border-radius: 6px; border: 1px dashed var(--border); display: flex; flex-direction: column; gap: 6px; }
+.radar-subs { margin-left: 90px; padding: 8px 10px; background: #fff; border-radius: 6px; border: 1px dashed var(--border); display: flex; flex-direction: column; gap: 6px; }
 .radar-sub-row { display: flex; align-items: center; gap: 7px; }
-.radar-sub-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--mid); min-width: clamp(60px, 8vw, 90px); }
+.radar-sub-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--mid); min-width: 75px; }
 .radar-sub-row input[type=range] { flex: 1; }
 .radar-sub-val { font-size: 12px; font-weight: 700; color: var(--accent); min-width: 18px; text-align: center; }
 .radar-sliders-only { display: flex; flex-direction: column; gap: 18px; }
@@ -111,8 +111,8 @@ input[type=range]::-webkit-slider-thumb {
 /* ── Texte libre ── */
 textarea.q-text {
   width: 100%; border: 1px solid var(--border); border-radius: var(--radius);
-  padding: clamp(11px, 1.3vw, 14px); font-family: 'Roboto', sans-serif;
-  font-size: clamp(13px, 1.5vw, 15px); background: var(--paper);
+  padding: 12px; font-family: 'Roboto', sans-serif;
+  font-size: 14px; background: var(--paper);
   resize: vertical; min-height: 80px; outline: none; transition: border-color .12s;
 }
 textarea.q-text:focus { border-color: var(--accent); }
@@ -121,7 +121,7 @@ textarea.q-text:focus { border-color: var(--accent); }
 .qcm-options { display: flex; flex-direction: column; gap: 8px; }
 .qcm-option {
   display: flex; align-items: center; gap: 12px; border: 1px solid var(--border);
-  border-radius: var(--radius); padding: clamp(12px, 1.4vw, 16px) clamp(14px, 1.8vw, 20px);
+  border-radius: var(--radius); padding: 14px 17px;
   cursor: pointer; transition: border-color .12s, background .12s; background: #fff; min-height: 52px;
 }
 .qcm-option:hover  { border-color: rgba(30,46,46,.25); }
@@ -134,23 +134,23 @@ textarea.q-text:focus { border-color: var(--accent); }
 /* ── Triangulaire / Discrim ── */
 .triangle-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(clamp(90px, 16vw, 150px), 1fr));
-  gap: clamp(8px, 1.3vw, 14px);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 11px;
 }
 .triangle-choice {
   background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius);
-  padding: clamp(22px, 3vw, 36px) clamp(12px, 1.8vw, 20px); text-align: center; cursor: pointer;
+  padding: 28px 16px; text-align: center; cursor: pointer;
   transition: border-color .12s, background .12s, box-shadow .12s;
 }
 .triangle-choice:hover { border-color: rgba(30,46,46,.3); box-shadow: 0 3px 12px rgba(30,46,46,.07); }
 .triangle-choice.selected { border-color: var(--accent); background: #fdf5e6; }
-.triangle-choice .code { font-family: 'DM Mono', monospace; font-weight: 600; font-size: clamp(20px, 2.8vw, 28px); color: var(--ink); }
+.triangle-choice .code { font-family: 'DM Mono', monospace; font-weight: 600; font-size: 24px; color: var(--ink); }
 .triangle-choice.selected .code { color: var(--accent); }
-.triangle-choice .sub { font-size: clamp(10px, 1.1vw, 12px); color: var(--mid); margin-top: 4px; }
+.triangle-choice .sub { font-size: 11px; color: var(--mid); margin-top: 4px; }
 
 /* ── Classement / Seuil — drag horizontal ── */
 .h-rank-wrap { margin-top: 8px; }
-.drag-hint { font-size: clamp(11px, 1.2vw, 13px); color: var(--mid); margin-bottom: 5px; }
+.drag-hint { font-size: 12px; color: var(--mid); margin-bottom: 5px; }
 .drag-hint-touch { display: none; color: var(--mid); font-size: 11px; }
 .h-rank-list {
   display: flex; flex-direction: row; align-items: center;
@@ -170,7 +170,7 @@ textarea.q-text:focus { border-color: var(--accent); }
 .h-rank-item.drag-over { background: #fdf5e6; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(191,100,8,.15); transform: scale(1.04); }
 .h-rank-item.h-rank-selected { border-color: var(--accent); background: #fdf5e6; box-shadow: 0 0 0 2px rgba(191,100,8,.2); }
 .h-rank-pos  { font-size: 10px; font-family: 'DM Mono', monospace; color: var(--mid); font-weight: 500; }
-.h-rank-code { font-family: 'DM Mono', monospace; font-size: clamp(13px, 1.8vw, 17px); font-weight: 700; color: var(--ink); }
+.h-rank-code { font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 700; color: var(--ink); }
 .h-rank-sep  { color: var(--mid); font-size: 16px; display: flex; align-items: center; flex-shrink: 0; opacity: .4; }
 
 .h-rank-nav { display: none; gap: 4px; margin-top: 6px; }
@@ -191,15 +191,15 @@ textarea.q-text:focus { border-color: var(--accent); }
 
 .drag-handle { font-size: 16px; color: var(--mid); letter-spacing: -2px; line-height: 1; opacity: .45; cursor: grab; }
 .drag-handle:active { cursor: grabbing; }
-.rank-pos { font-family: 'DM Mono', monospace; font-size: clamp(11px, 1.2vw, 13px); color: var(--mid); background: var(--paper2); border-radius: 3px; padding: 2px 8px; min-width: 26px; text-align: center; font-weight: 500; }
-.rank-code { font-family: 'DM Mono', monospace; font-size: clamp(14px, 1.7vw, 17px); font-weight: 700; color: var(--ink); flex: 1; }
+.rank-pos { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--mid); background: var(--paper2); border-radius: 3px; padding: 2px 8px; min-width: 26px; text-align: center; font-weight: 500; }
+.rank-code { font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 700; color: var(--ink); flex: 1; }
 
 /* ── Consigne discrim ── */
 .discrim-ref {
-  font-size: clamp(12px, 1.4vw, 15px); color: var(--ink);
+  font-size: 14px; color: var(--ink);
   background: linear-gradient(to right, rgba(191,100,8,.06), transparent);
   border-left: 3px solid var(--accent);
-  padding: clamp(11px, 1.4vw, 14px) clamp(14px, 1.8vw, 18px);
+  padding: 12px 16px;
   border-radius: 0 6px 6px 0; margin-bottom: 16px; line-height: 1.65;
 }
 .discrim-ref strong { color: var(--accent); font-weight: 700; }
@@ -209,15 +209,15 @@ textarea.q-text:focus { border-color: var(--accent); }
 .anona-row {
   display: flex; align-items: center; gap: 14px;
   background: #fff; border: 1px solid var(--border); border-radius: 8px;
-  padding: clamp(11px, 1.3vw, 14px) clamp(14px, 1.8vw, 18px);
+  padding: 12px 16px;
   box-shadow: 0 1px 3px rgba(30,46,46,.04); min-height: 56px;
 }
-.anona-code { font-family: 'DM Mono', monospace; font-size: clamp(15px, 1.8vw, 19px); font-weight: 700; min-width: 56px; color: var(--ink); }
+.anona-code { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 700; min-width: 56px; color: var(--ink); }
 .anona-choices { display: flex; gap: 8px; }
 .anona-btn {
-  padding: clamp(8px, 1vw, 12px) clamp(18px, 2.2vw, 26px);
+  padding: 10px 22px;
   border-radius: 20px; border: 1px solid var(--border); background: var(--paper);
-  font-size: clamp(12px, 1.4vw, 15px); font-weight: 600; cursor: pointer;
+  font-size: 14px; font-weight: 600; cursor: pointer;
   font-family: 'DM Mono', monospace; transition: all .12s; min-height: 44px;
 }
 .anona-btn:hover { border-color: rgba(30,46,46,.3); background: #fff; }
