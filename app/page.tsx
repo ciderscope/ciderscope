@@ -47,13 +47,20 @@ const downloadCSV = (rows: any[], name: string) => {
 const fingerprint = (cfg: unknown) => hsh(JSON.stringify(cfg));
 
 export default function CiderScope() {
-  // null = pas encore vérifié (évite le flash du formulaire de connexion)
-  const [adminAuth, setAdminAuth] = useState<boolean | null>(null);
+  // Initialize state directly from sessionStorage to avoid synchronous setState in useEffect
+  const [adminAuth, setAdminAuth] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("admin_auth") === "1";
+    }
+    return false;
+  });
   const editFingerprintRef = useRef<number | null>(null);
 
   useEffect(() => {
-    setAdminAuth(sessionStorage.getItem("admin_auth") === "1");
-  }, []);
+    // Sync if needed, though initialization usually handles it
+    const authed = sessionStorage.getItem("admin_auth") === "1";
+    if (authed !== adminAuth) setAdminAuth(authed);
+  }, [adminAuth]);
 
   const {
     mode, setMode,

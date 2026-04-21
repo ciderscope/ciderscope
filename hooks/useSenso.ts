@@ -197,7 +197,7 @@ export const useSenso = () => {
         randomizedCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id);
       }
       
-      let finalQ = { ...q, codes: randomizedCodes };
+      const finalQ = { ...q, codes: randomizedCodes };
 
       // Deep randomization for complex types
       if (q.type === "seuil-bet" && q.betLevels) {
