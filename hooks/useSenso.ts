@@ -141,40 +141,78 @@ export const useSenso = () => {
     const jl = jurorList || jurors;
     const mode = cfg.presMode || "fixed";
     
-    const ppQ = cfg.questions.filter((q: Question) => q.scope === "per-product");
-    const rankQ = cfg.questions.filter((q: Question) => q.type === "classement" || q.type === "seuil");
-    const discQ = cfg.questions.filter((q: Question) => ["triangulaire", "duo-trio", "a-non-a", "seuil-bet"].includes(q.type));
-    const glQ = cfg.questions.filter((q: Question) => q.scope === "global" && !["classement", "seuil", "seuil-bet", "triangulaire", "duo-trio", "a-non-a"].includes(q.type));
-    
     const steps: any[] = [];
+    
+    // 1. Per-product questions: organize by product to ensure each product is shown only once
+    const ppQuestions = cfg.questions.filter(q => q.scope === "per-product");
+    
+    // Identify which products need to be evaluated and which questions apply to each
+    const productMap = new Map<string, Question[]>();
+    
+    ppQuestions.forEach(q => {
+      const targetCodes = q.codes?.length ? q.codes : cfg.products.map(p => p.code);
+      targetCodes.forEach(code => {
+        if (!productMap.has(code)) productMap.set(code, []);
+        productMap.get(code)!.push(q);
+      });
+    });
 
-    // 1. Per-product evaluation
-    if (ppQ.length > 0) {
-      const products = getOrderedItems(cfg.products, mode, jurorName, jl, cfg.name);
-      products.forEach(p => steps.push({ type: "product", product: p, questions: ppQ }));
+    if (productMap.size > 0) {
+      const activeCodes = Array.from(productMap.keys());
+      // Important: only randomize products that are actually part of the evaluation
+      const orderedCodes = getOrderedItems(activeCodes, mode, jurorName, jl, cfg.name);
+      
+      orderedCodes.forEach(code => {
+        const product = cfg.products.find(p => p.code === code) || { code };
+        const questions = productMap.get(code) || [];
+        steps.push({ type: "product", product, questions });
+      });
     }
 
-    // 2. Ranking / Standalone questions
-    // Each of these should have its own randomization if codes are defined
-    const handleStandalone = (q: Question, type: "ranking" | "discrim") => {
-      let finalCodes = q.codes || [];
+    // 2. Standalone questions (ranking, discrim, global)
+    const standaloneQuestions = cfg.questions.filter(q => q.scope !== "per-product");
+    
+    // Separate globals from series (ranking/discrim)
+    const seriesQuestions = standaloneQuestions.filter(q => q.type !== "text" && q.type !== "qcm" && q.scope !== "global");
+    const globalQuestions = standaloneQuestions.filter(q => q.type === "text" || q.type === "qcm" || q.scope === "global");
+
+    // Randomize the order of the series themselves if requested
+    const orderedSeries = getOrderedItems(seriesQuestions, mode, jurorName, jl, cfg.name + "series");
+
+    orderedSeries.forEach(q => {
+      const type = (q.type === "classement" || q.type === "seuil") ? "ranking" : "discrim";
+      
+      let finalCodes = [...(q.codes || [])];
       if (finalCodes.length === 0 && (q.type === "classement" || q.type === "seuil")) {
-        // Fallback to all session products if no specific codes defined
-        const products = getOrderedItems(cfg.products, mode, jurorName, jl, cfg.name);
-        finalCodes = products.map(p => p.code);
-      } else if (finalCodes.length > 0) {
-        // Randomize the specific codes of this question
-        finalCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id);
+        finalCodes = cfg.products.map(p => p.code);
       }
-      steps.push({ type, question: { ...q, codes: finalCodes } });
-    };
+      
+      // Randomize the codes for this juror
+      let randomizedCodes: string[];
+      if (q.type === "duo-trio") {
+        // For Duo-Trio, we often want to keep the test sample at the end or randomize refs only
+        // But let's follow the general rule unless specified
+        randomizedCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id);
+      } else {
+        randomizedCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id);
+      }
+      
+      let finalQ = { ...q, codes: randomizedCodes };
 
-    rankQ.forEach(q => handleStandalone(q, "ranking"));
-    discQ.forEach(q => handleStandalone(q, "discrim"));
+      // Deep randomization for complex types
+      if (q.type === "seuil-bet" && q.betLevels) {
+        finalQ.betLevels = q.betLevels.map((lv, lIdx) => ({
+          ...lv,
+          codes: getOrderedItems([...lv.codes], mode, jurorName, jl, cfg.name + q.id + "l" + lIdx) as [string, string, string]
+        }));
+      }
+      
+      steps.push({ type, question: finalQ });
+    });
 
-    // 3. Global questions
-    if (glQ.length > 0) {
-      steps.push({ type: "global", questions: glQ });
+    // 3. Global questions at the very end
+    if (globalQuestions.length > 0) {
+      steps.push({ type: "global", questions: globalQuestions });
     }
 
     return steps;
