@@ -617,7 +617,7 @@ function RadarInput({ q, value, onChange }: { q: Question; value: any; onChange:
   );
 }
 
-export const QuestionInput = ({ q, value, onChange, products, seedKey }: QuestionInputProps) => {
+export const QuestionInput = ({ q, value, onChange, products }: QuestionInputProps) => {
   if (q.type === "scale") {
     return <ScaleInput q={q} value={value} onChange={onChange} />;
   }
