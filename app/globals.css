@@ -1,37 +1,37 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..800;1,9..40,300..800&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Abel&family=Roboto:ital,wght@0,300..800;1,300..800&family=DM+Mono:wght@400;500&display=swap');
 
 /* ══════════════════════════════════════════════════════
    TOKENS — CiderScope · IFPC
-   Remplacer app/globals.css par ce fichier.
-   Tous les noms de classes sont identiques à l'original.
+   Palette et typographie IFPC.
    ══════════════════════════════════════════════════════ */
 
 :root {
-  /* Palette IFPC — affinée */
-  --ink:    #1e2e2e;
-  --ink2:   #131f1f;
-  --paper:  #f5f3ee;        /* crème chaud, pas gris froid */
-  --paper2: #eceae3;
-  --paper3: #dedad0;
-  --accent:  #bf6408;       /* orange moins saturé, plus sobre */
-  --accent2: #d97310;
-  --ok:     #3b6b33;
-  --warn:   #7a9800;
-  --lime:   #b0bc00;
-  --blue:   #4f8fc4;
-  --mid:    #647070;
+  /* Palette IFPC */
+  --ink:    #2a2a2a;        /* texte principal */
+  --ink2:   #1a1a1a;
+  --paper:  #f6f8f9;        /* gris très clair */
+  --paper2: #eef1f3;
+  --paper3: #dde2e5;
+  --accent:  #ee8c00;       /* orange IFPC */
+  --accent2: #d47f00;
+  --ok:     #628d17;        /* vert foncé IFPC */
+  --warn:   #c8820a;
+  --lime:   #eaf066;        /* vert clair IFPC */
+  --blue:   #67a5db;        /* liens hypertextes */
+  --gold:   #e7c275;        /* doré IFPC */
+  --mid:    #6a6a6a;
   --danger: #a83228;
-  --border: rgba(30,46,46,.10);
-  --radius: 8px;            /* coins plus discrets */
-  --shadow: 0 1px 6px rgba(30,46,46,.06);  /* ombre très légère */
-  /* Type colors (inchangés) */
-  --t-scale:       #4f8fc4;
-  --t-classement:  #3b6b33;
-  --t-seuil:       #7a9800;
+  --border: rgba(42,42,42,.10);
+  --radius: 8px;
+  --shadow: 0 1px 6px rgba(42,42,42,.06);
+  /* Type colors */
+  --t-scale:       #67a5db;
+  --t-classement:  #628d17;
+  --t-seuil:       #eaf066;
   --t-text:        #8a7e90;
   --t-qcm:         #2472a0;
-  --t-triangulaire:#bf6408;
+  --t-triangulaire:#ee8c00;
   --t-duotrio:     #7b4aaa;
   --t-anona:       #a83228;
 }
@@ -39,7 +39,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'DM Sans', system-ui, sans-serif;
+  font-family: 'Roboto', system-ui, sans-serif;
   background: var(--paper);
   color: var(--ink);
   min-height: 100vh;
@@ -48,6 +48,17 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Abel', 'Roboto', system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+a {
+  color: var(--blue);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
 
 /* ══════════════════════════════════════════
    TOPBAR
@@ -63,7 +74,7 @@ body {
 }
 
 .topbar-logo {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 700;
   font-size: clamp(15px, 1.8vw, 19px);
   color: rgba(255,255,255,.6);
@@ -127,7 +138,7 @@ body {
   cursor: pointer;
   padding: clamp(7px, .9vw, 10px) clamp(12px, 1.5vw, 18px);
   border-radius: 6px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 500;
   transition: color .15s, background .15s, border-color .15s;
   white-space: nowrap;
@@ -156,7 +167,7 @@ body {
   display: inline-flex; align-items: center; gap: 7px;
   cursor: pointer; border: 1px solid transparent;
   border-radius: var(--radius);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 600;
   font-size: clamp(13px, 1.4vw, 15px);
   padding: clamp(10px, 1.2vw, 14px) clamp(18px, 2.2vw, 26px);
@@ -230,7 +241,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: clamp(10px, 1.2vw, 13px) clamp(11px, 1.3vw, 14px);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: clamp(13px, 1.5vw, 15px);
   background: var(--paper);
   color: var(--ink);
@@ -325,7 +336,7 @@ body {
 .count-badge strong {
   font-size: clamp(16px, 1.8vw, 20px);
   color: var(--ink);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 700;
   margin-right: 3px;
 }
@@ -389,7 +400,7 @@ body {
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
   padding: clamp(14px, 1.8vw, 20px);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 600;
   font-size: clamp(16px, 2.2vw, 22px);
   outline: none;
@@ -417,7 +428,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: clamp(9px, 1.1vw, 12px) clamp(14px, 1.8vw, 20px);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 600;
   font-size: clamp(13px, 1.5vw, 15px);
   cursor: pointer;
@@ -550,7 +561,7 @@ input[type=range]::-webkit-slider-thumb {
 }
 
 .scale-value {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 800;
   font-size: clamp(16px, 2vw, 22px);
   color: var(--accent);
@@ -607,7 +618,7 @@ input[type=range]::-webkit-slider-thumb {
 .scale-add-sub-input {
   flex: 1; border: 1px solid var(--border); border-radius: 6px;
   padding: 6px 10px; font-size: clamp(12px, 1.3vw, 13px);
-  font-family: 'DM Sans', sans-serif; background: #fff; outline: none; min-height: 36px;
+  font-family: 'Roboto', sans-serif; background: #fff; outline: none; min-height: 36px;
   transition: border-color .12s;
 }
 .scale-add-sub-input:focus { border-color: var(--t-scale); }
@@ -615,7 +626,7 @@ input[type=range]::-webkit-slider-thumb {
 .scale-add-sub-btn {
   flex-shrink: 0; padding: 6px 12px; border-radius: 6px;
   border: 1px solid var(--t-scale); background: transparent; color: var(--t-scale);
-  font-size: clamp(11px, 1.2vw, 13px); font-family: 'DM Sans', sans-serif; font-weight: 600;
+  font-size: clamp(11px, 1.2vw, 13px); font-family: 'Roboto', sans-serif; font-weight: 600;
   cursor: pointer; min-height: 36px; transition: all .12s; white-space: nowrap;
 }
 .scale-add-sub-btn:hover:not(:disabled) { background: var(--t-scale); color: #fff; }
@@ -633,7 +644,7 @@ input[type=range]::-webkit-slider-thumb {
 }
 .radar-group-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .radar-axis-row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
-.radar-axis-label-input { flex: 1 1 140px; min-width: 120px; padding: 6px 9px; font-size: 13px; border: 1px solid var(--border); border-radius: 5px; font-family: 'DM Sans', sans-serif; }
+.radar-axis-label-input { flex: 1 1 140px; min-width: 120px; padding: 6px 9px; font-size: 13px; border: 1px solid var(--border); border-radius: 5px; font-family: 'Roboto', sans-serif; }
 .radar-axis-subs-input { flex: 2 1 200px; min-width: 160px; padding: 6px 9px; font-size: 12px; border: 1px solid var(--border); border-radius: 5px; font-family: 'DM Mono', monospace; color: var(--ink); }
 
 /* Participant : mode switch */
@@ -697,7 +708,7 @@ input[type=range]::-webkit-slider-thumb {
   font-weight: 600; pointer-events: none; user-select: none;
 }
 .radar-value-text {
-  font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 800;
+  font-family: 'Roboto', sans-serif; font-size: 11px; font-weight: 800;
   fill: var(--accent); pointer-events: none; user-select: none;
 }
 
@@ -713,7 +724,7 @@ input[type=range]::-webkit-slider-thumb {
 }
 .radar-slider-main input[type=range] { flex: 1; }
 .radar-slider-val {
-  font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 14px;
+  font-family: 'Roboto', sans-serif; font-weight: 700; font-size: 14px;
   color: var(--accent); min-width: 22px; text-align: center;
 }
 .radar-precise-toggle {
@@ -751,7 +762,7 @@ textarea.q-text {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: clamp(11px, 1.3vw, 14px);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: clamp(13px, 1.5vw, 15px);
   background: var(--paper);
   resize: vertical; min-height: 80px; outline: none;
@@ -865,7 +876,7 @@ textarea.q-text:focus { border-color: var(--accent); }
   flex: 1; text-align: center;
   padding: clamp(9px, 1.2vw, 12px) 8px;
   border-radius: 6px; cursor: pointer;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 600;
   font-size: clamp(11px, 1.3vw, 14px);
   color: var(--mid);
@@ -891,7 +902,7 @@ textarea.q-text:focus { border-color: var(--accent); }
 .admin-section-btn {
   display: flex; align-items: center; gap: 5px;
   padding: 7px 16px; border: none; background: none;
-  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+  font-family: 'Roboto', sans-serif; font-size: 13px; font-weight: 600;
   color: var(--mid); cursor: pointer;
   border-radius: 6px 6px 0 0;
   border-bottom: 2px solid transparent; margin-bottom: -1px;
@@ -956,7 +967,7 @@ textarea.q-text:focus { border-color: var(--accent); }
   border: 1px solid var(--border); border-radius: 6px;
   padding: clamp(8px, 1vw, 11px) clamp(10px, 1.2vw, 13px);
   font-size: clamp(12px, 1.4vw, 14px); background: var(--paper);
-  width: 100%; outline: none; font-family: 'DM Sans', sans-serif;
+  width: 100%; outline: none; font-family: 'Roboto', sans-serif;
   transition: border-color .12s, background .12s; min-height: 40px;
 }
 .q-fields input:focus, .q-fields select:focus { border-color: var(--accent); background: #fff; }
@@ -1128,7 +1139,7 @@ canvas { max-width: 100%; }
   background: #fff; border: 1px solid var(--border); border-radius: 7px;
   padding: clamp(5px, .7vw, 7px); min-height: 44px;
 }
-.qcm-option-row input { flex: 1; border: none; padding: 7px 5px; font-size: clamp(12px, 1.4vw, 14px); font-family: 'DM Sans', sans-serif; outline: none; background: transparent; }
+.qcm-option-row input { flex: 1; border: none; padding: 7px 5px; font-size: clamp(12px, 1.4vw, 14px); font-family: 'Roboto', sans-serif; outline: none; background: transparent; }
 .qcm-correct-btn {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
