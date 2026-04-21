@@ -54,8 +54,9 @@ const SaveIndicator = ({ status, pendingCount }: { status: "idle" | "saving" | "
     <div
       role="status"
       aria-live="polite"
+      className="save-indicator"
       style={{
-        position: "fixed", bottom: "80px", right: "16px", zIndex: 50,
+        position: "fixed", zIndex: 50,
         display: "flex", alignItems: "center", gap: "6px",
         padding: "6px 10px", background: "var(--paper)", border: `1px solid ${m.color}22`,
         borderRadius: "999px", fontSize: "12px", color: m.color,
@@ -152,7 +153,7 @@ export const ParticipantView = ({
             <Button variant="ghost" size="sm" onClick={onGoBack}><FiArrowLeft /> Changer</Button>
           </div>
 
-          <div style={{ padding: "0 16px", marginTop: "4px" }}>
+          <div className="form-progress-wrap" style={{ padding: "0 16px", marginTop: "4px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--mid)", marginBottom: "4px" }}>
               <span>Étape {cs + 1} / {total}</span>
               <span>{done} / {total} complétées ({pct}%)</span>
@@ -165,7 +166,7 @@ export const ParticipantView = ({
                 }}
               />
             </div>
-            <div style={{ display: "flex", gap: "4px", marginTop: "8px", overflowX: "auto", paddingBottom: "4px" }}>
+            <div className="step-list" style={{ display: "flex", gap: "4px", marginTop: "8px", overflowX: "auto", paddingBottom: "4px" }}>
               {steps.map((s, i) => {
                 const complete = isStepComplete(i);
                 const active = i === cs;
@@ -175,6 +176,7 @@ export const ParticipantView = ({
                   <div
                     key={i}
                     title={`Étape ${i + 1}${complete ? " — complète" : ""}`}
+                    className={`step-item ${active ? "active" : ""} ${complete ? "complete" : ""}`}
                     style={{
                       flex: "0 0 auto", padding: "3px 8px",
                       background: bg, color: col,

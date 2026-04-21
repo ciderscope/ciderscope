@@ -1265,6 +1265,11 @@ canvas { max-width: 100%; }
 }
 
 /* Topbar : permettre aux items de rester alignés même sur écrans étroits. */
+.admin-tabs, .analyse-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.admin-tabs::-webkit-scrollbar, .analyse-tabs::-webkit-scrollbar { display: none; }
+
+.admin-tab, .analyse-tab { flex: 0 0 auto; }
+
 .topbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .topbar::-webkit-scrollbar { display: none; }
 
@@ -1280,8 +1285,7 @@ canvas { max-width: 100%; }
   .topbar-logo-ifpc { display: none; }
   .topbar-conn { display: none; }
   .topbar-navbtn { padding: 7px 9px; font-size: 12px; gap: 3px; min-height: 36px; }
-  .topbar-navbtn .topbar-logout-label,
-  .topbar-logout span:not(:first-child) { display: none; }
+  .topbar-navbtn span { display: none; }
 
   .landing, .jury-login { padding: 24px 14px; }
   .landing h1 { font-size: 24px; line-height: 1.15; }
@@ -1299,6 +1303,11 @@ canvas { max-width: 100%; }
   .session-card { padding: 16px 14px; }
   .session-card .counts { gap: 6px; }
   .count-badge { padding: 6px 10px; }
+
+  .save-indicator { bottom: 74px !important; right: 10px !important; left: 10px !important; justify-content: center; }
+
+  .form-progress-wrap { padding: 0 4px !important; }
+  .step-list { gap: 4px !important; }
 
   .product-nav { padding: 9px 10px; gap: 7px; }
   .product-nav-info { font-size: 10px; }

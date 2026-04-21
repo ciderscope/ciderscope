@@ -32,7 +32,7 @@ export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarP
           onClick={() => onModeChange(id)}
         >
           <Icon size={13} />
-          {label}
+          <span>{label}</span>
         </button>
       ))}
       {mode === "admin" && onLogout && (
@@ -42,7 +42,7 @@ export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarP
           title="Se déconnecter"
         >
           <FiLogOut size={13} />
-          Déconnexion
+          <span>Déconnexion</span>
         </button>
       )}
     </div>
