@@ -19,12 +19,13 @@ function printServiceSheet(sessionName: string, cfg: any) {
   type Section = { title: string; subtitle?: string; note?: string; rows: { jury: number; order: string[] }[] };
   const sections: Section[] = [];
 
+  const JURY_COUNT = 10;
   const buildRows = (codes: string[]): { jury: number; order: string[] }[] => {
     if (codes.length === 0) return [];
     const sq = wlm(codes.length);
-    return sq.map((order: number[], juryIdx: number) => ({
-      jury: juryIdx + 1,
-      order: order.map((pi: number) => codes[pi] || "?"),
+    return Array.from({ length: JURY_COUNT }, (_, i) => ({
+      jury: i + 1,
+      order: sq[i % sq.length].map((pi: number) => codes[pi] || "?"),
     }));
   };
 
