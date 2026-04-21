@@ -450,6 +450,9 @@ export const useSenso = () => {
       anCfg.products.forEach((p: any) => {
         const pa = jans[p.code] || {};
         ppQ.forEach((q: any) => {
+          // Only include if the question applies to this product
+          if (q.codes && q.codes.length > 0 && !q.codes.includes(p.code)) return;
+
           if (q.type === "radar") {
             // Explose chaque axe en ligne "scale" pour compat AnalyseProfil
             const answer = pa[q.id];

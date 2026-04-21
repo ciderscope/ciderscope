@@ -1250,6 +1250,7 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
   const removeAxis = (gi: number, ai: number) => updateGroup(gi, { axes: groups[gi].axes.filter((_, i) => i !== ai) });
 
   const addGroup = () => {
+    // eslint-disable-next-line react-hooks/purity
     const id = "g" + Date.now();
     onUpdate({ radarGroups: [...groups, { id, title: "Nouveau groupe", axes: [{ label: "" }] }] });
   };
@@ -1320,6 +1321,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
   const products: Product[] = editCfg.products || [];
 
   const addQuestion = (type: QuestionType) => {
+    // eslint-disable-next-line react-hooks/purity
     const id = "q" + Date.now();
     const allCodes = products.map(p => p.code);
     const newQ: Question = {
@@ -1372,9 +1374,11 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
   const duplicateQ = (i: number) => {
     onSetEditCfg((prev: any) => {
       const src: Question = prev.questions[i];
+      // eslint-disable-next-line react-hooks/purity
+      const id = "q" + Date.now();
       const copy: Question = {
         ...JSON.parse(JSON.stringify(src)) as Question,
-        id: "q" + Date.now(),
+        id,
         label: `${src.label} (copie)`,
       };
       const n = [...prev.questions];

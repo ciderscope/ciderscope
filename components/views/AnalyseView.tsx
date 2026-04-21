@@ -7,15 +7,6 @@ const COLORS = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030"
 
 // ─── Stats helpers ───────────────────────────────────────────────────────────
 
-// CDF N(0,1) — approximation Abramowitz-Stegun, précision ~7.5e-8
-function normalCDF(z: number): number {
-  const t = 1 / (1 + 0.2316419 * Math.abs(z));
-  const d = 0.3989423 * Math.exp(-z * z / 2);
-  const poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
-  const p = 1 - d * poly;
-  return z >= 0 ? p : 1 - p;
-}
-
 // ln Γ(x) — Lanczos (précision ~1e-14)
 function logGamma(x: number): number {
   if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
