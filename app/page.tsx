@@ -106,7 +106,7 @@ export default function CiderScope() {
         onLogout={adminAuth === true ? handleLogout : undefined}
       />
 
-      <main>
+      <main className="app-main">
         {mode === "participant" && (
           <ParticipantView
             screen={screen}

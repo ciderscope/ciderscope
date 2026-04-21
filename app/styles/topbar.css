@@ -2,7 +2,7 @@
    TOPBAR — tailles fixes par breakpoint (pas de vw)
    ══════════════════════════════════════════ */
 .topbar {
-  position: sticky; top: 0; z-index: 100;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   background: var(--ink);
   display: flex; align-items: center;
   gap: 10px;
@@ -35,6 +35,9 @@
 .topbar-conn.on::before  { background: #52c47a; animation: pulse 2s infinite; }
 .topbar-conn.off::before { background: #e05c5c; }
 @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.25 } }
+
+/* Compense la hauteur du topbar fixe */
+.app-main { padding-top: 60px; }
 .topbar-nav { display: flex; gap: 2px; }
 .topbar-navbtn {
   background: none; border: 1px solid transparent;

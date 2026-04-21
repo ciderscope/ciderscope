@@ -24,6 +24,7 @@
   body { font-size: 14px; }
 
   .topbar { gap: 5px; padding: 0 10px; height: 52px; }
+  .app-main { padding-top: 52px; }
   .topbar-logo { font-size: 14px; gap: 6px; }
   .topbar-logo img { height: 22px; }
   .topbar-logo-ifpc { display: none; }
