@@ -316,6 +316,33 @@ export const useSenso = () => {
     if (error) console.error("Erreur lors de la suppression:", error);
   };
 
+  const deleteJury = async (name: string) => {
+    if (!curSessId) return { success: false };
+    const { error } = await supabase
+      .from("answers")
+      .delete()
+      .eq("session_id", curSessId)
+      .eq("juror_name", name);
+    if (error) {
+      console.error("Erreur lors de la suppression du jury:", error);
+      return { success: false };
+    }
+    const newJurors = jurors.filter(j => j !== name);
+    setJurors(newJurors);
+    await supabase
+      .from("sessions")
+      .update({ juror_count: newJurors.length })
+      .eq("id", curSessId);
+    setSessions(sessions.map(s =>
+      s.id === curSessId ? { ...s, jurorCount: newJurors.length } : s
+    ));
+    if (cj === name) {
+      setCj("");
+      setJa({});
+    }
+    return { success: true };
+  };
+
   const toggleActive = async (id: string) => {
     const s = sessions.find(x => x.id === id);
     if (!s) return;
@@ -403,6 +430,7 @@ export const useSenso = () => {
     buildSteps,
     saveSession,
     deleteSession,
+    deleteJury,
     toggleActive,
     loadSessions,
     allAnswers,

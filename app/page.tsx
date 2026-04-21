@@ -71,6 +71,7 @@ export default function CiderScope() {
     buildSteps,
     saveSession,
     deleteSession,
+    deleteJury,
     toggleActive,
     loadSessions,
     loadSessionConfig,
@@ -124,6 +125,8 @@ export default function CiderScope() {
             onReviewAnswers={() => handleLoginJury(cj)}
             buildSteps={buildSteps}
             isStepComplete={isStepComplete}
+            isAdmin={adminAuth === true}
+            onDeleteJury={deleteJury}
           />
         )}
 
