@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { SessionListItem, SessionConfig, Question, JurorAnswers } from "../types";
+import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel } from "../types";
 import { hsh, wlm, formatVal } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
@@ -201,7 +201,7 @@ export const useSenso = () => {
 
       // Deep randomization for complex types
       if (q.type === "seuil-bet" && q.betLevels) {
-        finalQ.betLevels = q.betLevels.map((lv, lIdx) => ({
+        finalQ.betLevels = q.betLevels.map((lv: BetLevel, lIdx: number) => ({
           ...lv,
           codes: getOrderedItems([...lv.codes], mode, jurorName, jl, cfg.name + q.id + "l" + lIdx) as [string, string, string]
         }));
