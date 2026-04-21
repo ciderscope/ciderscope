@@ -1,0 +1,151 @@
+/* ══════════════════════════════════════════
+   RESPONSIVE — scroll safety & tous breakpoints
+   ══════════════════════════════════════════ */
+
+/* Containment : cartes et tables ne débordent pas */
+.card, .q-builder, .sess-list-card, .live-panel, .export-panel { max-width: 100%; }
+.data-table, .preview-table { max-width: 100%; }
+
+@media (max-width: 1100px) {
+  .card, .q-builder, .live-panel, .export-panel { overflow-x: auto; }
+}
+
+/* Onglets : scroll horizontal silencieux sur écrans étroits */
+.admin-tabs, .analyse-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.admin-tabs::-webkit-scrollbar, .analyse-tabs::-webkit-scrollbar { display: none; }
+.admin-tab, .analyse-tab { flex: 0 0 auto; }
+
+/* Topbar : scroll caché si écran très petit */
+.topbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.topbar::-webkit-scrollbar { display: none; }
+
+/* ── Mobile (≤ 480px) ── */
+@media (max-width: 480px) {
+  body { font-size: 14px; }
+
+  .topbar { gap: 5px; padding: 0 10px; height: 52px; }
+  .topbar-logo { font-size: 14px; gap: 6px; }
+  .topbar-logo img { height: 22px; }
+  .topbar-logo-ifpc { display: none; }
+  .topbar-conn { display: none; }
+  .topbar-navbtn { padding: 7px 9px; font-size: 12px; gap: 3px; min-height: 36px; }
+  .topbar-navbtn span { display: none; }
+
+  .landing, .jury-login { padding: 24px 14px; }
+  .landing h1 { font-size: 24px; line-height: 1.15; }
+  .landing .sub { font-size: 13px; margin-bottom: 22px; }
+
+  .form-shell { padding: 14px 10px 110px; }
+  .admin-shell { padding: 14px 10px 56px; }
+  .analyse-shell { padding: 14px 10px; }
+
+  .card, .product-card { padding: 16px 14px; }
+
+  .sess-list-card { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px; }
+  .sess-list-card .spacer { display: none; }
+  .sess-list-card .actions { width: 100%; justify-content: flex-end; }
+  .session-card { padding: 16px 14px; }
+  .session-card .counts { gap: 6px; }
+  .count-badge { padding: 6px 10px; }
+
+  .save-indicator { bottom: 74px !important; right: 10px !important; left: 10px !important; justify-content: center; }
+  .form-progress-wrap { padding: 0 4px !important; }
+  .step-list { gap: 4px !important; }
+
+  .product-nav { padding: 9px 10px; gap: 7px; }
+  .product-nav-info { font-size: 10px; }
+
+  .admin-tabs, .analyse-tabs { border-radius: 7px; padding: 3px; gap: 1px; }
+  .admin-tab, .analyse-tab { font-size: 11px; min-width: 46px; padding: 7px 3px; min-height: 36px; }
+  .admin-section-nav { flex-wrap: wrap; gap: 2px; }
+  .admin-section-btn { padding: 6px 10px; font-size: 12px; }
+
+  .triangle-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .triangle-choice { padding: 20px 10px; }
+  .q-fields { grid-template-columns: 1fr; gap: 8px; }
+  .grid2 { grid-template-columns: 1fr; gap: 10px; }
+  .anona-choices { flex-wrap: wrap; gap: 6px; }
+  .anona-btn { flex: 1 1 auto; padding: 8px 14px; min-height: 40px; }
+  .anona-row { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .anona-code { min-width: 48px; }
+  .duo-trio-zones, .anona-zones-admin { flex-direction: column; gap: 10px; }
+  .drop-slot, .anona-zone-admin { min-width: 0; }
+  .btn { font-size: 13px; padding: 10px 16px; min-height: 42px; }
+  .btn-sm { padding: 7px 12px; font-size: 12px; min-height: 34px; }
+
+  .scale-subcriterion { flex-wrap: wrap; gap: 4px 6px; }
+  .scale-sub-label { flex: 1 1 auto; min-width: 0; }
+  .scale-track-sub { flex: 1 1 100%; order: 3; }
+  .scale-sub-remove { order: 2; }
+  .scale-add-sub { flex-wrap: wrap; }
+  .scale-add-sub-input { min-width: 0; flex: 1 1 60%; }
+
+  .scale-track { gap: 8px; }
+  input[type=range] { height: 6px; }
+  input[type=range]::-webkit-slider-thumb { width: 26px; height: 26px; }
+
+  .h-rank-item { min-width: 72px; min-height: 82px; padding: 12px 10px; }
+  .h-rank-sep { display: none; }
+
+  .radar-group-body { grid-template-columns: 1fr; gap: 12px; }
+  .radar-svg { max-width: 100%; }
+  .radar-slider-label, .radar-sub-label { min-width: 80px; }
+  .radar-subs { margin-left: 0; }
+
+  .modal { padding: 20px 18px; width: 94%; }
+
+  .data-table, .preview-table { font-size: 11px; }
+  .data-table th, .data-table td,
+  .preview-table th, .preview-table td { padding: 6px 8px; }
+
+  .stat-card { padding: 12px 14px; }
+  .stat-val { font-size: 24px; }
+  .export-stats { gap: 8px; }
+  .export-stat { padding: 8px 12px; }
+}
+
+/* ── Tablette portrait (481–720px) ── */
+@media (min-width: 481px) and (max-width: 720px) {
+  .grid2, .q-fields { grid-template-columns: 1fr; }
+  .admin-tab, .analyse-tab { font-size: 12px; min-width: 56px; }
+  .topbar-nav { gap: 1px; }
+  .triangle-grid { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+  .admin-section-nav { flex-wrap: wrap; }
+  .sess-list-card { flex-wrap: wrap; }
+  .sess-list-card .actions { flex: 1 1 100%; justify-content: flex-end; margin-top: 4px; }
+  .duo-trio-zones, .anona-zones-admin { flex-direction: column; }
+  .form-shell { padding-bottom: 120px; }
+  .radar-group-body { grid-template-columns: 1fr; }
+}
+
+/* ── Tablette paysage (721–900px) ── */
+@media (min-width: 721px) and (max-width: 900px) {
+  .q-fields { grid-template-columns: 1fr 1fr; }
+  .grid2 { grid-template-columns: 1fr; }
+  #sessList { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #landingContent { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; text-align: left; }
+  .admin-section-nav { flex-wrap: wrap; }
+  .triangle-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+}
+
+/* ── Desktop (≥ 901px) ── */
+@media (min-width: 901px) {
+  #landingContent { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; text-align: left; }
+  #sessList { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .q-fields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .grid2 { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── Large desktop (≥ 1280px) ── */
+@media (min-width: 1280px) {
+  #sessList { grid-template-columns: repeat(3, 1fr); }
+  #landingContent { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+  .scale-sub-label { min-width: 150px; }
+}
+
+/* ── Ultra-wide (≥ 1600px) ── */
+@media (min-width: 1600px) {
+  #sessList { grid-template-columns: repeat(4, 1fr); }
+  #landingContent { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .grid2 { grid-template-columns: repeat(3, 1fr); }
+}
