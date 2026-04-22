@@ -20,6 +20,7 @@ import { AdminLoginView } from "../components/views/AdminLoginView";
 import { validateSession } from "../lib/validation";
 import { hsh } from "../lib/utils";
 import { useApp } from "./AppProviders";
+import type { CSVRow, JurorAnswers, Question, SessionConfig, AllAnswers } from "../types";
 
 ChartJS.register(
   RadialLinearScale,
@@ -33,10 +34,10 @@ ChartJS.register(
   BarElement
 );
 
-const downloadCSV = (rows: any[], name: string) => {
+const downloadCSV = (rows: CSVRow[], name: string) => {
   if (rows.length === 0) return;
   const hd = Object.keys(rows[0]);
-  const csv = "﻿" + [hd.join(";"), ...rows.map(r => hd.map(h => r[h]).join(";"))].join("\n");
+  const csv = "﻿" + [hd.join(";"), ...rows.map(r => hd.map(h => r[h] ?? "").join(";"))].join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   a.download = name + ".csv";
@@ -177,11 +178,16 @@ export default function CiderScope() {
           alert("Erreur lors de l'enregistrement.");
         }
       }}
-      buildCSVRows={(cfg, ans) => {
-        const rows: any[] = [];
-        cfg.questions.filter((q: any) => q.scope === "per-product").forEach((q: any) => {
-          Object.entries(ans).forEach(([j, ja]: [string, any]) => {
-            cfg.products.forEach((p: any) => rows.push({ jury: j, produit: p.code, question: q.label, valeur: ja[p.code]?.[q.id] }));
+      buildCSVRows={(cfg: SessionConfig, ans: AllAnswers) => {
+        const rows: CSVRow[] = [];
+        cfg.questions.filter((q: Question) => q.scope === "per-product").forEach((q: Question) => {
+          Object.entries(ans).forEach(([j, ja]: [string, JurorAnswers]) => {
+            cfg.products.forEach(p => rows.push({
+              jury: j,
+              produit: p.code,
+              question: q.label,
+              valeur: String(ja[p.code]?.[q.id] ?? ""),
+            }));
           });
         });
         return rows;

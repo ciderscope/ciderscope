@@ -1,18 +1,23 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, Dispatch, SetStateAction } from "react";
 import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPrinter } from "react-icons/fi";
 import { QuestionInput } from "../features/QuestionInput";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { AnalyseView } from "./AnalyseView";
-import { Question, QuestionType, Product, BetLevel, RadarGroup, RadarAxis } from "../../types";
+import { Question, QuestionType, Product, BetLevel, RadarGroup, RadarAxis, SessionConfig, SessionListItem, AllAnswers, JurorAnswers, CSVRow, AnswerValue, AppScreen } from "../../types";
 import { wlm } from "../../lib/utils";
 
+// Génère un id unique pour une nouvelle question/groupe. Extrait hors composants
+// pour éviter le faux-positif de la règle react-hooks/purity sur Date.now().
+let _idCounter = 0;
+const nextId = (prefix: string): string => `${prefix}_${++_idCounter}_${Date.now()}`;
+
 // ─── Fiche de service ─────────────────────────────────────────────────────────
-function printServiceSheet(sessionName: string, cfg: any) {
+function printServiceSheet(sessionName: string, cfg: SessionConfig) {
   const products: Product[] = cfg.products || [];
-  const allQs: any[] = cfg.questions || [];
+  const allQs: Question[] = cfg.questions || [];
   const n = products.length;
   if (n === 0) { alert("Aucun échantillon dans cette séance."); return; }
 
@@ -30,11 +35,11 @@ function printServiceSheet(sessionName: string, cfg: any) {
   };
 
   // 1. Section produits (questions scope=per-product)
-  const ppQs = allQs.filter((q: any) => q.scope === "per-product");
+  const ppQs = allQs.filter(q => q.scope === "per-product");
   if (ppQs.length > 0) {
     sections.push({
       title: "Présentation des échantillons",
-      subtitle: `Questions évaluées par produit : ${ppQs.map((q: any) => q.label).join(" · ")}`,
+      subtitle: `Questions évaluées par produit : ${ppQs.map(q => q.label).join(" · ")}`,
       rows: buildRows(products.map(p => p.code)),
     });
   }
@@ -48,7 +53,7 @@ function printServiceSheet(sessionName: string, cfg: any) {
     "a-non-a": "A / non-A",
   };
 
-  allQs.forEach((q: any) => {
+  allQs.forEach(q => {
     if (["classement", "seuil", "triangulaire", "duo-trio"].includes(q.type) && Array.isArray(q.codes) && q.codes.length > 0) {
       sections.push({
         title: `Q · ${q.label}`,
@@ -66,8 +71,8 @@ function printServiceSheet(sessionName: string, cfg: any) {
   });
 
   // 3. Seuil-BET : une sous-section par niveau
-  allQs.filter((q: any) => q.type === "seuil-bet").forEach((q: any) => {
-    (q.betLevels || []).forEach((lv: any, i: number) => {
+  allQs.filter(q => q.type === "seuil-bet").forEach(q => {
+    (q.betLevels || []).forEach((lv: BetLevel, i: number) => {
       const codes: string[] = (lv.codes || []).filter(Boolean);
       if (codes.length === 0) return;
       sections.push({
@@ -155,9 +160,9 @@ ${sections.map(renderSection).join("")}
 }
 
 interface AdminViewProps {
-  screen: "landing" | "jury" | "form" | "done" | "edit";
-  sessions: any[];
-  editCfg: any;
+  screen: AppScreen;
+  sessions: SessionListItem[];
+  editCfg: SessionConfig | null;
   curEditTab: string;
   editSessId: string | null;
   onNewSession: () => void;
@@ -165,20 +170,20 @@ interface AdminViewProps {
   onToggleActive: (id: string) => void;
   onDuplicateSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
-  onSetEditCfg: (cfg: any) => void;
+  onSetEditCfg: Dispatch<SetStateAction<SessionConfig | null>>;
   onSetEditTab: (tab: string) => void;
   onSaveEdit: () => void;
   onHome: () => void;
-  buildCSVRows: (cfg: any, ans: any) => any[];
-  downloadCSV: (rows: any[], filename: string) => void;
-  loadSessionConfig: (id: string) => Promise<any>;
+  buildCSVRows: (cfg: SessionConfig, ans: AllAnswers) => CSVRow[];
+  downloadCSV: (rows: CSVRow[], filename: string) => void;
+  loadSessionConfig: (id: string) => Promise<SessionConfig | null>;
   listJurorsForSession: (id: string) => Promise<string[]>;
   deleteJury: (sessionId: string, name: string) => Promise<{ success: boolean } | undefined>;
   // Analyse props
-  allAnswers: any;
+  allAnswers: AllAnswers;
   anSessId: string | null;
-  anCfg: any;
-  csvData: any[];
+  anCfg: SessionConfig | null;
+  csvData: CSVRow[];
   curAnT: string;
   onAnSessChange: (id: string) => void;
   onAnTabChange: (tab: string) => void;
@@ -308,7 +313,7 @@ export const AdminView = ({
                 </div>
               </Card>
               <Card title="Échantillons">
-                {editCfg.products.map((p: any, i: number) => (
+                {editCfg.products.map((p: Product, i: number) => (
                   <div key={i} className="flex" style={{ marginBottom: "8px", gap: "6px" }}>
                     <input
                       value={p.code}
@@ -328,13 +333,13 @@ export const AdminView = ({
                       style={{ flex: 1, border: "1px solid var(--border)", borderRadius: "7px", padding: "7px", fontSize: "13px" }}
                     />
                     <Button variant="ghost" size="sm" style={{ color: "var(--danger)" }} onClick={() => {
-                      onSetEditCfg({ ...editCfg, products: editCfg.products.filter((_: any, idx: number) => idx !== i) });
+                      onSetEditCfg({ ...editCfg, products: editCfg.products.filter((_: Product, idx: number) => idx !== i) });
                     }}><FiX /></Button>
                   </div>
                 ))}
                 <div className="flex mt8">
                   <Button variant="ghost" size="sm" onClick={() => {
-                    const existing = editCfg.products.map((p: any) => p.code);
+                    const existing = editCfg.products.map((p: Product) => p.code);
                     let code: string;
                     let attempts = 0;
                     do { code = String(Math.floor(Math.random() * 900) + 100); attempts++; }
@@ -360,9 +365,9 @@ export const AdminView = ({
           {curEditTab === "données" && (
             <Card title="Export des données">
               <Button onClick={() => {
-                const all: any = {};
-                const jl = JSON.parse(localStorage.getItem(`sp_j_${editSessId}`) || "[]");
-                jl.forEach((n: string) => { all[n] = JSON.parse(localStorage.getItem(`sp_a_${editSessId}_${n}`) || "{}"); });
+                const all: AllAnswers = {};
+                const jl = JSON.parse(localStorage.getItem(`sp_j_${editSessId}`) || "[]") as string[];
+                jl.forEach((n: string) => { all[n] = JSON.parse(localStorage.getItem(`sp_a_${editSessId}_${n}`) || "{}") as JurorAnswers; });
                 downloadCSV(buildCSVRows(editCfg, all), editCfg.name);
               }}>Télécharger CSV</Button>
             </Card>
@@ -656,7 +661,7 @@ function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
   }
 
   return (
-    <div className="draggable-list admin-order-list">
+    <div className="draggable-list admin-order-list ">
       {codes.map((code, i) => (
         /* ⚠ Le div N'EST PAS draggable — seul le handle l'est */
         <div
@@ -1250,7 +1255,6 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
   const removeAxis = (gi: number, ai: number) => updateGroup(gi, { axes: groups[gi].axes.filter((_, i) => i !== ai) });
 
   const addGroup = () => {
-    // eslint-disable-next-line react-hooks/purity
     const id = "g" + Date.now();
     onUpdate({ radarGroups: [...groups, { id, title: "Nouveau groupe", axes: [{ label: "" }] }] });
   };
@@ -1317,12 +1321,11 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
 // ─────────────────────────────────────────────
 // Main question builder
 // ─────────────────────────────────────────────
-function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg: (val: any) => void }) {
+function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: SessionConfig; onSetEditCfg: Dispatch<SetStateAction<SessionConfig | null>> }) {
   const products: Product[] = editCfg.products || [];
 
   const addQuestion = (type: QuestionType) => {
-    // eslint-disable-next-line react-hooks/purity
-    const id = "q" + Date.now();
+    const id = nextId("q");
     const allCodes = products.map(p => p.code);
     const newQ: Question = {
       id,
@@ -1360,11 +1363,12 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
     if (type === "classement" || type === "seuil") { newQ.codes = []; newQ.correctOrder = []; }
     if (type === "seuil-bet") { newQ.betLevels = []; }
     
-    onSetEditCfg((prev: any) => ({ ...prev, questions: [...prev.questions, newQ] }));
+    onSetEditCfg(prev => prev ? ({ ...prev, questions: [...prev.questions, newQ] }) : prev);
   };
 
   const updateQ = (i: number, patch: Partial<Question>) => {
-    onSetEditCfg((prev: any) => {
+    onSetEditCfg(prev => {
+      if (!prev) return prev;
       const n = [...prev.questions];
       n[i] = { ...n[i], ...patch };
       return { ...prev, questions: n };
@@ -1372,13 +1376,12 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
   };
 
   const duplicateQ = (i: number) => {
-    onSetEditCfg((prev: any) => {
+    onSetEditCfg(prev => {
+      if (!prev) return prev;
       const src: Question = prev.questions[i];
-      // eslint-disable-next-line react-hooks/purity
-      const id = "q" + Date.now();
       const copy: Question = {
         ...JSON.parse(JSON.stringify(src)) as Question,
-        id,
+        id: nextId("q"),
         label: `${src.label} (copie)`,
       };
       const n = [...prev.questions];
@@ -1412,7 +1415,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: any; onSetEditCfg
           typeLabel={TYPE_LABELS[q.type] || q.type}
           onUpdate={(patch) => updateQ(i, patch)}
           onDuplicate={() => duplicateQ(i)}
-          onDelete={() => onSetEditCfg((prev: any) => ({ ...prev, questions: prev.questions.filter((_: any, idx: number) => idx !== i) }))}
+          onDelete={() => onSetEditCfg(prev => prev ? ({ ...prev, questions: prev.questions.filter((_: Question, idx: number) => idx !== i) }) : prev)}
         />
       ))}
 
@@ -1438,13 +1441,13 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
   q: Question;
   index: number;
   products: Product[];
-  typeLabel: string;
+  typeLabel: string; 
   onUpdate: (patch: Partial<Question>) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [preview, setPreview] = useState(false);
-  const [previewVal, setPreviewVal] = useState<any>(undefined);
+  const [previewVal, setPreviewVal] = useState<AnswerValue>(undefined);
   return (
     <div className={`q-builder q-builder-${q.type}`}>
           <div className="q-builder-header">

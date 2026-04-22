@@ -16,7 +16,7 @@ export const getSupabase = (): SupabaseClient => {
 
 // Proxy object so existing `supabase.from(...)` calls still work
 export const supabase = new Proxy({} as SupabaseClient, {
-  get(_target, prop: string) {
-    return (getSupabase() as any)[prop];
+  get(_target, prop: string | symbol) {
+    return Reflect.get(getSupabase() as object, prop);
   },
 });

@@ -25,7 +25,9 @@ export const wlm = (n: number) => {
   return R;
 };
 
-export const formatVal = (v: any, t: string) => {
+import type { AnswerValue } from "../types";
+
+export const formatVal = (v: AnswerValue, t: string) => {
   if (v == null) return '';
   if ((t === 'rank' || t === 'seuil') && Array.isArray(v)) return v.join('>');
   if (Array.isArray(v)) return v.join('|');

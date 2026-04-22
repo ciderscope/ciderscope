@@ -2,18 +2,18 @@
 
 import { useEffect, useRef } from "react";
 import { QuestionInput } from "./QuestionInput";
-import { Question, Product } from "../../types";
+import { Question, Product, SessionStep, JurorAnswers, AnswerValue } from "../../types";
 
 interface QuestionnaireProps {
-  steps: any[];
+  steps: SessionStep[];
   currentStepIdx: number;
-  ja: any;
-  setJa: (newJa: any) => void;
+  ja: JurorAnswers;
+  setJa: (newJa: JurorAnswers) => void;
   products?: Product[];
   jurorName?: string;
 }
 
-const stepKey = (step: any, idx: number) => {
+const stepKey = (step: SessionStep | undefined, idx: number) => {
   if (!step) return `s${idx}`;
   if (step.type === "product") return `product:${step.product.code}`;
   if (step.type === "ranking" || step.type === "discrim") return `${step.type}:${step.question.id}`;
@@ -21,29 +21,33 @@ const stepKey = (step: any, idx: number) => {
   return `s${idx}`;
 };
 
-export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products, jurorName }: QuestionnaireProps) => {
+export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: QuestionnaireProps) => {
   const step = steps[currentStepIdx];
-  const startRef = useRef<number>(Date.now());
+  const startRef = useRef<number | null>(null);
   const jaRef = useRef(ja);
-  jaRef.current = ja;
+  useEffect(() => {
+    jaRef.current = ja;
+  }, [ja]);
 
   useEffect(() => {
     startRef.current = Date.now();
     const key = stepKey(step, currentStepIdx);
     return () => {
+      if (startRef.current === null) return;
       const elapsed = Date.now() - startRef.current;
       if (elapsed < 200 || elapsed > 1000 * 60 * 30) return;
       const cur = jaRef.current || {};
-      const prev = cur["_timing"]?.[key] || 0;
-      setJa({ ...cur, _timing: { ...(cur["_timing"] || {}), [key]: prev + elapsed } });
+      const timing = (cur["_timing"] || {}) as Record<string, number>;
+      const prev = timing[key] || 0;
+      setJa({ ...cur, _timing: { ...timing, [key]: prev + elapsed } } as JurorAnswers);
     };
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStepIdx]);
 
   if (!step) return null;
 
-  const handleUpdate = (ctx: string, qid: string, val: any) => {
-    const newJa = {
+  const handleUpdate = (ctx: string, qid: string, val: AnswerValue) => {
+    const newJa: JurorAnswers = {
       ...ja,
       [ctx]: { ...(ja[ctx] || {}), [qid]: val },
     };

@@ -1,13 +1,13 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel } from "../types";
+import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, Product, SessionStep, CSVRow, AllAnswers, AppMode, AppScreen, SaveStatus } from "../types";
 import { hsh, wlm, formatVal } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
 
 export const useSenso = () => {
-  const [mode, setMode] = useState<"participant" | "admin">("participant");
-  const [screen, setScreen] = useState<"landing" | "jury" | "form" | "done" | "edit">("landing");
+  const [mode, setMode] = useState<AppMode>("participant");
+  const [screen, setScreen] = useState<AppScreen>("landing");
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(false);
@@ -22,9 +22,9 @@ export const useSenso = () => {
   const [curEditTab, setCurEditTab] = useState<string>("session");
   const [anSessId, setAnSessId] = useState<string | null>(null);
   const [anCfg, setAnCfg] = useState<SessionConfig | null>(null);
-  const [allAnswers, setAllAnswers] = useState<Record<string, JurorAnswers>>({});
+  const [allAnswers, setAllAnswers] = useState<AllAnswers>({});
   const [curAnT, setCurAnT] = useState<string>("profil");
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error" | "pending">("idle");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [pendingCount, setPendingCount] = useState<number>(0);
 
   // Online/offline detection
@@ -55,8 +55,16 @@ export const useSenso = () => {
       setOnline(false);
     } else if (data) {
       setOnline(true);
-      setSessions(data.map((r: any) => {
-        const cfg = r.config as SessionConfig;
+      type SessionRow = {
+        id: string;
+        name: string;
+        date: string;
+        active: boolean;
+        juror_count: number;
+        config: SessionConfig | null;
+      };
+      setSessions((data as SessionRow[]).map(r => {
+        const cfg = r.config;
         return {
           id: r.id,
           name: r.name,
@@ -98,15 +106,15 @@ export const useSenso = () => {
       .select("juror_name")
       .eq("session_id", id);
     if (error) console.error("Erreur lors du chargement des jurys:", error);
-    setJurors(data ? data.map((r: any) => r.juror_name) : []);
+    setJurors(data ? (data as { juror_name: string }[]).map(r => r.juror_name) : []);
     setScreen("jury");
   };
 
-  const isStepDone = (s: any, currentJa: JurorAnswers) => {
-    if (s.type === "product") return currentJa[s.product.code] && s.questions.some((q: Question) => currentJa[s.product.code][q.id] != null);
-    if (s.type === "ranking") return currentJa["_rank"] && currentJa["_rank"][s.question.id] != null;
-    if (s.type === "discrim") return currentJa["_discrim"] && currentJa["_discrim"][s.question.id] != null;
-    if (s.type === "global") return currentJa["_global"] && s.questions.some((q: Question) => currentJa["_global"][q.id] != null);
+  const isStepDone = (s: SessionStep, currentJa: JurorAnswers) => {
+    if (s.type === "product") return !!currentJa[s.product.code] && s.questions.some(q => currentJa[s.product.code][q.id] != null);
+    if (s.type === "ranking") return !!currentJa["_rank"] && currentJa["_rank"][s.question.id] != null;
+    if (s.type === "discrim") return !!currentJa["_discrim"] && currentJa["_discrim"][s.question.id] != null;
+    if (s.type === "global") return !!currentJa["_global"] && s.questions.some(q => currentJa["_global"][q.id] != null);
     return false;
   };
 
@@ -115,12 +123,12 @@ export const useSenso = () => {
     return idx >= 0 ? idx : jurorList.length;
   };
 
-  const getOrderedItems = (items: any[], mode: string, name: string, jurorList: string[], sessionName: string) => {
+  const getOrderedItems = <T,>(items: T[], mode: string, name: string, jurorList: string[], sessionName: string): T[] => {
     if (!items || items.length === 0) return [];
     if (mode === "fixed") return [...items];
-    
+
     const idx = getJurorIndex(name, jurorList);
-    
+
     if (mode === "latin") {
       const sq = wlm(items.length);
       return sq[idx % sq.length].map((i: number) => items[i]);
@@ -141,7 +149,7 @@ export const useSenso = () => {
     const jl = jurorList || jurors;
     const mode = cfg.presMode || "fixed";
     
-    const steps: any[] = [];
+    const steps: SessionStep[] = [];
     
     // 1. Per-product questions: organize by product to ensure each product is shown only once
     const ppQuestions = cfg.questions.filter(q => q.scope === "per-product");
@@ -226,7 +234,7 @@ export const useSenso = () => {
       .select("data")
       .eq("session_id", curSessId)
       .eq("juror_name", name)
-      .single();
+      .maybeSingle();
     const answers = data?.data || {};
     setJa(answers);
     const jl = jurors.includes(name) ? jurors : [...jurors, name];
@@ -319,7 +327,7 @@ export const useSenso = () => {
     if (s.type === "product") {
       const pa = ja[s.product.code] || {};
       // "Non évalué" (null) vaut réponse pour les échelles.
-      return s.questions.every((q: any) => q.type === "scale" || (pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null));
+      return s.questions.every(q => q.type === "scale" || (pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null));
     }
     if (s.type === "ranking") return Array.isArray(ja["_rank"]?.[s.question.id]);
     if (s.type === "discrim") {
@@ -327,20 +335,20 @@ export const useSenso = () => {
       if (s.question.type === "a-non-a") {
         const codes: string[] = s.question.codes || [];
         if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-        const rec = v as Record<string, string>;
+        const rec = v as unknown as Record<string, string>;
         return codes.length > 0 && codes.every(c => rec[c] != null);
       }
       if (s.question.type === "seuil-bet") {
         const levels = s.question.betLevels || [];
         if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-        const rec = v as Record<string, string>;
-        return levels.length > 0 && levels.every((_: any, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
+        const rec = v as unknown as Record<string, string>;
+        return levels.length > 0 && levels.every((_: BetLevel, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
       }
       return v != null && v !== "";
     }
     if (s.type === "global") {
       const ga = ja["_global"] || {};
-      return s.questions.every((q: any) => q.type === "scale" || (ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null));
+      return s.questions.every(q => q.type === "scale" || (ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null));
     }
     return true;
   };
@@ -430,37 +438,39 @@ export const useSenso = () => {
     setSessions(sessions.map(x => x.id === id ? { ...x, active: newActive } : x));
   };
 
-  const csvData = useMemo(() => {
+  const csvData = useMemo<CSVRow[]>(() => {
     if (!anCfg || !allAnswers) return [];
-    const rows: Record<string, unknown>[] = [];
-    const ppQ = anCfg.questions.filter((q: Question) => q.scope === "per-product");
-    const rkQ = anCfg.questions.filter((q: Question) => q.type === "classement" || q.type === "seuil");
-    const discQ = anCfg.questions.filter((q: Question) => ["triangulaire", "duo-trio", "a-non-a", "seuil-bet"].includes(q.type));
-    const glQ = anCfg.questions.filter((q: Question) => q.scope === "global" && !["classement", "seuil", "seuil-bet", "triangulaire", "duo-trio", "a-non-a"].includes(q.type));
+    const rows: CSVRow[] = [];
+    const ppQ = anCfg.questions.filter(q => q.scope === "per-product");
+    const rkQ = anCfg.questions.filter(q => q.type === "classement" || q.type === "seuil");
+    const discQ = anCfg.questions.filter(q => ["triangulaire", "duo-trio", "a-non-a", "seuil-bet"].includes(q.type));
+    const glQ = anCfg.questions.filter(q => q.scope === "global" && !["classement", "seuil", "seuil-bet", "triangulaire", "duo-trio", "a-non-a"].includes(q.type));
 
     // Build positional column keys for ranking/seuil questions
     const maxPositions = rkQ.length > 0
-      ? Math.max(...rkQ.map((q: Question) => q.codes?.length || q.correctOrder?.length || anCfg.products?.length || 0))
+      ? Math.max(...rkQ.map(q => q.codes?.length || q.correctOrder?.length || anCfg.products?.length || 0))
       : 0;
     const posKeys = Array.from({ length: maxPositions }, (_, i) => `position ${i + 1}`);
     const corPosKeys = Array.from({ length: maxPositions }, (_, i) => `correct position ${i + 1}`);
-    const emptyPos = [...posKeys, ...corPosKeys].reduce((o: any, k) => { o[k] = ""; return o; }, {});
+    const emptyPos = [...posKeys, ...corPosKeys].reduce<Record<string, string>>((o, k) => { o[k] = ""; return o; }, {});
 
-    Object.entries(allAnswers).forEach(([j, jans]: [string, any]) => {
-      anCfg.products.forEach((p: any) => {
+    Object.entries(allAnswers).forEach(([j, jans]: [string, JurorAnswers]) => {
+      anCfg.products.forEach((p: Product) => {
         const pa = jans[p.code] || {};
-        ppQ.forEach((q: any) => {
+        ppQ.forEach(q => {
           // Only include if the question applies to this product
           if (q.codes && q.codes.length > 0 && !q.codes.includes(p.code)) return;
 
           if (q.type === "radar") {
             // Explose chaque axe en ligne "scale" pour compat AnalyseProfil
             const answer = pa[q.id];
-            if (answer && typeof answer === "object") {
-              (q.radarGroups || []).forEach((g: any) => {
-                (g.axes || []).forEach((ax: any) => {
-                  const axAns = answer[ax.label];
-                  const main = (typeof axAns === "object" && axAns !== null) ? axAns._ : axAns;
+            if (answer && typeof answer === "object" && !Array.isArray(answer)) {
+              (q.radarGroups || []).forEach(g => {
+                (g.axes || []).forEach(ax => {
+                  const axAns = (answer as Record<string, unknown>)[ax.label];
+                  const main = (typeof axAns === "object" && axAns !== null)
+                    ? (axAns as { _?: number })._
+                    : axAns;
                   rows.push({
                     jury: j, produit: p.code, question: ax.label, type: "scale",
                     valeur: typeof main === "number" ? String(main) : "",
@@ -474,22 +484,22 @@ export const useSenso = () => {
           rows.push({ jury: j, produit: p.code, question: q.label, type: q.type, valeur: formatVal(pa[q.id], q.type), correct: q.correctAnswer || "", ...emptyPos });
         });
       });
-      const ra = jans["_rank"] || {};
-      rkQ.forEach((q: any) => {
-        const ranked: string[] = Array.isArray(ra[q.id]) ? ra[q.id] : [];
+      const ra = (jans["_rank"] || {}) as Record<string, string[] | undefined>;
+      rkQ.forEach(q => {
+        const ranked: string[] = Array.isArray(ra[q.id]) ? ra[q.id]! : [];
         const correctOrder: string[] = q.correctOrder || [];
-        const posCols = posKeys.reduce((o: any, key, idx) => { o[key] = ranked[idx] || ""; return o; }, {});
-        const corPosCols = corPosKeys.reduce((o: any, key, idx) => { o[key] = correctOrder[idx] || ""; return o; }, {});
+        const posCols = posKeys.reduce<Record<string, string>>((o, key, idx) => { o[key] = ranked[idx] || ""; return o; }, {});
+        const corPosCols = corPosKeys.reduce<Record<string, string>>((o, key, idx) => { o[key] = correctOrder[idx] || ""; return o; }, {});
         rows.push({ jury: j, produit: "_classement", question: q.label, type: q.type, valeur: ranked.join(">"), correct: correctOrder.join(">"), ...posCols, ...corPosCols });
       });
       const da = jans["_discrim"] || {};
-      discQ.forEach((q: any) => {
+      discQ.forEach(q => {
         const val = da[q.id];
-        const valStr = typeof val === "object" && val !== null ? JSON.stringify(val) : (val || "");
+        const valStr = typeof val === "object" && val !== null ? JSON.stringify(val) : String(val ?? "");
         rows.push({ jury: j, produit: "_test", question: q.label, type: q.type, valeur: valStr, correct: q.correctAnswer || "", ...emptyPos });
       });
       const ga = jans["_global"] || {};
-      glQ.forEach((q: any) => rows.push({ jury: j, produit: "_global", question: q.label, type: q.type, valeur: formatVal(ga[q.id], q.type), correct: "", ...emptyPos }));
+      glQ.forEach(q => rows.push({ jury: j, produit: "_global", question: q.label, type: q.type, valeur: formatVal(ga[q.id], q.type), correct: "", ...emptyPos }));
     });
     return rows;
   }, [anCfg, allAnswers]);

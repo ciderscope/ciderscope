@@ -561,6 +561,35 @@ textarea.q-text:focus { border-color: var(--accent); }
   box-shadow: 0 1px 4px rgba(0,0,0,.07); border-bottom-color: var(--accent);
 }
 
+/* ── Wrapper for scrollable tab bars with arrow buttons ── */
+.scrollable-tabs-wrap {
+  position: sticky; top: 60px; z-index: 50; margin-bottom: 24px;
+  display: flex; align-items: center; gap: 4px;
+  background: var(--paper2); border-radius: 8px; padding: 4px;
+}
+.scrollable-tabs-wrap > .analyse-tabs,
+.scrollable-tabs-wrap > .admin-tabs {
+  position: static; top: auto; margin-bottom: 0;
+  padding: 0; background: transparent; border-radius: 0;
+  flex: 1 1 auto; min-width: 0;
+}
+.scrollable-tabs-arrow {
+  flex: 0 0 auto; width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--paper);
+  border-radius: 6px; cursor: pointer; color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  transition: background .12s, color .12s, border-color .12s, transform .08s;
+  padding: 0;
+}
+.scrollable-tabs-arrow:hover:not(:disabled) { background: var(--paper2); }
+.scrollable-tabs-arrow:active:not(:disabled) { transform: scale(0.92); }
+.scrollable-tabs-arrow:disabled {
+  cursor: default; opacity: 0.35;
+  color: var(--mid); background: var(--paper2);
+  border-color: transparent; box-shadow: none;
+}
+
 .admin-section-nav { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
 .admin-section-btn {
   display: flex; align-items: center; gap: 5px; padding: 7px 16px;

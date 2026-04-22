@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { Topbar } from "../components/ui/Topbar";
 import { useSenso } from "../hooks/useSenso";
 
@@ -29,11 +29,6 @@ export function AppProviders({ children }: { children: ReactNode }) {
     }
     return false;
   });
-
-  useEffect(() => {
-    const authed = sessionStorage.getItem("admin_auth") === "1";
-    if (authed !== adminAuth) setAdminAuth(authed);
-  }, [adminAuth]);
 
   const handleLogout = () => {
     sessionStorage.removeItem("admin_auth");

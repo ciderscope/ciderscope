@@ -1,17 +1,17 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../ui/Badge";
-import { Question, Product, RadarAxis } from "../../types";
+import { Question, Product, RadarAxis, AnswerValue, ScaleAnswer, RadarAnswer } from "../../types";
 import { FiChevronLeft } from "react-icons/fi";
 interface QuestionInputProps {
   q: Question;
-  value: any;
-  onChange: (val: any) => void;
+  value: AnswerValue;
+  onChange: (val: AnswerValue) => void;
   products?: Product[];
 }
 
 // Horizontal draggable rank for classement / seuil
-function HorizontalRank({ items, value, onChange }: { items: string[]; value: any; onChange: (v: any) => void }) {
+function HorizontalRank({ items, value, onChange }: { items: string[]; value: AnswerValue; onChange: (v: string[]) => void }) {
   const hasValue = Array.isArray(value) && value.length === items.length;
   const ordered: string[] = hasValue ? value : items;
 
@@ -107,15 +107,15 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: an
 
 // ── ScaleInput (extracted to allow hooks usage) ─────────────────────────────
 // Answer format: number (no subs) OR { _: number, _subs: string[], [label]: number }
-function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange: (v: any) => void }) {
+function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; onChange: (v: AnswerValue) => void }) {
   const mn = q.min ?? 0;
   const mx = q.max ?? 10;
   const mid = Math.round((mn + mx) / 2);
   const [newLabel, setNewLabel] = useState("");
 
   // Normalise value → always work as object internally
-  const valObj: Record<string, any> = (() => {
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) return value as Record<string, any>;
+  const valObj: ScaleAnswer = (() => {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) return value as ScaleAnswer;
     if (typeof value === "number") return { _: value, _subs: [] };
     return { _: mid, _subs: [] };
   })();
@@ -127,7 +127,7 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange:
   useEffect(() => {
     if (value == null || typeof value === "number") {
       const defaults = q.subCriteria || [];
-      const init: Record<string, any> = { _: typeof value === "number" ? value : mid, _subs: [...defaults] };
+      const init: ScaleAnswer = { _: typeof value === "number" ? value : mid, _subs: [...defaults] };
       defaults.forEach(s => { init[s] = mid; });
       onChange(init);
     }
@@ -135,9 +135,10 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange:
   }, []);
 
   const updateMain = (v: number) => {
-    const next: Record<string, any> = { ...valObj, _: v };
+    const next: ScaleAnswer = { ...valObj, _: v };
     activeSubs.forEach(label => {
-      if (typeof next[label] === "number" && next[label] > v) next[label] = v;
+      const current = next[label];
+      if (typeof current === "number" && current > v) next[label] = v;
     });
     onChange(next);
   };
@@ -149,7 +150,7 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange:
 
   const removeSub = (label: string) => {
     const newSubs = activeSubs.filter(s => s !== label);
-    const next: Record<string, any> = { ...valObj, _subs: newSubs };
+    const next: ScaleAnswer = { ...valObj, _subs: newSubs };
     delete next[label];
     onChange(next);
   };
@@ -240,26 +241,27 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: any; onChange:
 // Answer format: { [axisLabel]: { _: number, _subs: string[], [precision]: number } }
 // Représentation visuelle type toile d'araignée (même structure que l'analyse).
 
-type RadarAnswer = Record<string, { _: number; _subs: string[]; [key: string]: any }>;
-
-function normalizeRadarValue(value: any, axes: RadarAxis[], mid: number): RadarAnswer {
+function normalizeRadarValue(value: AnswerValue, axes: RadarAxis[], mid: number): RadarAnswer {
   const out: RadarAnswer = {};
-  const src = (typeof value === "object" && value !== null && !Array.isArray(value)) ? value : {};
+  const src: Record<string, unknown> = (typeof value === "object" && value !== null && !Array.isArray(value))
+    ? (value as Record<string, unknown>)
+    : {};
   axes.forEach(a => {
     const cur = src[a.label];
     if (typeof cur === "object" && cur !== null) {
-      const subs: string[] = Array.isArray(cur._subs) ? cur._subs : (a.subCriteria || []);
-      const entry: any = { _: typeof cur._ === "number" ? cur._ : mid, _subs: subs };
-      subs.forEach(s => { entry[s] = typeof cur[s] === "number" ? cur[s] : mid; });
+      const curObj = cur as Record<string, unknown>;
+      const subs: string[] = Array.isArray(curObj._subs) ? (curObj._subs as string[]) : (a.subCriteria || []);
+      const entry: ScaleAnswer = { _: typeof curObj._ === "number" ? (curObj._ as number) : mid, _subs: subs };
+      subs.forEach(s => { entry[s] = typeof curObj[s] === "number" ? (curObj[s] as number) : mid; });
       out[a.label] = entry;
     } else if (typeof cur === "number") {
       const subs = a.subCriteria || [];
-      const entry: any = { _: cur, _subs: [...subs] };
+      const entry: ScaleAnswer = { _: cur, _subs: [...subs] };
       subs.forEach(s => { entry[s] = mid; });
       out[a.label] = entry;
     } else {
       const subs = a.subCriteria || [];
-      const entry: any = { _: mid, _subs: [...subs] };
+      const entry: ScaleAnswer = { _: mid, _subs: [...subs] };
       subs.forEach(s => { entry[s] = mid; });
       out[a.label] = entry;
     }
@@ -415,11 +417,12 @@ function RadarGroupBlock({ group, min, max, answer, onChange }: {
 
   const setAxis = (i: number, v: number) => {
     const axisLabel = group.axes[i].label;
-    const cur = answer[axisLabel] || { _: v, _subs: [] };
-    const next: any = { ...cur, _: v };
+    const cur: ScaleAnswer = answer[axisLabel] || { _: v, _subs: [] };
+    const next: ScaleAnswer = { ...cur, _: v };
     // clamp des précisions éventuelles
     (cur._subs || []).forEach((s: string) => {
-      if (typeof next[s] === "number" && next[s] > v) next[s] = v;
+      const currentSub = next[s];
+      if (typeof currentSub === "number" && currentSub > v) next[s] = v;
     });
     onChange({ ...answer, [axisLabel]: next });
   };
@@ -441,7 +444,7 @@ function RadarGroupBlock({ group, min, max, answer, onChange }: {
   const removeSub = (axisLabel: string, sub: string) => {
     const cur = answer[axisLabel];
     if (!cur) return;
-    const next: any = { ...cur, _subs: cur._subs.filter((s: string) => s !== sub) };
+    const next: ScaleAnswer = { ...cur, _subs: cur._subs.filter((s: string) => s !== sub) };
     delete next[sub];
     onChange({ ...answer, [axisLabel]: next });
   };
@@ -484,10 +487,10 @@ function RadarGroupBlock({ group, min, max, answer, onChange }: {
                         <span className="radar-sub-label">{s}</span>
                         <input
                           type="range" min={min} max={v}
-                          value={Math.min(axisAnswer[s] ?? v, v)}
+                          value={Math.min(typeof axisAnswer[s] === "number" ? (axisAnswer[s] as number) : v, v)}
                           onChange={(e) => setSub(ax.label, s, parseInt(e.target.value))}
                         />
-                        <span className="radar-sub-val">{Math.min(axisAnswer[s] ?? v, v)}</span>
+                        <span className="radar-sub-val">{Math.min(typeof axisAnswer[s] === "number" ? (axisAnswer[s] as number) : v, v)}</span>
                         <button type="button" className="scale-sub-remove" onClick={() => removeSub(ax.label, s)}>×</button>
                       </div>
                     ))}
@@ -531,11 +534,11 @@ function RadarGroupBlock({ group, min, max, answer, onChange }: {
   );
 }
 
-function RadarInput({ q, value, onChange }: { q: Question; value: any; onChange: (v: any) => void }) {
+function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; onChange: (v: RadarAnswer) => void }) {
   const mn = q.min ?? 0;
   const mx = q.max ?? 10;
   const mid = Math.round((mn + mx) / 2);
-  const groups = q.radarGroups || [];
+  const groups = useMemo(() => q.radarGroups || [], [q.radarGroups]);
   const allAxes = useMemo(() => groups.flatMap(g => g.axes), [groups]);
 
   const [mode, setMode] = useState<"radar" | "sliders">("radar");
@@ -598,9 +601,10 @@ function RadarInput({ q, value, onChange }: { q: Question; value: any; onChange:
                       type="range" min={mn} max={mx} value={a._}
                       onChange={(e) => {
                         const v = parseInt(e.target.value);
-                        const next: any = { ...a, _: v };
+                        const next: ScaleAnswer = { ...a, _: v };
                         (a._subs || []).forEach((s: string) => {
-                          if (typeof next[s] === "number" && next[s] > v) next[s] = v;
+                          const sub = next[s];
+                          if (typeof sub === "number" && sub > v) next[s] = v;
                         });
                         onChange({ ...answer, [ax.label]: next });
                       }}
@@ -633,7 +637,7 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
         <textarea
           className="q-text"
           placeholder={q.placeholder}
-          value={value || ""}
+          value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
         />
       </div>
@@ -714,7 +718,7 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
 
   if (q.type === "seuil-bet") {
     const levels = q.betLevels || [];
-    const currentVal: Record<string, string> = (typeof value === "object" && value !== null) ? value : {};
+    const currentVal: Record<string, string> = (typeof value === "object" && value !== null && !Array.isArray(value)) ? (value as unknown as Record<string, string>) : {};
     return (
       <div className="q-block">
         <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">seuil 3-AFC</Badge></span>
@@ -748,7 +752,7 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
   if (q.type === "a-non-a") {
     const codes = q.codes || [];
     const ref = q.refCode || "A";
-    const currentVal: Record<string, string> = (typeof value === "object" && value !== null) ? value : {};
+    const currentVal: Record<string, string> = (typeof value === "object" && value !== null && !Array.isArray(value)) ? (value as unknown as Record<string, string>) : {};
     return (
       <div className="q-block">
         <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">A / non-A</Badge></span>

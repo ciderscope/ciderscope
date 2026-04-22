@@ -68,10 +68,75 @@ export interface SessionListItem {
   questionCount?: number;
 }
 
-export type AnswerValue = number | string | string[] | Record<string, string> | null;
+// ── Answer value shapes ─────────────────────────────────────────────────────
+// Réponse à une échelle avec sous-critères : { _: noteGlobale, _subs: [labels…], [label]: note }
+export interface ScaleAnswer {
+  _: number;
+  _subs: string[];
+  [subLabel: string]: number | string[];
+}
 
-// Structure logique des réponses d'un jury.
+// Réponse radar : { [axisLabel]: { _: note, _subs: [...], [sub]: note } }
+export type RadarAnswer = Record<string, ScaleAnswer>;
+
+// Toute forme possible pour la valeur d'une question (brute, stockée en DB).
+// - number : échelle simple
+// - string : texte, qcm single, triangulaire, duo-trio
+// - string[] : qcm multiple, classement, seuil
+// - ScaleAnswer : échelle avec sous-critères
+// - RadarAnswer : radar (axes + sous-critères)
+// - Record<string,string> : a-non-a (par code), seuil-bet (par niveau)
+export type AnswerValue =
+  | number
+  | string
+  | string[]
+  | ScaleAnswer
+  | RadarAnswer
+  | Record<string, string>
+  | null
+  | undefined;
+
 // Les clés "_rank", "_discrim", "_global", "_timing" sont réservées ; les autres sont des codes échantillon.
+// Par produit : Record<questionId, AnswerValue>.
+// Pour "_global" : Record<questionId, AnswerValue>.
+// Pour "_rank"/"_discrim"/"_timing" : structures ad hoc typées plus souplement.
 export type JurorAnswers = {
-  [key: string]: Record<string, AnswerValue | number | string[]>;
+  [key: string]: Record<string, AnswerValue>;
 };
+
+// Map globale : nom du jury → ses réponses.
+export type AllAnswers = Record<string, JurorAnswers>;
+
+// ── UI / app state ─────────────────────────────────────────────────────────
+export type AppMode = "participant" | "admin";
+export type AppScreen = "landing" | "jury" | "form" | "done" | "edit";
+export type SaveStatus = "idle" | "saving" | "saved" | "error" | "pending";
+
+export type JurorsMap = Record<string, string[]>;
+export type SessionsMap = Record<string, SessionListItem>;
+
+// ── Steps générés pour le questionnaire ────────────────────────────────────
+export type SessionStep =
+  | { type: "product"; product: Product; questions: Question[] }
+  | { type: "ranking"; question: Question }
+  | { type: "discrim"; question: Question }
+  | { type: "global"; questions: Question[] };
+
+// ── CSV rows (export + analyses) ───────────────────────────────────────────
+export interface CSVRow {
+  jury: string;
+  produit: string;
+  question: string;
+  type?: string;
+  valeur: string;
+  correct?: string;
+  [key: string]: string | undefined;
+}
+
+// ── Entrées de la file d'attente hors-ligne ────────────────────────────────
+export interface PendingEntry {
+  sessionId: string;
+  jurorName: string;
+  data: JurorAnswers;
+  ts: number;
+}

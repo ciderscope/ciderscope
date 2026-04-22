@@ -1,7 +1,10 @@
 "use client";
 import { useMemo } from "react";
 import { Card } from "../ui/Card";
+import { ScrollableTabs } from "../ui/ScrollableTabs";
 import { Radar, Bar, Scatter } from "react-chartjs-2";
+import type { TooltipItem } from "chart.js";
+import type { SessionConfig, SessionListItem, Question, BetLevel, AllAnswers, CSVRow, Product } from "../../types";
 
 const COLORS = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
 
@@ -325,14 +328,14 @@ const STATS_QTYPES: Record<string, string> = {
   "seuil-bet": "Seuil 3-AFC",
 };
 
-function computeTabs(anCfg: any): Tab[] {
+function computeTabs(anCfg: SessionConfig | null): Tab[] {
   if (!anCfg) return [{ id: "données", label: "Données" }];
-  const qs: any[] = anCfg.questions || [];
+  const qs: Question[] = anCfg.questions || [];
   const tabs: Tab[] = [];
 
   if (qs.some(q => q.type === "scale")) tabs.push({ id: "profil", label: "Profil" });
 
-  qs.forEach((q: any) => {
+  qs.forEach((q: Question) => {
     const prefix = STATS_QTYPES[q.type];
     if (prefix) {
       tabs.push({
@@ -353,15 +356,15 @@ function computeTabs(anCfg: any): Tab[] {
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface AnalyseViewProps {
-  sessions: any[];
+  sessions: SessionListItem[];
   anSessId: string | null;
-  anCfg: any;
-  csvData: any[];
-  allAnswers: any;
+  anCfg: SessionConfig | null;
+  csvData: CSVRow[];
+  allAnswers: AllAnswers;
   curAnT: string;
   onAnSessChange: (id: string) => void;
   onAnTabChange: (tab: string) => void;
-  downloadCSV: (rows: any[], name: string) => void;
+  downloadCSV: (rows: CSVRow[], name: string) => void;
 }
 
 export const AnalyseView = ({
@@ -407,17 +410,19 @@ export const AnalyseView = ({
       {anCfg && (
         <>
           {/* Dynamic tabs */}
-          <div className="analyse-tabs">
+          <ScrollableTabs className="analyse-tabs" activeKey={activeTab} ariaLabel="Onglets d'analyse">
             {tabs.map(t => (
               <div
                 key={t.id}
+                role="tab"
+                aria-selected={activeTab === t.id}
                 className={`analyse-tab ${activeTab === t.id ? "active" : ""}`}
                 onClick={() => onAnTabChange(t.id)}
               >
                 {t.label}
               </div>
             ))}
-          </div>
+          </ScrollableTabs>
 
           <div id="anContent">
             {activeTab === "profil"  && <AnalyseProfil    config={anCfg} data={csvData} />}
@@ -426,7 +431,7 @@ export const AnalyseView = ({
             {activeTab === "données" && <AnalyseDonnees   data={csvData} />}
             {activeTab.startsWith("q:") && (() => {
               const tab = tabs.find(t => t.id === activeTab);
-              const q = tab?.questionId ? (anCfg.questions || []).find((x: any) => x.id === tab.questionId) : null;
+              const q = tab?.questionId ? (anCfg.questions || []).find((x: Question) => x.id === tab.questionId) : null;
               if (!q) return null;
               if (q.type === "classement" || q.type === "seuil")
                 return <AnalyseFriedman config={anCfg} data={csvData} type={q.type} questionLabel={q.label} />;
@@ -449,7 +454,7 @@ export const AnalyseView = ({
 
 // ─── Profil (échelles) ────────────────────────────────────────────────────────
 
-function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
+function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[] }) {
   void config;
   const scaleData = data.filter(r => r.type === "scale" && r.valeur !== "" && r.valeur != null);
   const products = [...new Set(scaleData.map(r => r.produit))] as string[];
@@ -669,8 +674,8 @@ function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
                   legend: { display: false },
                   tooltip: {
                     callbacks: {
-                      label: (ctx: any) => {
-                        const d = ctx.raw;
+                      label: (ctx: TooltipItem<"scatter">) => {
+                        const d = ctx.raw as { x: number; y: number; label: string };
                         return `${d.label}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`;
                       }
                     }
@@ -730,7 +735,7 @@ function AnalyseProfil({ config, data }: { config: any; data: any[] }) {
 
 // ─── Classement & Seuil → Friedman + Nemenyi ──────────────────────────────────
 
-function AnalyseFriedman({ config, data, type, questionLabel }: { config: any; data: any[]; type: "classement" | "seuil"; questionLabel: string }) {
+function AnalyseFriedman({ config, data, type, questionLabel }: { config: SessionConfig; data: CSVRow[]; type: "classement" | "seuil"; questionLabel: string }) {
   const rankRows = data.filter(r => r.type === type && r.valeur && r.question === questionLabel);
   const title = type === "seuil" ? "Seuil" : "Classement";
 
@@ -915,9 +920,9 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: any; d
                     <div style={{ marginTop: "12px", padding: "10px", background: "var(--paper2)", borderLeft: "4px solid var(--accent)", borderRadius: "4px" }}>
                       <strong>Conclusion Seuil</strong>
                       <div>L&apos;échantillon marquant le seuil est : <strong>{thresholdProduct}</strong></div>
-                      {config?.products?.find((p: any) => p.code === thresholdProduct)?.label && (
+                      {config?.products?.find((p: Product) => p.code === thresholdProduct)?.label && (
                         <div style={{ fontSize: "12px", color: "var(--mid)", fontStyle: "italic", marginTop: "4px" }}>
-                          Descripteurs : {config.products.find((p: any) => p.code === thresholdProduct).label}
+                          Descripteurs : {config.products.find((p: Product) => p.code === thresholdProduct)?.label}
                         </div>
                       )}
                     </div>
@@ -967,7 +972,7 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: any; d
 
 // ─── Tests discriminatifs (un type à la fois) ─────────────────────────────────
 
-function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: any[]; type: string; label: string; questionLabel: string }) {
+function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow[]; type: string; label: string; questionLabel: string }) {
   const dd = data.filter(r => r.type === type && r.question === questionLabel);
 
   if (dd.length === 0) {
@@ -1224,15 +1229,15 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: any[];
 
 // ─── Seuil BET (3-AFC, ASTM E679) ─────────────────────────────────────────────
 
-function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: any; allAnswers: any; questionId: string }) {
-  const questions: any[] = (config?.questions || []).filter((q: any) => q.type === "seuil-bet" && q.id === questionId);
+function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: SessionConfig; allAnswers: AllAnswers; questionId: string }) {
+  const questions: Question[] = (config?.questions || []).filter((q: Question) => q.type === "seuil-bet" && q.id === questionId);
   const jurors = Object.keys(allAnswers || {});
 
   if (questions.length === 0 || jurors.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée disponible.</div>;
   }
 
-  const computeBET = (levels: any[], answers: Record<string, string>): { bet: number | null; censored: "low" | "high" | null; trace: ("+" | "-" | "?")[] } => {
+  const computeBET = (levels: BetLevel[], answers: Record<string, string>): { bet: number | null; censored: "low" | "high" | null; trace: ("+" | "-" | "?")[] } => {
     const trace: ("+" | "-" | "?")[] = levels.map((lv, i) => {
       const a = answers?.[String(i)];
       if (a == null || a === "") return "?";
@@ -1261,8 +1266,8 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: any; allA
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {questions.map((q: any) => {
-        const levels = q.betLevels || [];
+      {questions.map((q: Question) => {
+        const levels: BetLevel[] = q.betLevels || [];
         if (levels.length === 0) {
           return (
             <Card key={q.id} title={`Seuil 3-AFC — ${q.label}`}>
@@ -1272,7 +1277,7 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: any; allA
         }
 
         const perJury = jurors.map(j => {
-          const answers = (allAnswers[j]?._discrim?.[q.id] || {}) as Record<string, string>;
+          const answers = (allAnswers[j]?._discrim?.[q.id] || {}) as unknown as Record<string, string>;
           const { bet, censored, trace } = computeBET(levels, answers);
           return { jury: j, bet, censored, trace };
         });
@@ -1282,7 +1287,7 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: any; allA
           ? Math.exp(valid.reduce((s, r) => s + Math.log(r.bet as number), 0) / valid.length)
           : null;
 
-        const levelStats = levels.map((lv: any, i: number) => {
+        const levelStats = levels.map((lv: BetLevel, i: number) => {
           const resp = perJury.map(r => r.trace[i]).filter(t => t !== "?");
           const correct = resp.filter(t => t === "+").length;
           return { label: lv.label, concentration: lv.concentration, n: resp.length, correct };
@@ -1308,7 +1313,7 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: any; allA
                     <tr><th>Niveau</th><th>Concentration</th><th>Correctes / N</th><th>%</th></tr>
                   </thead>
                   <tbody>
-                    {levelStats.map((lv: any, i: number) => (
+                    {levelStats.map((lv, i: number) => (
                       <tr key={i}>
                         <td>{lv.label || `niveau ${i + 1}`}</td>
                         <td className="num">{lv.concentration}</td>
@@ -1327,7 +1332,7 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: any; allA
                 <thead>
                   <tr>
                     <th>Jury</th>
-                    {levels.map((lv: any, i: number) => <th key={i} title={lv.label}>N{i + 1}</th>)}
+                    {levels.map((lv: BetLevel, i: number) => <th key={i} title={lv.label}>N{i + 1}</th>)}
                     <th>BET</th>
                   </tr>
                 </thead>
@@ -1366,10 +1371,10 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: any; allA
 
 const STOP_WORDS = new Set(["le","la","les","de","du","des","un","une","en","et","à","au","aux","ce","se","sa","son","ses","je","tu","il","elle","nous","vous","ils","elles","que","qui","ne","pas","par","sur","avec","dans","est","sont","été","être","avoir","plus","ou","mais","donc","car","si","comme","tout","très","bien","aussi","pour","cette","cet","ces","leur","leurs","même","autre","autres","dont","peu","fait","faire","non","oui","ça","on","lui"]);
 
-function buildWordFreq(rows: any[]): [string, number][] {
+function buildWordFreq(rows: CSVRow[]): [string, number][] {
   const wordFreq: Record<string, number> = {};
   rows.forEach(r => {
-    (r.valeur as string)
+    (r.valeur)
       .toLowerCase()
       .split(/[\s,;.!?''"()\[\]]+/)
       .map((w: string) => w.replace(/[^a-zàâäéèêëîïôùûüç-]/g, ""))
@@ -1379,7 +1384,7 @@ function buildWordFreq(rows: any[]): [string, number][] {
   return Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 60);
 }
 
-function WordCloudDisplay({ rows, title }: { rows: any[]; title: string }) {
+function WordCloudDisplay({ rows, title }: { rows: CSVRow[]; title: string }) {
   const sorted = buildWordFreq(rows);
   const maxFreq = sorted[0]?.[1] || 1;
   if (sorted.length === 0) return null;
@@ -1419,7 +1424,7 @@ function WordCloudDisplay({ rows, title }: { rows: any[]; title: string }) {
   );
 }
 
-function AnalyseWordCloud({ data, config }: { data: any[]; config?: any }) {
+function AnalyseWordCloud({ data, config }: { data: CSVRow[]; config?: SessionConfig }) {
   const textRows = data.filter(r => r.type === "text" && r.valeur && r.valeur.trim());
   const questionLabels = [...new Set(textRows.map(r => r.question))] as string[];
 
@@ -1427,13 +1432,13 @@ function AnalyseWordCloud({ data, config }: { data: any[]; config?: any }) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune réponse textuelle disponible.</div>;
   }
 
-  const qs: any[] = config?.questions || [];
-  const products: any[] = config?.products || [];
+  const qs: Question[] = config?.questions || [];
+  const products: Product[] = config?.products || [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       {questionLabels.map(qLabel => {
-        const qConfig = qs.find((qq: any) => qq.label === qLabel);
+        const qConfig = qs.find((qq: Question) => qq.label === qLabel);
         const isPerProduct = qConfig?.scope === "per-product" && products.length > 0;
         const qRows = textRows.filter(r => r.question === qLabel);
 
@@ -1442,7 +1447,7 @@ function AnalyseWordCloud({ data, config }: { data: any[]; config?: any }) {
             <div key={qLabel}>
               <div className="builder-section-label" style={{ marginBottom: "14px" }}>{qLabel}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "16px" }}>
-                {products.map((p: any) => {
+                {products.map((p: Product) => {
                   const pRows = qRows.filter(r => r.produit === p.code);
                   if (pRows.length === 0) return null;
                   return (
@@ -1462,14 +1467,14 @@ function AnalyseWordCloud({ data, config }: { data: any[]; config?: any }) {
 
 // ─── Par jury ─────────────────────────────────────────────────────────────────
 
-function AnalyseJury({ config, allAnswers }: { config: any; allAnswers: any }) {
+function AnalyseJury({ config, allAnswers }: { config: SessionConfig; allAnswers: AllAnswers }) {
   const jurors = Object.keys(allAnswers || {});
   if (jurors.length === 0) {
     return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucun jury enregistré.</div>;
   }
 
-  const qs: any[] = config.questions || [];
-  const products: any[] = config.products || [];
+  const qs: Question[] = config.questions || [];
+  const products: Product[] = config.products || [];
   const ppQ = qs.filter(q => q.scope === "per-product");
 
   return (
@@ -1525,7 +1530,7 @@ function AnalyseJury({ config, allAnswers }: { config: any; allAnswers: any }) {
 
 // ─── Données brutes ───────────────────────────────────────────────────────────
 
-function computeResultat(r: any): string {
+function computeResultat(r: CSVRow): string {
   if (!r.correct || !r.valeur) return "";
   const type: string = r.type || "";
   if (type === "scale" || type === "text" || type === "seuil-bet") return "";
@@ -1534,7 +1539,7 @@ function computeResultat(r: any): string {
     try {
       const valObj: Record<string, string> = JSON.parse(r.valeur);
       const corrObj: Record<string, string> = Object.fromEntries(
-        (r.correct as string).split(",").map((p: string) => p.split(":")).filter((a: string[]) => a.length === 2)
+        r.correct.split(",").map((p: string) => p.split(":")).filter((a: string[]) => a.length === 2)
       );
       const codes = Object.keys(corrObj);
       if (codes.length === 0) return "";
@@ -1546,10 +1551,10 @@ function computeResultat(r: any): string {
   return String(r.valeur) === String(r.correct) ? "✓" : "✗";
 }
 
-function AnalyseDonnees({ data }: { data: any[] }) {
+function AnalyseDonnees({ data }: { data: CSVRow[] }) {
   if (data.length === 0) return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée.</div>;
 
-  const enriched = data.map(r => ({ ...r, résultat: computeResultat(r) }));
+  const enriched: Record<string, string | undefined>[] = data.map(r => ({ ...r, résultat: computeResultat(r) }));
   const headers = Object.keys(enriched[0]);
 
   return (

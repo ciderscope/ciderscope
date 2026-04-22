@@ -2,31 +2,31 @@ import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud
 import { Button } from "../ui/Button";
 import { SessionCard } from "../features/SessionCard";
 import { Questionnaire } from "../features/Questionnaire";
-import { Product } from "../../types";
+import { Product, SessionListItem, SessionConfig, JurorAnswers, SessionStep, AppScreen, SaveStatus } from "../../types";
 
 interface ParticipantViewProps {
-  screen: "landing" | "jury" | "form" | "done" | "edit";
-  sessions: any[];
-  curSess: any;
+  screen: AppScreen;
+  sessions: SessionListItem[];
+  curSess: SessionConfig | null;
   jurors: string[];
   cj: string;
-  ja: any;
+  ja: JurorAnswers;
   cs: number;
-  saveStatus: "idle" | "saving" | "saved" | "error" | "pending";
+  saveStatus: SaveStatus;
   pendingCount: number;
   onSelectSession: (id: string) => void;
   onLoginJury: (name: string) => void;
   onPrevStep: () => void;
   onNextStep: () => void;
-  onSetJa: (ja: any) => void;
+  onSetJa: (ja: JurorAnswers) => void;
   onGoBack: () => void;
   onHome: () => void;
   onReviewAnswers: () => void;
-  buildSteps: (cfg: any, name: string) => any[];
+  buildSteps: (cfg: SessionConfig, name: string) => SessionStep[];
   isStepComplete: (idx: number) => boolean;
 }
 
-const stepShortLabel = (step: any) => {
+const stepShortLabel = (step: SessionStep | undefined) => {
   if (!step) return "";
   if (step.type === "product") return step.product.code;
   if (step.type === "ranking") return step.question.type === "seuil" ? "Seuil" : "Rang";
@@ -40,7 +40,7 @@ const stepShortLabel = (step: any) => {
   return "•";
 };
 
-const SaveIndicator = ({ status, pendingCount }: { status: "idle" | "saving" | "saved" | "error" | "pending"; pendingCount: number }) => {
+const SaveIndicator = ({ status, pendingCount }: { status: SaveStatus; pendingCount: number }) => {
   if (status === "idle" && pendingCount === 0) return null;
   const map = {
     idle:    { icon: <FiCloud size={13} />, text: `${pendingCount} en attente de synchronisation`, color: "#c8820a" },
@@ -70,7 +70,7 @@ const SaveIndicator = ({ status, pendingCount }: { status: "idle" | "saving" | "
 
 // ─── Sub-components for each screen ──────────────────────────────────────────
 
-const LandingScreen = ({ sessions, onSelectSession }: { sessions: any[], onSelectSession: (id: string) => void }) => (
+const LandingScreen = ({ sessions, onSelectSession }: { sessions: SessionListItem[], onSelectSession: (id: string) => void }) => (
   <div className="landing">
     <h1>Bienvenue sur<br /><em>CiderScope</em></h1>
     <p className="sub">Sélectionnez une séance pour participer</p>
@@ -97,7 +97,7 @@ const LandingScreen = ({ sessions, onSelectSession }: { sessions: any[], onSelec
   </div>
 );
 
-const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome }: { curSess: any, jurors: string[], onLoginJury: (name: string) => void, onHome: () => void }) => (
+const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome }: { curSess: SessionConfig | null, jurors: string[], onLoginJury: (name: string) => void, onHome: () => void }) => (
   <div className="jury-login">
     <h2>Identifiez-vous</h2>
     <p className="hint">{curSess?.name}</p>
@@ -126,12 +126,12 @@ const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome }: { curSess: an
   </div>
 );
 
-const FormScreen = ({ 
-  curSess, cj, steps, cs, ja, onSetJa, onGoBack, onPrevStep, onNextStep, isStepComplete, saveStatus, pendingCount 
-}: { 
-  curSess: any, cj: string, steps: any[], cs: number, ja: any, onSetJa: (ja: any) => void, 
-  onGoBack: () => void, onPrevStep: () => void, onNextStep: () => void, 
-  isStepComplete: (idx: number) => boolean, saveStatus: any, pendingCount: number 
+const FormScreen = ({
+  curSess, cj, steps, cs, ja, onSetJa, onGoBack, onPrevStep, onNextStep, isStepComplete, saveStatus, pendingCount
+}: {
+  curSess: SessionConfig, cj: string, steps: SessionStep[], cs: number, ja: JurorAnswers, onSetJa: (ja: JurorAnswers) => void,
+  onGoBack: () => void, onPrevStep: () => void, onNextStep: () => void,
+  isStepComplete: (idx: number) => boolean, saveStatus: SaveStatus, pendingCount: number
 }) => {
   const products: Product[] = curSess.products || [];
   const total = steps.length;
