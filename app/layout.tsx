@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AppProviders } from "./AppProviders";
 
 export const metadata: Metadata = {
   title: "CiderScope — IFPC",
@@ -12,8 +13,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="fr" className="antialiased">
+      <body className="min-h-screen">
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }
