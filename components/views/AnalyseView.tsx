@@ -591,7 +591,7 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div className="grid2">
         <Card title="Radar — Profil moyen">
-          <Radar data={radarData} options={{ scales: { r: { beginAtZero: true } } }} />
+          <Radar data={radarData} options={{ scales: { r: { beginAtZero: true, max: 10 } } }} />
         </Card>
         <Card title="Moyennes par critère">
           <table className="data-table">
@@ -1528,7 +1528,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
 
           return (
             <Card key={g.id} title={g.title}>
-              <Radar data={radarData} options={{ scales: { r: { beginAtZero: true } } }} />
+              <Radar data={radarData} options={{ scales: { r: { beginAtZero: true, max: 10 } } }} />
               <div style={{ marginTop: "20px" }}>
                 <table className="data-table" style={{ fontSize: "11px" }}>
                   <thead>
