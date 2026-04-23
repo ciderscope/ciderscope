@@ -128,12 +128,6 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: An
     </div>
   );
 }
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── ScaleInput (extracted to allow hooks usage) ─────────────────────────────
 // Answer format: number (no subs) OR { _: number, _subs: string[], [label]: number }
