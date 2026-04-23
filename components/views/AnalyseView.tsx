@@ -4,7 +4,7 @@ import { Card } from "../ui/Card";
 import { ScrollableTabs } from "../ui/ScrollableTabs";
 import { Radar, Bar, Scatter } from "react-chartjs-2";
 import type { TooltipItem } from "chart.js";
-import type { SessionConfig, SessionListItem, Question, BetLevel, AllAnswers, CSVRow, Product } from "../../types";
+import type { SessionConfig, SessionListItem, Question, BetLevel, AllAnswers, CSVRow, Product, RadarGroup, RadarAxis, RadarAnswer, JurorAnswers } from "../../types";
 
 const COLORS = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
 
@@ -309,6 +309,21 @@ function pca2D(X: number[][]): { scores: number[][]; explained: number[]; loadin
   return { scores, explained, loadings };
 }
 
+// Conformité = corrélation de Pearson entre notes du jury et moyennes du panel
+const pearson = (xs: number[], ys: number[]): number => {
+  const n = xs.length;
+  if (n < 2) return 0;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0, dx = 0, dy = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - mx) * (ys[i] - my);
+    dx += (xs[i] - mx) ** 2;
+    dy += (ys[i] - my) ** 2;
+  }
+  return dx > 0 && dy > 0 ? num / Math.sqrt(dx * dy) : 0;
+};
+
 function wordColor(w: string) {
   let h = 0;
   for (const c of w) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
@@ -334,6 +349,8 @@ function computeTabs(anCfg: SessionConfig | null): Tab[] {
   const tabs: Tab[] = [];
 
   if (qs.some(q => q.type === "scale")) tabs.push({ id: "profil", label: "Profil" });
+
+  if (qs.some(q => q.type === "radar")) tabs.push({ id: "radar", label: "Toile d'araignée" });
 
   qs.forEach((q: Question) => {
     const prefix = STATS_QTYPES[q.type];
@@ -426,6 +443,7 @@ export const AnalyseView = ({
 
           <div id="anContent">
             {activeTab === "profil"  && <AnalyseProfil    config={anCfg} data={csvData} />}
+            {activeTab === "radar"   && <AnalyseRadar     config={anCfg} allAnswers={allAnswers} />}
             {activeTab === "texte"   && <AnalyseWordCloud data={csvData} config={anCfg} />}
             {activeTab === "jury"    && <AnalyseJury      config={anCfg} allAnswers={allAnswers} />}
             {activeTab === "données" && <AnalyseDonnees   data={csvData} />}
@@ -547,22 +565,6 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
   } : null;
 
   // ─── Performance individuelle du jury ───
-  // Conformité = corrélation de Pearson entre notes du jury et moyennes du panel
-  // Amplitude = max - min des notes du jury (utilisation de l'échelle)
-  const pearson = (xs: number[], ys: number[]): number => {
-    const n = xs.length;
-    if (n < 2) return 0;
-    const mx = xs.reduce((a, b) => a + b, 0) / n;
-    const my = ys.reduce((a, b) => a + b, 0) / n;
-    let num = 0, dx = 0, dy = 0;
-    for (let i = 0; i < n; i++) {
-      num += (xs[i] - mx) * (ys[i] - my);
-      dx += (xs[i] - mx) ** 2;
-      dy += (ys[i] - my) ** 2;
-    }
-    return dx > 0 && dy > 0 ? num / Math.sqrt(dx * dy) : 0;
-  };
-
   const juryPerf = jurors.map(j => {
     const paired: Array<{ self: number; panel: number }> = [];
     const selfAll: number[] = [];
@@ -1363,6 +1365,268 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: SessionCo
           </Card>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Toile d&apos;araignée (Radar) ──────────────────────────────────────────────────
+
+function flattenRadarAnswers(ans: RadarAnswer, prefix = ""): Record<string, number> {
+  let result: Record<string, number> = {};
+  if (!ans) return result;
+  for (const [label, node] of Object.entries(ans)) {
+    const fullLabel = prefix ? `${prefix} > ${label}` : label;
+    if (node._ !== undefined && node._ !== null) {
+      result[fullLabel] = node._;
+    }
+    if (node.children) {
+      result = { ...result, ...flattenRadarAnswers(node.children, fullLabel) };
+    }
+  }
+  return result;
+}
+
+function AnalyseRadar({ config, allAnswers }: { config: SessionConfig; allAnswers: AllAnswers }) {
+  const radarQs = config.questions.filter(q => q.type === "radar");
+  const products = config.products || [];
+  const jurors = Object.keys(allAnswers);
+
+  if (radarQs.length === 0) {
+    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée radar disponible.</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
+      {radarQs.map(q => (
+        <RadarQuestionAnalysis key={q.id} question={q} products={products} jurors={jurors} allAnswers={allAnswers} />
+      ))}
+    </div>
+  );
+}
+
+function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { question: Question; products: Product[]; jurors: string[]; allAnswers: AllAnswers }) {
+  // Aggregate all criteria names across all groups
+  const allCriteriaNames = new Set<string>();
+  (question.radarGroups || []).forEach(g => {
+    const walk = (axes: RadarAxis[], prefix = "") => {
+      axes.forEach(ax => {
+        const full = prefix ? `${prefix} > ${ax.label}` : ax.label;
+        allCriteriaNames.add(full);
+        if (ax.children) walk(ax.children, full);
+      });
+    };
+    walk(g.axes);
+  });
+  const criteria = Array.from(allCriteriaNames);
+
+  // Helper to get a note: (jury, product, criterion) -> number | null
+  const getNote = (j: string, p: string, crit: string): number | null => {
+    const ja = allAnswers[j]?.[p]?.[question.id] as RadarAnswer;
+    if (!ja) return null;
+    const flat = flattenRadarAnswers(ja);
+    return flat[crit] ?? null;
+  };
+
+  const avg = (p: string, crit: string) => {
+    const vals = jurors.map(j => getNote(j, p, crit)).filter((v): v is number => v !== null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  };
+
+  const sd = (p: string, crit: string) => {
+    const vals = jurors.map(j => getNote(j, p, crit)).filter((v): v is number => v !== null);
+    if (vals.length < 2) return 0;
+    const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+    return Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / (vals.length - 1));
+  };
+
+  // Performance individuelle
+  const juryPerf = jurors.map(j => {
+    const paired: Array<{ self: number; panel: number }> = [];
+    const selfAll: number[] = [];
+    products.forEach(p => {
+      criteria.forEach(c => {
+        const v = getNote(j, p.code, c);
+        if (v !== null) {
+          paired.push({ self: v, panel: avg(p.code, c) });
+          selfAll.push(v);
+        }
+      });
+    });
+    const conf = paired.length >= 2 ? pearson(paired.map(x => x.self), paired.map(x => x.panel)) : 0;
+    const range = selfAll.length ? Math.max(...selfAll) - Math.min(...selfAll) : 0;
+    return { jury: j, conf, range, n: selfAll.length };
+  }).sort((a, b) => b.conf - a.conf);
+
+  // ANOVA par critère (uniquement pour les familles de premier niveau)
+  const families = (question.radarGroups || []).flatMap(g => g.axes.map(ax => ax.label));
+  const anovaRows = families.map(crit => {
+    const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p.code, crit)));
+    const flat = mat.flat().filter((v): v is number => v !== null);
+    const pN = products.length;
+    const jN = jurors.length;
+    if (flat.length < pN * jN || pN < 2 || jN < 2) return { crit, ok: false as const };
+    
+    const grand = flat.reduce((a, b) => a + b, 0) / flat.length;
+    const prodMeans = mat.map(row => {
+      const v = row.filter((x): x is number => x !== null);
+      return v.reduce((a, b) => a + b, 0) / v.length;
+    });
+    const juryMeans = jurors.map((_, jIdx) => {
+      const col = mat.map(row => row[jIdx]).filter((x): x is number => x !== null);
+      return col.reduce((a, b) => a + b, 0) / col.length;
+    });
+    let ssProd = 0, ssJury = 0, ssTot = 0;
+    for (let i = 0; i < pN; i++) ssProd += jN * (prodMeans[i] - grand) ** 2;
+    for (let j = 0; j < jN; j++) ssJury += pN * (juryMeans[j] - grand) ** 2;
+    for (let i = 0; i < pN; i++) for (let j = 0; j < jN; j++) {
+      const v = mat[i][j];
+      if (v !== null) ssTot += (v - grand) ** 2;
+    }
+    const ssErr = Math.max(0, ssTot - ssProd - ssJury);
+    const dfProd = pN - 1, dfJury = jN - 1, dfErr = (pN - 1) * (jN - 1);
+    const msProd = ssProd / dfProd, msJury = ssJury / dfJury, msErr = ssErr / dfErr;
+    const fProd = msErr > 0 ? msProd / msErr : 0;
+    const pProd = msErr > 0 ? fPValue(fProd, dfProd, dfErr) : 1;
+    return { crit, ok: true as const, fProd, pProd };
+  });
+
+  // ACP (Global sur tous les critères renseignés)
+  const populatedCriteria = criteria.filter(c => products.some(p => avg(p.code, c) > 0));
+  const pcaMatrix = products.map(p => populatedCriteria.map(c => avg(p.code, c)));
+  const canPca = products.length >= 3 && populatedCriteria.length >= 2;
+  const pcaRes = canPca ? pca2D(pcaMatrix) : null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>{question.label}</h3>
+
+      <div className="grid2">
+        {(question.radarGroups || []).map((g, gi) => {
+          const groupCriteria: string[] = [];
+          const walk = (axes: RadarAxis[], prefix = "") => {
+            axes.forEach(ax => {
+              const full = prefix ? `${prefix} > ${ax.label}` : ax.label;
+              groupCriteria.push(full);
+              if (ax.children) walk(ax.children, full);
+            });
+          };
+          walk(g.axes);
+
+          // Filtrer pour ne garder que les critères qui ont des données ou sont top-level
+          const displayCriteria = groupCriteria.filter(c => !c.includes(">") || products.some(p => avg(p.code, c) > 0));
+
+          const radarData = {
+            labels: displayCriteria.map(c => c.split(" > ").pop()),
+            datasets: products.map((p, pi) => ({
+              label: p.code,
+              data: displayCriteria.map(c => avg(p.code, c)),
+              borderColor: COLORS[pi % 8],
+              backgroundColor: COLORS[pi % 8] + "22",
+              pointBackgroundColor: COLORS[pi % 8],
+            }))
+          };
+
+          return (
+            <Card key={g.id} title={g.title}>
+              <Radar data={radarData} options={{ scales: { r: { beginAtZero: true } } }} />
+              <div style={{ marginTop: "20px" }}>
+                <table className="data-table" style={{ fontSize: "11px" }}>
+                  <thead>
+                    <tr>
+                      <th>Critère</th>
+                      {products.map(p => <th key={p.code}>{p.code}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayCriteria.map(c => (
+                      <tr key={c}>
+                        <td style={{ paddingLeft: `${(c.split(" > ").length - 1) * 12}px`, color: c.includes(">") ? "var(--mid)" : "inherit", fontWeight: c.includes(">") ? 400 : 700 }}>
+                          {c.split(" > ").pop()}
+                        </td>
+                        {products.map(p => {
+                          const m = avg(p.code, c);
+                          const s = sd(p.code, c);
+                          return <td key={p.code} className="num" style={{ opacity: m > 0 ? 1 : 0.3 }}>
+                            {m > 0 ? `${m.toFixed(1)} ±${s.toFixed(1)}` : "—"}
+                          </td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="grid2">
+        <Card title="Significativité des descripteurs (ANOVA)">
+          <table className="data-table" style={{ fontSize: "12px" }}>
+            <thead>
+              <tr><th>Descripteur</th><th>F-produit</th><th>p-value</th></tr>
+            </thead>
+            <tbody>
+              {anovaRows.filter(r => r.ok).map(r => (
+                <tr key={r.crit}>
+                  <td>{r.crit}</td>
+                  <td className="num">{r.fProd.toFixed(2)}</td>
+                  <td className="num" style={{ fontWeight: r.pProd < 0.05 ? 700 : 400, color: r.pProd < 0.05 ? "#1a6b3a" : "inherit" }}>
+                    {r.pProd < 0.001 ? "< 0,001" : r.pProd.toFixed(3)} {r.pProd < 0.05 ? "*" : ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+
+        {pcaRes && (
+          <Card title="ACP — Carte des produits">
+            <div style={{ height: "300px" }}>
+              <Scatter
+                data={{
+                  datasets: [{
+                    label: "Produits",
+                    data: products.map((p, i) => ({ x: pcaRes.scores[i][0], y: pcaRes.scores[i][1], label: p.code })),
+                    backgroundColor: products.map((_, i) => COLORS[i % 8]),
+                  }]
+                }}
+                options={{
+                  responsive: true, maintainAspectRatio: false,
+                  scales: {
+                    x: { title: { display: true, text: `CP1 (${(pcaRes.explained[0]*100).toFixed(1)}%)` } },
+                    y: { title: { display: true, text: `CP2 (${((pcaRes.explained[1]||0)*100).toFixed(1)}%)` } },
+                  },
+                  plugins: { tooltip: { callbacks: { label: (ctx: any) => ctx.raw.label } } }
+                }}
+              />
+            </div>
+            <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "10px" }}>
+              CP1+CP2 : {((pcaRes.explained[0] + (pcaRes.explained[1]||0))*100).toFixed(1)}% de variance expliquée.
+            </div>
+          </Card>
+        )}
+      </div>
+
+      <Card title="Performance du jury">
+        <table className="data-table" style={{ fontSize: "12px" }}>
+          <thead>
+            <tr><th>Jury</th><th>Conformité (r)</th><th>Amplitude</th><th>Statut</th></tr>
+          </thead>
+          <tbody>
+            {juryPerf.map(p => (
+              <tr key={p.jury}>
+                <td>{p.jury}</td>
+                <td className="num" style={{ fontWeight: 700, color: p.conf > 0.6 ? "#1a6b3a" : p.conf > 0.3 ? "#c8820a" : "#c0392b" }}>
+                  {p.conf.toFixed(2)}
+                </td>
+                <td className="num">{p.range.toFixed(1)}</td>
+                <td>{p.conf > 0.6 ? "Conforme" : p.conf > 0.3 ? "Modéré" : "Discordant"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
     </div>
   );
 }

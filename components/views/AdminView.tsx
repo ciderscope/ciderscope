@@ -8,6 +8,7 @@ import { Badge } from "../ui/Badge";
 import { AnalyseView } from "./AnalyseView";
 import { Question, QuestionType, Product, BetLevel, RadarGroup, RadarAxis, SessionConfig, SessionListItem, AllAnswers, JurorAnswers, CSVRow, AnswerValue, AppScreen } from "../../types";
 import { wlm } from "../../lib/utils";
+import { AROMA_PRESET } from "../../lib/aromaPreset";
 
 // Génère un id unique pour une nouvelle question/groupe. Extrait hors composants
 // pour éviter le faux-positif de la règle react-hooks/purity sur Date.now().
@@ -1235,8 +1236,92 @@ function QCMOptions({ options, correctAnswer, onChange, onChangeCorrect }: {
 }
 
 // ─────────────────────────────────────────────
-// Radar builder (toile d'araignée)
+// Radar builder (toile d'araignée) — arbre de décision récursif.
 // ─────────────────────────────────────────────
+
+// Applique un patch sur un nœud (identifié par son chemin d'indices dans l'arbre) d'une liste d'axes.
+function updateAxisAtPath(axes: RadarAxis[], path: number[], updater: (ax: RadarAxis) => RadarAxis): RadarAxis[] {
+  if (path.length === 0) return axes;
+  const [head, ...rest] = path;
+  return axes.map((ax, i) => {
+    if (i !== head) return ax;
+    if (rest.length === 0) return updater(ax);
+    const kids = ax.children ?? [];
+    return { ...ax, children: updateAxisAtPath(kids, rest, updater) };
+  });
+}
+
+// Supprime un nœud (identifié par path) d'une liste d'axes.
+function removeAxisAtPath(axes: RadarAxis[], path: number[]): RadarAxis[] {
+  if (path.length === 0) return axes;
+  const [head, ...rest] = path;
+  if (rest.length === 0) return axes.filter((_, i) => i !== head);
+  return axes.map((ax, i) => {
+    if (i !== head) return ax;
+    const kids = ax.children ?? [];
+    return { ...ax, children: removeAxisAtPath(kids, rest) };
+  });
+}
+
+// Ajoute un enfant à un nœud (identifié par path).
+function addChildAtPath(axes: RadarAxis[], path: number[]): RadarAxis[] {
+  return updateAxisAtPath(axes, path, ax => ({
+    ...ax,
+    children: [...(ax.children ?? []), { label: "" }],
+  }));
+}
+
+function RadarAxisNodeEditor({
+  ax, path, depth, onUpdate, onRemove, onAddChild,
+}: {
+  ax: RadarAxis;
+  path: number[];
+  depth: number;
+  onUpdate: (path: number[], patch: Partial<RadarAxis>) => void;
+  onRemove: (path: number[]) => void;
+  onAddChild: (path: number[]) => void;
+}) {
+  const hasChildren = !!ax.children && ax.children.length > 0;
+  return (
+    <div className={`radar-builder-node depth-${depth}`}>
+      <div className="radar-builder-node-row">
+        <input
+          value={ax.label}
+          onChange={(e) => onUpdate(path, { label: e.target.value })}
+          placeholder={depth === 0 ? "Catégorie" : depth === 1 ? "Sous-catégorie" : "Descripteur"}
+          className="radar-axis-label-input"
+        />
+        <button
+          type="button"
+          className="chip"
+          onClick={() => onAddChild(path)}
+          title="Ajouter un enfant"
+        >
+          <FiPlus size={11} /> enfant
+        </button>
+        <button className="chip-x" onClick={() => onRemove(path)} type="button" title="Supprimer ce nœud">
+          <FiX size={12} />
+        </button>
+      </div>
+      {hasChildren && (
+        <div className="radar-builder-children">
+          {ax.children!.map((child, ci) => (
+            <RadarAxisNodeEditor
+              key={ci}
+              ax={child}
+              path={[...path, ci]}
+              depth={depth + 1}
+              onUpdate={onUpdate}
+              onRemove={onRemove}
+              onAddChild={onAddChild}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<Question>) => void }) {
   const groups: RadarGroup[] = q.radarGroups || [];
 
@@ -1245,20 +1330,22 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
     onUpdate({ radarGroups: n });
   };
 
-  const updateAxis = (gi: number, ai: number, patch: Partial<RadarAxis>) => {
-    const group = groups[gi];
-    const axes = group.axes.map((a, i) => i === ai ? { ...a, ...patch } : a);
-    updateGroup(gi, { axes });
-  };
-
-  const addAxis = (gi: number) => updateGroup(gi, { axes: [...groups[gi].axes, { label: "" }] });
-  const removeAxis = (gi: number, ai: number) => updateGroup(gi, { axes: groups[gi].axes.filter((_, i) => i !== ai) });
+  const setGroupAxes = (gi: number, axes: RadarAxis[]) => updateGroup(gi, { axes });
 
   const addGroup = () => {
-    const id = "g" + Date.now();
+    const id = nextId("g");
     onUpdate({ radarGroups: [...groups, { id, title: "Nouveau groupe", axes: [{ label: "" }] }] });
   };
   const removeGroup = (gi: number) => onUpdate({ radarGroups: groups.filter((_, i) => i !== gi) });
+
+  const loadPreset = () => {
+    onUpdate({
+      radarGroups: AROMA_PRESET.map(g => ({
+        ...g,
+        axes: g.axes.map(ax => ({ ...ax, children: ax.children ? [...ax.children] : undefined })),
+      })),
+    });
+  };
 
   return (
     <div className="radar-builder">
@@ -1268,7 +1355,7 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
       </div>
 
       <p style={{ fontSize: "11px", color: "var(--mid)", margin: "8px 0 4px" }}>
-        Chaque groupe = une toile d&apos;araignée. Le jury peut ajouter des précisions sous chaque axe durant l&apos;évaluation.
+        Arbre de décision : catégorie (axe de la toile) → sous-catégorie → descripteur. Le jury ne peut rien ajouter, seulement explorer l&apos;arbre défini ici.
       </p>
 
       {groups.map((g, gi) => (
@@ -1284,36 +1371,33 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
               <FiX size={12} />
             </button>
           </div>
-          {g.axes.map((ax, ai) => (
-            <div key={ai} className="radar-axis-row">
-              <input
-                value={ax.label}
-                onChange={(e) => updateAxis(gi, ai, { label: e.target.value })}
-                placeholder={`Axe ${ai + 1}`}
-                className="radar-axis-label-input"
+          <div className="radar-builder-tree">
+            {g.axes.map((ax, ai) => (
+              <RadarAxisNodeEditor
+                key={ai}
+                ax={ax}
+                path={[ai]}
+                depth={0}
+                onUpdate={(path, patch) => setGroupAxes(gi, updateAxisAtPath(g.axes, path, a => ({ ...a, ...patch })))}
+                onRemove={(path) => setGroupAxes(gi, removeAxisAtPath(g.axes, path))}
+                onAddChild={(path) => setGroupAxes(gi, addChildAtPath(g.axes, path))}
               />
-              <input
-                value={(ax.subCriteria || []).join(", ")}
-                onChange={(e) => updateAxis(gi, ai, {
-                  subCriteria: e.target.value.split(",").map(s => s.trim()).filter(Boolean)
-                })}
-                placeholder="Précisions par défaut (ex : abricot, pêche)"
-                className="radar-axis-subs-input"
-              />
-              <button className="chip-x" onClick={() => removeAxis(gi, ai)} type="button">
-                <FiX size={12} />
-              </button>
-            </div>
-          ))}
-          <Button variant="ghost" size="sm" onClick={() => addAxis(gi)} style={{ marginTop: "4px" }}>
-            <FiPlus /> Axe
+            ))}
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setGroupAxes(gi, [...g.axes, { label: "" }])} style={{ marginTop: "4px" }}>
+            <FiPlus /> Catégorie racine
           </Button>
         </div>
       ))}
 
-      <Button variant="ghost" size="sm" onClick={addGroup} style={{ marginTop: "8px" }}>
-        <FiPlus /> Ajouter un groupe radar
-      </Button>
+      <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+        <Button variant="ghost" size="sm" onClick={addGroup}>
+          <FiPlus /> Ajouter un groupe radar
+        </Button>
+        <Button variant="ghost" size="sm" onClick={loadPreset} title="Recharger l'arbre d'arômes de référence">
+          Recharger le preset arômes
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1337,24 +1421,11 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: SessionConfig; on
     if (type === "radar") {
       newQ.min = 0; newQ.max = 10;
       newQ.scope = "per-product";
-      newQ.radarGroups = [
-        { id: "main", title: "Critères principaux", axes: [
-          { label: "acidité" },
-          { label: "amertume" },
-          { label: "astringence" },
-          { label: "sucrosité" },
-          { label: "fruité" },
-        ]},
-        { id: "fruits", title: "Fruité — décomposition", axes: [
-          { label: "fruit jaune", subCriteria: ["abricot", "pêche"] },
-          { label: "fruit blanc", subCriteria: ["poire", "pomme", "coing"] },
-          { label: "fruit exotique", subCriteria: ["banane", "fruit de la passion", "litchi"] },
-        ]},
-        { id: "autres", title: "Autres arômes", axes: [
-          { label: "cuir" }, { label: "fumé" }, { label: "solvant" },
-          { label: "épice" }, { label: "terreux" }, { label: "champignon" },
-        ]},
-      ];
+      // Preset arômes chargé par défaut (arbre à 3 niveaux : catégorie → sous-catégorie → descripteur).
+      newQ.radarGroups = AROMA_PRESET.map(g => ({
+        ...g,
+        axes: g.axes.map(ax => ({ ...ax, children: ax.children ? [...ax.children] : undefined })),
+      }));
     }
     if (type === "qcm") newQ.options = ["Excellent", "Bon", "Moyen", "Mauvais"];
     if (type === "triangulaire") newQ.codes = allCodes.slice(0, 3);

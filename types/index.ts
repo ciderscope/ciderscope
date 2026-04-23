@@ -8,10 +8,13 @@ export interface BetLevel {
   correctAnswer: string; // code de l'échantillon "différent"
 }
 
-// Un axe d'un radar = un critère noté 0→max, avec précisions optionnelles (équivalent d'un scale sub).
+// Un axe d'un radar = un critère noté 0→max.
+// Arbre de décision : chaque nœud peut avoir des enfants (sous-critères de plus en plus fins).
+// Les feuilles (sans `children`) sont les descripteurs ultimes (ex: "Anis", "Noix").
 export interface RadarAxis {
   label: string;
-  subCriteria?: string[];  // précisions par défaut (éditables par le jury)
+  children?: RadarAxis[];   // sous-arbre récursif
+  subCriteria?: string[];   // legacy (ancienne liste plate) — conservé pour compat lecture
 }
 
 export interface RadarGroup {
@@ -76,8 +79,14 @@ export interface ScaleAnswer {
   [subLabel: string]: number | string[];
 }
 
-// Réponse radar : { [axisLabel]: { _: note, _subs: [...], [sub]: note } }
-export type RadarAnswer = Record<string, ScaleAnswer>;
+// Nœud de réponse radar récursif : { _: note, children?: { [label]: RadarNodeAnswer } }
+export interface RadarNodeAnswer {
+  _: number;
+  children?: Record<string, RadarNodeAnswer>;
+}
+
+// Réponse radar : map axe-de-premier-niveau → nœud récursif.
+export type RadarAnswer = Record<string, RadarNodeAnswer>;
 
 // Toute forme possible pour la valeur d'une question (brute, stockée en DB).
 // - number : échelle simple
