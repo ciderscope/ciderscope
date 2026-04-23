@@ -24,6 +24,8 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: An
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [touchActive, setTouchActive] = useState<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const applyReorder = (from: number, to: number) => {
     const next = [...ordered];
@@ -50,14 +52,34 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: An
     }
   };
 
+  // Direct touch drag
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchActive === null) return;
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const item = el?.closest(".h-rank-item");
+    if (item && listRef.current) {
+      const idx = Array.from(listRef.current.children).filter(c => c.classList.contains("h-rank-item")).indexOf(item);
+      if (idx !== -1 && idx !== touchActive) {
+        applyReorder(touchActive, idx);
+        setTouchActive(idx);
+      }
+    }
+  };
+
   return (
     <div className="h-rank-wrap">
       <p className="drag-hint">
         Classez les verres de gauche à droite : le verre le moins intense se place à gauche, le plus intense à droite.
         Chaque verre est <strong>inférieur</strong> (&lt;) à celui qui le suit.
-        <span className="drag-hint-touch"> Sur tablette : appuyez sur un verre pour le sélectionner, puis sur sa position cible.</span>
+        <span className="drag-hint-touch"> Sur tablette : glissez les verres ou appuyez pour intervertir.</span>
       </p>
-      <div className="h-rank-list">
+      <div 
+        className="h-rank-list"
+        ref={listRef}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={() => setTouchActive(null)}
+      >
         {ordered.map((code, i) => (
           <React.Fragment key={code}>
             <div
@@ -66,13 +88,15 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: An
               onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
               onDrop={() => handleDrop(i)}
               onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+              onTouchStart={() => setTouchActive(i)}
               onClick={() => handleTap(i)}
               className={[
                 "h-rank-item",
-                dragIdx === i ? "dragging" : "",
+                dragIdx === i || touchActive === i ? "dragging" : "",
                 overIdx === i && dragIdx !== i ? "drag-over" : "",
                 selectedIdx === i ? "h-rank-selected" : "",
               ].filter(Boolean).join(" ")}
+              style={{ touchAction: "none" }}
             >
               <span className="h-rank-pos">{i + 1}</span>
               <span className="h-rank-code">{code}</span>
@@ -98,6 +122,12 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: An
                 <FiChevronLeft size={16} />
               </div>
             )}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
           </React.Fragment>
         ))}
       </div>

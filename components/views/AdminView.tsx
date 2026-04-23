@@ -1288,18 +1288,19 @@ function RadarAxisNodeEditor({
         <input
           value={ax.label}
           onChange={(e) => onUpdate(path, { label: e.target.value })}
-          placeholder={depth === 0 ? "Catégorie" : depth === 1 ? "Sous-catégorie" : "Descripteur"}
-          className="radar-axis-label-input"
+          placeholder={depth === 0 ? \"Catégorie\" : depth === 1 ? \"Sous-catégorie\" : \"Descripteur\"}
+          className=\"radar-axis-label-input\"
         />
         <button
-          type="button"
-          className="chip"
+          type=\"button\"
+          className=\"chip-add\"
           onClick={() => onAddChild(path)}
-          title="Ajouter un enfant"
+          title=\"Ajouter un enfant\"
+          style={{ width: \"24px\", height: \"24px\", borderRadius: \"50%\", border: \"1px solid var(--border)\", background: \"var(--paper)\", display: \"inline-flex\", alignItems: \"center\", justifyContent: \"center\", cursor: \"pointer\", color: \"var(--accent)\" }}
         >
-          <FiPlus size={11} /> enfant
+          <FiPlus size={14} />
         </button>
-        <button className="chip-x" onClick={() => onRemove(path)} type="button" title="Supprimer ce nœud">
+        <button className=\"chip-x\" onClick={() => onRemove(path)} type=\"button\" title=\"Supprimer ce nœud\">
           <FiX size={12} />
         </button>
       </div>
@@ -1324,6 +1325,7 @@ function RadarAxisNodeEditor({
 
 function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<Question>) => void }) {
   const groups: RadarGroup[] = q.radarGroups || [];
+  const [isConfiguring, setIsConfiguring] = useState(false);
 
   const updateGroup = (gi: number, patch: Partial<RadarGroup>) => {
     const n = groups.map((g, i) => i === gi ? { ...g, ...patch } : g);
@@ -1354,50 +1356,60 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
         <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
       </div>
 
-      <p style={{ fontSize: "11px", color: "var(--mid)", margin: "8px 0 4px" }}>
-        Arbre de décision : catégorie (axe de la toile) → sous-catégorie → descripteur. Le jury ne peut rien ajouter, seulement explorer l&apos;arbre défini ici.
-      </p>
-
-      {groups.map((g, gi) => (
-        <div key={g.id} className="radar-group-block">
-          <div className="radar-group-header">
-            <input
-              value={g.title}
-              onChange={(e) => updateGroup(gi, { title: e.target.value })}
-              placeholder="Titre du radar"
-              style={{ fontWeight: 600, flex: 1 }}
-            />
-            <button className="chip-x" onClick={() => removeGroup(gi)} type="button" title="Supprimer le groupe">
-              <FiX size={12} />
-            </button>
-          </div>
-          <div className="radar-builder-tree">
-            {g.axes.map((ax, ai) => (
-              <RadarAxisNodeEditor
-                key={ai}
-                ax={ax}
-                path={[ai]}
-                depth={0}
-                onUpdate={(path, patch) => setGroupAxes(gi, updateAxisAtPath(g.axes, path, a => ({ ...a, ...patch })))}
-                onRemove={(path) => setGroupAxes(gi, removeAxisAtPath(g.axes, path))}
-                onAddChild={(path) => setGroupAxes(gi, addChildAtPath(g.axes, path))}
-              />
-            ))}
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => setGroupAxes(gi, [...g.axes, { label: "" }])} style={{ marginTop: "4px" }}>
-            <FiPlus /> Catégorie racine
-          </Button>
-        </div>
-      ))}
-
-      <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
-        <Button variant="ghost" size="sm" onClick={addGroup}>
-          <FiPlus /> Ajouter un groupe radar
-        </Button>
-        <Button variant="ghost" size="sm" onClick={loadPreset} title="Recharger l'arbre d'arômes de référence">
-          Recharger le preset arômes
+      <div style={{ display: \"flex\", gap: \"10px\", marginTop: \"12px\", marginBottom: \"8px\" }}>
+        <Button variant=\"secondary\" size=\"sm\" onClick={() => setIsConfiguring(!isConfiguring)}>
+          {isConfiguring ? \"Masquer le paramétrage\" : \"Paramétrer les catégories\"}
         </Button>
       </div>
+
+      {isConfiguring && (
+        <>
+          <p style={{ fontSize: \"11px\", color: \"var(--mid)\", margin: \"8px 0 4px\" }}>
+            Arbre de décision : catégorie (axe de la toile) → sous-catégorie → descripteur. Le jury ne peut rien ajouter, seulement explorer l&apos;arbre défini ici.
+          </p>
+
+          {groups.map((g, gi) => (
+            <div key={g.id} className=\"radar-group-block\">
+              <div className=\"radar-group-header\">
+                <input
+                  value={g.title}
+                  onChange={(e) => updateGroup(gi, { title: e.target.value })}
+                  placeholder=\"Titre du radar\"
+                  style={{ fontWeight: 600, flex: 1 }}
+                />
+                <button className=\"chip-x\" onClick={() => removeGroup(gi)} type=\"button\" title=\"Supprimer le groupe\">
+                  <FiX size={12} />
+                </button>
+              </div>
+              <div className=\"radar-builder-tree\">
+                {g.axes.map((ax, ai) => (
+                  <RadarAxisNodeEditor
+                    key={ai}
+                    ax={ax}
+                    path={[ai]}
+                    depth={0}
+                    onUpdate={(path, patch) => setGroupAxes(gi, updateAxisAtPath(g.axes, path, a => ({ ...a, ...patch })))}
+                    onRemove={(path) => setGroupAxes(gi, removeAxisAtPath(g.axes, path))}
+                    onAddChild={(path) => setGroupAxes(gi, addChildAtPath(g.axes, path))}
+                  />
+                ))}
+              </div>
+              <Button variant=\"ghost\" size=\"sm\" onClick={() => setGroupAxes(gi, [...g.axes, { label: \"\" }])} style={{ marginTop: \"4px\" }}>
+                <FiPlus /> Catégorie racine
+              </Button>
+            </div>
+          ))}
+
+          <div style={{ display: \"flex\", gap: \"8px\", marginTop: \"8px\", flexWrap: \"wrap\" }}>
+            <Button variant=\"ghost\" size=\"sm\" onClick={addGroup}>
+              <FiPlus /> Ajouter un groupe radar
+            </Button>
+            <Button variant=\"ghost\" size=\"sm\" onClick={loadPreset} title=\"Recharger l'arbre d'arômes de référence\">
+              Recharger le preset arômes
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1552,38 +1564,13 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
           {/* Type-specific UI */}
           <div className="q-type-body">
 
-            {q.type === "scale" && (
+            {q.type === \"scale\" && (
               <>
-                <div className="q-fields">
-                  <div className="field-wrap"><label>MIN</label><input type="number" value={q.min ?? 0} onChange={(e) => onUpdate({ min: +e.target.value })} /></div>
-                  <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
-                  <div className="field-wrap"><label>LABEL MIN</label><input value={q.labelMin || ""} onChange={(e) => onUpdate({ labelMin: e.target.value })} /></div>
-                  <div className="field-wrap"><label>LABEL MAX</label><input value={q.labelMax || ""} onChange={(e) => onUpdate({ labelMax: e.target.value })} /></div>
-                </div>
-                <div style={{ marginTop: "12px" }}>
-                  <div className="builder-section-label">SOUS-CRITÈRES PAR DÉFAUT (optionnel)</div>
-                  <p style={{ fontSize: "11px", color: "var(--mid)", margin: "4px 0 8px" }}>
-                    Pré-remplissez des sous-critères suggérés au jury. Le jury pourra les modifier et en ajouter librement durant l&apos;évaluation.
-                  </p>
-                  {(q.subCriteria || []).map((sc: string, i: number) => (
-                    <div key={i} className="qcm-option-row" style={{ marginBottom: "6px" }}>
-                      <input
-                        value={sc}
-                        onChange={(e) => {
-                          const n = [...(q.subCriteria || [])];
-                          n[i] = e.target.value;
-                          onUpdate({ subCriteria: n });
-                        }}
-                        placeholder={`Sous-critère ${i + 1} (ex: agrumes)`}
-                      />
-                      <button className="chip-x" onClick={() => onUpdate({ subCriteria: (q.subCriteria || []).filter((_: string, idx: number) => idx !== i) })} type="button">
-                        <FiX size={12} />
-                      </button>
-                    </div>
-                  ))}
-                  <Button variant="ghost" size="sm" onClick={() => onUpdate({ subCriteria: [...(q.subCriteria || []), ""] })} style={{ marginTop: "4px" }}>
-                    <FiPlus /> Sous-critère
-                  </Button>
+                <div className=\"q-fields\">
+                  <div className=\"field-wrap\"><label>MIN</label><input type=\"number\" value={q.min ?? 0} onChange={(e) => onUpdate({ min: +e.target.value })} /></div>
+                  <div className=\"field-wrap\"><label>MAX</label><input type=\"number\" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
+                  <div className=\"field-wrap\"><label>LABEL MIN</label><input value={q.labelMin || \"\"} onChange={(e) => onUpdate({ labelMin: e.target.value })} /></div>
+                  <div className=\"field-wrap\"><label>LABEL MAX</label><input value={q.labelMax || \"\"} onChange={(e) => onUpdate({ labelMax: e.target.value })} /></div>
                 </div>
               </>
             )}
