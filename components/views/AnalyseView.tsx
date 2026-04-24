@@ -1246,17 +1246,22 @@ function AnalyseRadar({ config, allAnswers }: { config: SessionConfig; allAnswer
 }
 
 function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { question: Question; products: Product[]; jurors: string[]; allAnswers: AllAnswers }) {
-  // Aggregate all criteria names across all groups
+  // Criteria par groupe (pour filtrer l'ACP) + liste globale
+  const groups = question.radarGroups || [];
+  const criteriaByGroup: Record<string, string[]> = {};
   const allCriteriaNames = new Set<string>();
-  (question.radarGroups || []).forEach(g => {
+  groups.forEach(g => {
+    const acc: string[] = [];
     const walk = (axes: RadarAxis[], prefix = "") => {
       axes.forEach(ax => {
         const full = prefix ? `${prefix} > ${ax.label}` : ax.label;
+        acc.push(full);
         allCriteriaNames.add(full);
         if (ax.children) walk(ax.children, full);
       });
     };
     walk(g.axes);
+    criteriaByGroup[g.id] = acc;
   });
   const criteria = Array.from(allCriteriaNames);
 
@@ -1331,9 +1336,10 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     return { crit, ok: true as const, fProd, pProd };
   });
 
-  // ACP — niveau sélectionné (famille / classe / descripteur)
+  // ACP — groupe (toile des arômes / profil gustatif / …) + niveau (famille / classe / descripteur)
   type PcaLevel = "famille" | "classe" | "descripteur";
   const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
+  const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
   const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
   const levelLabel: Record<PcaLevel, string> = {
     famille: "Famille",
@@ -1341,7 +1347,9 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     descripteur: "Descripteur",
   };
   const depthOf = (c: string) => c.split(" > ").length;
-  const pcaCriteria = criteria
+  const activeGroup = groups.find(g => g.id === pcaGroupId) || groups[0];
+  const scopeCriteria = activeGroup ? (criteriaByGroup[activeGroup.id] || []) : criteria;
+  const pcaCriteria = scopeCriteria
     .filter(c => depthOf(c) === levelDepth[pcaLevel])
     .filter(c => products.some(p => avg(p.code, c) > 0));
   const pcaMatrix = products.map(p => pcaCriteria.map(c => avg(p.code, c)));
@@ -1439,6 +1447,22 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
       </Card>
 
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        {groups.length > 1 && (
+          <>
+            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
+              Toile ACP
+            </span>
+            <select
+              value={pcaGroupId}
+              onChange={(e) => setPcaGroupId(e.target.value)}
+              className="pca-group-select"
+            >
+              {groups.map(g => (
+                <option key={g.id} value={g.id}>{g.title}</option>
+              ))}
+            </select>
+          </>
+        )}
         <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
           Niveau ACP
         </span>
@@ -1467,7 +1491,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
 
       {pcaRes && (
         <div className="grid2">
-          <Card title={`ACP — Carte des produits (${levelLabel[pcaLevel].toLowerCase()})`}>
+          <Card title={`ACP — Carte des produits · ${activeGroup?.title || ""} (${levelLabel[pcaLevel].toLowerCase()})`}>
             <div style={{ height: "320px" }}>
               <Scatter
                 data={{
@@ -1501,7 +1525,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
             </div>
           </Card>
 
-          <Card title={`ACP — ${levelLabel[pcaLevel]}s (cercle des corrélations)`}>
+          <Card title={`ACP — ${levelLabel[pcaLevel]}s · ${activeGroup?.title || ""} (cercle des corrélations)`}>
             <div style={{ height: "320px" }}>
               <Scatter
                 data={{

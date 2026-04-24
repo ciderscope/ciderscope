@@ -977,6 +977,18 @@ textarea.q-text:focus { border-color: var(--accent); }
    ANALYSE — tableaux stats, graphiques
    ══════════════════════════════════════════ */
 .analyse-shell { max-width: min(95%, 2200px); margin: 0 auto; padding: 24px; }
+.pca-group-select {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.pca-group-select:focus { outline: none; border-color: var(--accent); }
+
 .pca-level-switch {
   display: inline-flex;
   border: 1px solid var(--border);
