@@ -1349,8 +1349,12 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
   const depthOf = (c: string) => c.split(" > ").length;
   const activeGroup = groups.find(g => g.id === pcaGroupId) || groups[0];
   const scopeCriteria = activeGroup ? (criteriaByGroup[activeGroup.id] || []) : criteria;
+  // Un groupe "plat" (ex. Profil gustatif : Acidité, Amertume, …) n'a qu'un niveau pertinent :
+  // on masque alors le sélecteur de niveau et on force "famille".
+  const isFlatGroup = scopeCriteria.length > 0 && scopeCriteria.every(c => !c.includes(" > "));
+  const effectiveLevel: PcaLevel = isFlatGroup ? "famille" : pcaLevel;
   const pcaCriteria = scopeCriteria
-    .filter(c => depthOf(c) === levelDepth[pcaLevel])
+    .filter(c => depthOf(c) === levelDepth[effectiveLevel])
     .filter(c => products.some(p => avg(p.code, c) > 0));
   const pcaMatrix = products.map(p => pcaCriteria.map(c => avg(p.code, c)));
   const canPca = products.length >= 3 && pcaCriteria.length >= 2;
@@ -1463,35 +1467,39 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
             </select>
           </>
         )}
-        <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
-          Niveau ACP
-        </span>
-        <div className="pca-level-switch">
-          {(["famille", "classe", "descripteur"] as const).map(lv => (
-            <button
-              key={lv}
-              type="button"
-              className={`pca-level-btn ${pcaLevel === lv ? "active" : ""}`}
-              onClick={() => setPcaLevel(lv)}
-            >
-              {levelLabel[lv]}
-            </button>
-          ))}
-        </div>
+        {!isFlatGroup && (
+          <>
+            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
+              Niveau ACP
+            </span>
+            <div className="pca-level-switch">
+              {(["famille", "classe", "descripteur"] as const).map(lv => (
+                <button
+                  key={lv}
+                  type="button"
+                  className={`pca-level-btn ${pcaLevel === lv ? "active" : ""}`}
+                  onClick={() => setPcaLevel(lv)}
+                >
+                  {levelLabel[lv]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <span style={{ fontSize: "11px", color: "var(--mid)" }}>
-          {pcaCriteria.length} {levelLabel[pcaLevel].toLowerCase()}{pcaCriteria.length > 1 ? "s" : ""}
+          {pcaCriteria.length} {levelLabel[effectiveLevel].toLowerCase()}{pcaCriteria.length > 1 ? "s" : ""}
         </span>
       </div>
 
       {!pcaRes && (
         <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>
-          Pas assez de données au niveau « {levelLabel[pcaLevel].toLowerCase()} » pour calculer l&apos;ACP (il faut au moins 3 produits et 2 critères renseignés).
+          Pas assez de données au niveau « {levelLabel[effectiveLevel].toLowerCase()} » pour calculer l&apos;ACP (il faut au moins 3 produits et 2 critères renseignés).
         </div>
       )}
 
       {pcaRes && (
         <div className="grid2">
-          <Card title={`ACP — Carte des produits · ${activeGroup?.title || ""} (${levelLabel[pcaLevel].toLowerCase()})`}>
+          <Card title={`ACP — Carte des produits · ${activeGroup?.title || ""} (${levelLabel[effectiveLevel].toLowerCase()})`}>
             <div style={{ height: "320px" }}>
               <Scatter
                 data={{
@@ -1525,7 +1533,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
             </div>
           </Card>
 
-          <Card title={`ACP — ${levelLabel[pcaLevel]}s · ${activeGroup?.title || ""} (cercle des corrélations)`}>
+          <Card title={`ACP — ${levelLabel[effectiveLevel]}s · ${activeGroup?.title || ""} (cercle des corrélations)`}>
             <div style={{ height: "320px" }}>
               <Scatter
                 data={{
