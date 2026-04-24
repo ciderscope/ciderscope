@@ -199,30 +199,32 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
         </div>
 
         {/* Sub-criteria — jury-driven */}
-        <div className="scale-subcriteria">
-          {activeSubs.map(label => {
-            const subVal = typeof valObj[label] === "number" ? valObj[label] : mainValue;
-            return (
-              <div key={label} className="scale-subcriterion">
-                <span className="scale-sub-label">{label}</span>
-                <div className="scale-track scale-track-sub">
-                  <span style={{ ...monoStyle, minWidth: "20px" }}>{mn}</span>
-                  <input
-                    type="range"
-                    min={mn}
-                    max={mx}
-                    value={subVal}
-                    onChange={(e) => updateSub(label, parseInt(e.target.value))}
-                    style={{ cursor: "pointer" }}
-                  />
-                  <span style={{ ...monoStyle, minWidth: "20px" }}>{mx}</span>
-                  <span className="scale-value scale-value-sub">{subVal}</span>
+        {activeSubs.length > 0 && (
+          <div className="scale-subcriteria">
+            {activeSubs.map(label => {
+              const subVal = typeof valObj[label] === "number" ? valObj[label] : mainValue;
+              return (
+                <div key={label} className="scale-subcriterion">
+                  <span className="scale-sub-label">{label}</span>
+                  <div className="scale-track scale-track-sub">
+                    <span style={{ ...monoStyle, minWidth: "20px" }}>{mn}</span>
+                    <input
+                      type="range"
+                      min={mn}
+                      max={mx}
+                      value={subVal}
+                      onChange={(e) => updateSub(label, parseInt(e.target.value))}
+                      style={{ cursor: "pointer" }}
+                    />
+                    <span style={{ ...monoStyle, minWidth: "20px" }}>{mx}</span>
+                    <span className="scale-value scale-value-sub">{subVal}</span>
+                  </div>
+                  <button className="scale-sub-remove" onClick={() => removeSub(label)} type="button" title="Retirer">×</button>
                 </div>
-                <button className="scale-sub-remove" onClick={() => removeSub(label)} type="button" title="Retirer">×</button>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -261,11 +263,24 @@ function normalizeRadarNode(raw: unknown, axis: RadarAxis, defaults: RadarDefaul
   const childAxes = axis.children && axis.children.length > 0
     ? axis.children
     : (axis.subCriteria || []).map(l => ({ label: l } as RadarAxis));
-  if (childAxes.length > 0) {
-    const childMap: Record<string, RadarNodeAnswer> = {};
-    for (const c of childAxes) {
-      childMap[c.label] = normalizeRadarNode(childrenRaw[c.label], c, defaults, depth + 1);
+  const knownLabels = new Set(childAxes.map(c => c.label));
+  const childMap: Record<string, RadarNodeAnswer> = {};
+  for (const c of childAxes) {
+    childMap[c.label] = normalizeRadarNode(childrenRaw[c.label], c, defaults, depth + 1);
+  }
+  // Préserver les enfants ajoutés librement par l'utilisateur (termes personnalisés).
+  for (const k of Object.keys(childrenRaw)) {
+    if (knownLabels.has(k)) continue;
+    const raw = childrenRaw[k];
+    if (typeof raw === "object" && raw !== null) {
+      const obj = raw as Record<string, unknown>;
+      const v = typeof obj._ === "number" ? obj._ : defaults.child;
+      childMap[k] = { _: v };
+    } else if (typeof raw === "number") {
+      childMap[k] = { _: raw };
     }
+  }
+  if (Object.keys(childMap).length > 0) {
     out.children = childMap;
   }
   return out;
@@ -313,8 +328,7 @@ function setNodeAtPath(
       return clampNodeTree({ ...node, _: newValue }, newValue);
     }
     const [h, ...t] = remaining;
-    const child = node.children?.[h];
-    if (!child) return node;
+    const child = node.children?.[h] ?? { _: 0 };
 
     const updatedChild = updateNode(child, t);
     // Upward propagation : la valeur du parent doit être AU MOINS égale à celle de l'enfant (uniquement si augmentation).
@@ -482,8 +496,10 @@ function RadarSVG({ axes, values, max, onChange }: {
 }
 
 // Nœud récursif : slider + bouton d'expansion vers ses enfants.
+// `pathPrefix` permet d'insérer des segments de chemin cachés (aplatissement famille→classe unique).
 function RadarTreeNode({
   axis, nodeAnswer, min, max, path, expandedPaths, togglePath, setPathValue, highlightKey,
+  customChildren, onAddCustomChild,
 }: {
   axis: RadarAxis;
   nodeAnswer: RadarNodeAnswer;
@@ -494,12 +510,33 @@ function RadarTreeNode({
   togglePath: (key: string) => void;
   setPathValue: (path: string[], v: number) => void;
   highlightKey: string | null;
+  customChildren: Record<string, string[]>;
+  onAddCustomChild: (pathKey: string, label: string) => void;
 }) {
   const pathKey = path.join("/");
-  const hasChildren = !!axis.children && axis.children.length > 0;
+
+  // Aplatissement : si l'axe possède exactement une classe-fille qui a elle-même des descripteurs,
+  // on masque ce niveau intermédiaire en affichant directement les descripteurs (le path de données
+  // reste à 3 niveaux : famille → classe cachée → descripteur).
+  const singleClass = axis.children && axis.children.length === 1
+    && axis.children[0].children && axis.children[0].children.length > 0
+    ? axis.children[0]
+    : null;
+
+  const displayChildren: Array<{ child: RadarAxis; hiddenMid: string | null }> =
+    singleClass
+      ? singleClass.children!.map(d => ({ child: d, hiddenMid: singleClass.label }))
+      : (axis.children || []).map(c => ({ child: c, hiddenMid: null }));
+
+  const hasDisplayChildren = displayChildren.length > 0;
   const expanded = expandedPaths.has(pathKey);
   const v = nodeAnswer._;
   const isHighlight = highlightKey === pathKey;
+
+  // Une "classe" pour l'UI = un nœud dont les enfants affichés sont des feuilles.
+  // (Cas standard : profondeur 2. Cas aplati : profondeur 1 avec classe unique masquée.)
+  const childrenAreLeaves = hasDisplayChildren && displayChildren.every(d => !d.child.children || d.child.children.length === 0);
+  const customForHere = customChildren[pathKey] || [];
 
   return (
     <div className={`radar-tree-node depth-${path.length - 1}${isHighlight ? " highlight" : ""}`} data-path={pathKey}>
@@ -513,7 +550,7 @@ function RadarTreeNode({
           onChange={(e) => setPathValue(path, parseInt(e.target.value))}
         />
         <span className="radar-tree-val">{v}</span>
-        {hasChildren ? (
+        {hasDisplayChildren ? (
           <button
             type="button"
             className="radar-tree-toggle"
@@ -527,11 +564,12 @@ function RadarTreeNode({
           <span className="radar-tree-toggle placeholder" aria-hidden="true" />
         )}
       </div>
-      {expanded && hasChildren && (
+      {expanded && hasDisplayChildren && (
         <div className="radar-tree-children">
-          {axis.children!.map(child => {
-            // Enfants (classes, mots) : valeur par défaut = min (0) ; always visible quand le parent est déplié.
-            const childAnswer = nodeAnswer.children?.[child.label] ?? { _: min };
+          {displayChildren.map(({ child, hiddenMid }) => {
+            const midNode = hiddenMid ? nodeAnswer.children?.[hiddenMid] : nodeAnswer;
+            const childAnswer = midNode?.children?.[child.label] ?? { _: min };
+            const childPath = hiddenMid ? [...path, hiddenMid, child.label] : [...path, child.label];
             return (
               <RadarTreeNode
                 key={child.label}
@@ -539,26 +577,83 @@ function RadarTreeNode({
                 nodeAnswer={childAnswer}
                 min={min}
                 max={max}
-                path={[...path, child.label]}
+                path={childPath}
                 expandedPaths={expandedPaths}
                 togglePath={togglePath}
                 setPathValue={setPathValue}
                 highlightKey={highlightKey}
+                customChildren={customChildren}
+                onAddCustomChild={onAddCustomChild}
               />
             );
           })}
+          {childrenAreLeaves && customForHere.map(label => {
+            // Les termes personnalisés sont stockés sous le chemin réel (via la classe cachée si présent).
+            const realParentPath = singleClass ? [...path, singleClass.label] : path;
+            const midNode = singleClass ? nodeAnswer.children?.[singleClass.label] : nodeAnswer;
+            const childAnswer = midNode?.children?.[label] ?? { _: min };
+            return (
+              <div key={`custom:${label}`} className="radar-tree-node depth-custom">
+                <div className="radar-tree-row">
+                  <span className="radar-tree-label radar-tree-label-custom">{label}</span>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    value={childAnswer._}
+                    onChange={(e) => setPathValue([...realParentPath, label], parseInt(e.target.value))}
+                  />
+                  <span className="radar-tree-val">{childAnswer._}</span>
+                  <span className="radar-tree-toggle placeholder" aria-hidden="true" />
+                </div>
+              </div>
+            );
+          })}
+          {childrenAreLeaves && (
+            <CustomDescriptorAdder onAdd={(label) => onAddCustomChild(pathKey, label)} />
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function RadarGroupBlock({ group, min, max, answer, onChange }: {
+function CustomDescriptorAdder({ onAdd }: { onAdd: (label: string) => void }) {
+  const [val, setVal] = useState("");
+  const submit = () => {
+    const t = val.trim();
+    if (!t) return;
+    onAdd(t);
+    setVal("");
+  };
+  return (
+    <div className="radar-tree-custom-add">
+      <input
+        type="text"
+        className="radar-tree-custom-input"
+        placeholder="Ajouter un terme…"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+      />
+      <button
+        type="button"
+        className="radar-tree-custom-btn"
+        onClick={submit}
+        disabled={!val.trim()}
+        aria-label="Ajouter"
+      ><FiPlus size={12} /></button>
+    </div>
+  );
+}
+
+function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched }: {
   group: { title: string; axes: RadarAxis[] };
   min: number;
   max: number;
   answer: RadarAnswer;
   onChange: (next: RadarAnswer) => void;
+  markFamilyTouched: (label: string) => void;
 }) {
   const familyDefault = Math.round((min + max) / 2);
   const values = group.axes.map(a => answer[a.label]?._ ?? familyDefault);
@@ -568,7 +663,29 @@ function RadarGroupBlock({ group, min, max, answer, onChange }: {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  // Descripteurs personnalisés ajoutés par le jury, indexés par pathKey du parent affiché.
+  const [customChildren, setCustomChildren] = useState<Record<string, string[]>>({});
   const blockRef = useRef<HTMLDivElement>(null);
+
+  const addCustomChild = (parentPathKey: string, label: string) => {
+    setCustomChildren(prev => {
+      const existing = prev[parentPathKey] || [];
+      if (existing.includes(label)) return prev;
+      return { ...prev, [parentPathKey]: [...existing, label] };
+    });
+    // Initialise la valeur à 0 dans l'arbre de réponses via le chemin réel
+    // (si la famille n'a qu'une seule classe, on passe par la classe cachée).
+    const segments = parentPathKey.split("/");
+    const [familyLabel] = segments;
+    const familyAxis = group.axes.find(a => a.label === familyLabel);
+    const hiddenMid = familyAxis && familyAxis.children && familyAxis.children.length === 1 && familyAxis.children[0].children && familyAxis.children[0].children.length > 0
+      ? familyAxis.children[0].label
+      : null;
+    const realPath = hiddenMid && segments.length === 1
+      ? [...segments, hiddenMid, label]
+      : [...segments, label];
+    onChange(setNodeAtPath(answer, realPath, 0));
+  };
 
   // Accordion : à chaque niveau, un seul frère peut être déplié à la fois.
   // Ouvrir un nœud ferme le frère (et tous ses descendants) ; les valeurs restent inchangées.
@@ -602,10 +719,12 @@ function RadarGroupBlock({ group, min, max, answer, onChange }: {
   };
 
   const setPathValue = (path: string[], v: number) => {
+    if (path[0]) markFamilyTouched(path[0]);
     onChange(setNodeAtPath(answer, path, v));
   };
 
   const setAxis = (i: number, v: number) => {
+    markFamilyTouched(group.axes[i].label);
     onChange(setNodeAtPath(answer, [group.axes[i].label], v));
   };
 
@@ -728,6 +847,8 @@ function RadarGroupBlock({ group, min, max, answer, onChange }: {
                   togglePath={togglePath}
                   setPathValue={setPathValue}
                   highlightKey={highlightKey}
+                  customChildren={customChildren}
+                  onAddCustomChild={addCustomChild}
                 />
               );
             })
@@ -745,6 +866,15 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
   const allAxes = useMemo(() => groups.flatMap(g => g.axes), [groups]);
 
   const [mode, setMode] = useState<"radar" | "sliders">("radar");
+  const [touchedFamilies, setTouchedFamilies] = useState<Set<string>>(new Set());
+  const markFamilyTouched = (label: string) => {
+    setTouchedFamilies(prev => {
+      if (prev.has(label)) return prev;
+      const next = new Set(prev);
+      next.add(label);
+      return next;
+    });
+  };
 
   // Familles = valeur médiane (5 pour 0-10) → toujours visibles au départ.
   // Classes / mots = 0 → visibles dès que la famille parente est dépliée.
@@ -762,6 +892,10 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Familles non touchées = curseurs jamais bougés par le jury (la valeur par défaut
+  // peut ne pas refléter son ressenti réel, notamment si l'intensité est en fait nulle).
+  const untouchedFamilies = allAxes.map(a => a.label).filter(l => !touchedFamilies.has(l));
 
   return (
     <div className="q-block">
@@ -791,6 +925,7 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
               max={mx}
               answer={answer}
               onChange={onChange}
+              markFamilyTouched={markFamilyTouched}
             />
           ))}
         </div>
@@ -808,6 +943,7 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
                       type="range" min={mn} max={mx} value={a._}
                       onChange={(e) => {
                         const v = parseInt(e.target.value);
+                        markFamilyTouched(ax.label);
                         onChange(setNodeAtPath(answer, [ax.label], v));
                       }}
                     />
@@ -817,6 +953,18 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
               })}
             </div>
           ))}
+        </div>
+      )}
+
+      {untouchedFamilies.length > 0 && (
+        <div className="radar-untouched-warn" role="status">
+          <strong>⚠ Curseurs non déplacés :</strong> pensez à vérifier{" "}
+          {untouchedFamilies.map((f, i) => (
+            <span key={f}>
+              <em>{f}</em>{i < untouchedFamilies.length - 1 ? ", " : ""}
+            </span>
+          ))}
+          {" "}— déplacez-les au moins une fois (y compris à 0 si l&apos;intensité est nulle).
         </div>
       )}
     </div>

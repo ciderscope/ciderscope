@@ -50,8 +50,8 @@ const axes: RadarAxis[] = [
   {
     label: "Fruit",
     children: [
-      { label: "Fruit rouge", children: leaves(["Cassis", "Cerise", "Figue", "Fraise", "Framboise", "Fruit mûr", "Fruit noir", "Groseille", "Mûre", "Myrtille", "Raisin"]) },
-      { label: "Fruit blanc/jaune", children: leaves(["Abricot", "Fruit à noyau", "Fruit blanc", "Fruit jaune", "Melon", "Pêche", "Poire", "Pomme", "Prune", "Raisin"]) },
+      { label: "Fruit rouge", children: leaves(["Cassis", "Cerise", "Figue", "Fraise", "Framboise", "Fruit mûr", "Fruit noir", "Groseille", "Mûre", "Myrtille"]) },
+      { label: "Fruit blanc/jaune", children: leaves(["Abricot", "Coing", "Fruit à noyau", "Fruit blanc", "Fruit jaune", "Melon", "Pêche", "Poire", "Pomme", "Prune", "Raisin"]) },
       { label: "Agrume", children: leaves(["Citron", "Citron vert", "Orange", "Pamplemousse"]) },
       { label: "Fruit tropical", children: leaves(["Ananas", "Fruit de la passion", "Litchi", "Mangue", "Noix de coco"]) },
       { label: "Amylique", children: leaves(["Banane", "Bonbon anglais"]) },

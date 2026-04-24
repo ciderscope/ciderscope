@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card } from "../ui/Card";
 import { ScrollableTabs } from "../ui/ScrollableTabs";
 import { Radar, Bar, Scatter } from "react-chartjs-2";
@@ -1331,11 +1331,27 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     return { crit, ok: true as const, fProd, pProd };
   });
 
-  // ACP (Global sur tous les critères renseignés)
-  const populatedCriteria = criteria.filter(c => products.some(p => avg(p.code, c) > 0));
-  const pcaMatrix = products.map(p => populatedCriteria.map(c => avg(p.code, c)));
-  const canPca = products.length >= 3 && populatedCriteria.length >= 2;
+  // ACP — niveau sélectionné (famille / classe / descripteur)
+  type PcaLevel = "famille" | "classe" | "descripteur";
+  const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
+  const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
+  const levelLabel: Record<PcaLevel, string> = {
+    famille: "Famille",
+    classe: "Classe",
+    descripteur: "Descripteur",
+  };
+  const depthOf = (c: string) => c.split(" > ").length;
+  const pcaCriteria = criteria
+    .filter(c => depthOf(c) === levelDepth[pcaLevel])
+    .filter(c => products.some(p => avg(p.code, c) > 0));
+  const pcaMatrix = products.map(p => pcaCriteria.map(c => avg(p.code, c)));
+  const canPca = products.length >= 3 && pcaCriteria.length >= 2;
   const pcaRes = canPca ? pca2D(pcaMatrix) : null;
+
+  // Bornes symétriques pour normaliser les axes de la carte produits
+  const scoreBound = pcaRes
+    ? Math.max(0.5, ...pcaRes.scores.flatMap(s => [Math.abs(s[0]), Math.abs(s[1] ?? 0)])) * 1.1
+    : 1;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -1422,9 +1438,36 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
         </table>
       </Card>
 
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
+          Niveau ACP
+        </span>
+        <div className="pca-level-switch">
+          {(["famille", "classe", "descripteur"] as const).map(lv => (
+            <button
+              key={lv}
+              type="button"
+              className={`pca-level-btn ${pcaLevel === lv ? "active" : ""}`}
+              onClick={() => setPcaLevel(lv)}
+            >
+              {levelLabel[lv]}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize: "11px", color: "var(--mid)" }}>
+          {pcaCriteria.length} {levelLabel[pcaLevel].toLowerCase()}{pcaCriteria.length > 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {!pcaRes && (
+        <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+          Pas assez de données au niveau « {levelLabel[pcaLevel].toLowerCase()} » pour calculer l&apos;ACP (il faut au moins 3 produits et 2 critères renseignés).
+        </div>
+      )}
+
       {pcaRes && (
         <div className="grid2">
-          <Card title="ACP — Carte des produits">
+          <Card title={`ACP — Carte des produits (${levelLabel[pcaLevel].toLowerCase()})`}>
             <div style={{ height: "320px" }}>
               <Scatter
                 data={{
@@ -1440,8 +1483,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
                 options={{
                   responsive: true, maintainAspectRatio: false,
                   scales: {
-                    x: { title: { display: true, text: `CP1 (${(pcaRes.explained[0]*100).toFixed(1)}%)` } },
-                    y: { title: { display: true, text: `CP2 (${((pcaRes.explained[1]||0)*100).toFixed(1)}%)` } },
+                    x: { title: { display: true, text: `CP1 (${(pcaRes.explained[0]*100).toFixed(1)}%)` }, min: -scoreBound, max: scoreBound },
+                    y: { title: { display: true, text: `CP2 (${((pcaRes.explained[1]||0)*100).toFixed(1)}%)` }, min: -scoreBound, max: scoreBound },
                   },
                   plugins: {
                     legend: { display: true, position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
@@ -1458,7 +1501,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
             </div>
           </Card>
 
-          <Card title="ACP — Descripteurs (cercle des corrélations)">
+          <Card title={`ACP — ${levelLabel[pcaLevel]}s (cercle des corrélations)`}>
             <div style={{ height: "320px" }}>
               <Scatter
                 data={{
@@ -1477,21 +1520,29 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
                       showLine: true,
                       fill: false,
                     },
-                    // Une flèche (ligne) par descripteur : (0,0) → (loading[0], loading[1])
-                    ...populatedCriteria.map((c, i) => ({
-                      label: c.split(" > ").pop() as string,
-                      data: [
-                        { x: 0, y: 0 },
-                        { x: pcaRes.loadings[i][0], y: pcaRes.loadings[i][1] },
-                      ],
-                      borderColor: COLORS[i % 8],
-                      backgroundColor: COLORS[i % 8],
-                      borderWidth: 2,
-                      pointRadius: [0, 4],
-                      pointHoverRadius: [0, 7],
-                      showLine: true,
-                      fill: false,
-                    })),
+                    // Flèche fine (ligne + pointe triangulaire) par critère : (0,0) → (loading[0], loading[1])
+                    ...pcaCriteria.map((c, i) => {
+                      const lx = pcaRes.loadings[i][0];
+                      const ly = pcaRes.loadings[i][1];
+                      // Rotation du triangle (par défaut orienté vers le haut) pour suivre le vecteur
+                      const rot = Math.atan2(lx, ly) * 180 / Math.PI;
+                      return {
+                        label: c.split(" > ").pop() as string,
+                        data: [
+                          { x: 0, y: 0 },
+                          { x: lx, y: ly },
+                        ],
+                        borderColor: COLORS[i % 8],
+                        backgroundColor: COLORS[i % 8],
+                        borderWidth: 1,
+                        pointStyle: ["circle", "triangle"] as Array<"circle" | "triangle">,
+                        pointRadius: [0, 5],
+                        pointHoverRadius: [0, 8],
+                        pointRotation: [0, rot],
+                        showLine: true,
+                        fill: false,
+                      };
+                    }),
                   ],
                 }}
                 options={{
@@ -1523,7 +1574,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
               />
             </div>
             <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "10px" }}>
-              Longueur de la flèche ≈ importance du descripteur sur le plan CP1-CP2 ; direction ≈ corrélation entre descripteurs.
+              Longueur de la flèche ≈ importance du critère sur le plan CP1-CP2 ; direction ≈ corrélation entre critères.
             </div>
           </Card>
         </div>
