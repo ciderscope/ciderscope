@@ -15,10 +15,10 @@ const NAV = [
 export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarProps) => (
   <div className="topbar">
     <div className="topbar-logo">
-      <img src="/Logo.jpg" alt="Logo" style={{ height: "24px", marginRight: "8px", borderRadius: "4px" }} />
+      <img src="/assets/logo.png" alt="IFPC" />
       <span className="topbar-logo-ifpc">IFPC</span>
-      <span className="topbar-logo-sep">/</span>
-      Cider<span>Scope</span>
+      <span className="topbar-logo-sep">·</span>
+      <span>CiderScope</span>
     </div>
     <div className="topbar-sep"></div>
     <span className={`topbar-conn ${online ? "on" : "off"}`}>
@@ -31,7 +31,7 @@ export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarP
           className={`topbar-navbtn ${mode === id ? "active" : ""}`}
           onClick={() => onModeChange(id)}
         >
-          <Icon size={13} />
+          <Icon size={14} />
           <span>{label}</span>
         </button>
       ))}
@@ -41,7 +41,7 @@ export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarP
           onClick={onLogout}
           title="Se déconnecter"
         >
-          <FiLogOut size={13} />
+          <FiLogOut size={14} />
           <span>Déconnexion</span>
         </button>
       )}

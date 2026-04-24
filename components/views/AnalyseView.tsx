@@ -400,7 +400,7 @@ export const AnalyseView = ({
       <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "20px", flexWrap: "wrap" }}>
         <h2 style={{ fontWeight: 800, fontSize: "clamp(17px,2.5vw,22px)" }}>Analyse</h2>
         <div style={{ flex: 1 }} />
-        <label style={{ fontFamily: "DM Mono, monospace", fontSize: "11px", color: "var(--mid)" }}>Séance :</label>
+        <label style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: "11px", color: "var(--mid)" }}>Séance :</label>
         <select
           value={anSessId || ""}
           onChange={(e) => onAnSessChange(e.target.value)}
@@ -516,7 +516,7 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
           const products = [...new Set(rows.map(r => r.produit))];
           return (
             <Card key={q.id} title={q.label}>
-              <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px", fontFamily: "'DM Mono', monospace" }}>
+              <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
                 Moyenne par échantillon
               </div>
               <table className="data-table">
@@ -552,7 +552,7 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
         const s = stats(vals);
         return (
           <Card key={q.id} title={q.label}>
-            <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px", fontFamily: "'DM Mono', monospace" }}>
+            <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
               Moyenne sur l&apos;ensemble du questionnaire
             </div>
             <div style={{ display: "flex", gap: "28px", alignItems: "baseline", flexWrap: "wrap" }}>
@@ -703,7 +703,7 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
                   <tbody>
                     {sortedByMean.map(p => (
                       <tr key={p}>
-                        <td style={{ fontFamily: "DM Mono, monospace" }}>{p}</td>
+                        <td style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{p}</td>
                         <td className="num">{rankMeans[p].toFixed(2)}</td>
                         {pValue < 0.05 && <td style={{ textAlign: "center", fontWeight: 700, color: "var(--accent)" }}>{cld[p]}</td>}
                       </tr>
@@ -1048,7 +1048,7 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
                       return (
                         <tr key={i}>
                           <td>{r.jury}</td>
-                          <td style={{ fontFamily: "DM Mono, monospace", fontSize: "11px" }}>
+                          <td style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: "11px" }}>
                             {typeof r.valeur === "string" && r.valeur.length > 30
                               ? r.valeur.slice(0, 30) + "…"
                               : r.valeur}
@@ -1453,7 +1453,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
         {groups.length > 1 && (
           <>
-            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
+            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'JetBrains Mono', ui-monospace, monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
               Toile ACP
             </span>
             <select
@@ -1469,7 +1469,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
         )}
         {!isFlatGroup && (
           <>
-            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
+            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'JetBrains Mono', ui-monospace, monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
               Niveau ACP
             </span>
             <div className="pca-level-switch">

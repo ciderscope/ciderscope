@@ -322,7 +322,7 @@ export const AdminView = ({
                         const nl = [...editCfg.products]; nl[i].code = e.target.value;
                         onSetEditCfg({ ...editCfg, products: nl });
                       }}
-                      style={{ width: "90px", border: "1px solid var(--border)", borderRadius: "7px", padding: "7px", fontFamily: "DM Mono, monospace", fontSize: "13px" }}
+                      style={{ width: "90px", border: "1px solid var(--border)", borderRadius: "7px", padding: "7px", fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: "13px" }}
                     />
                     <input
                       value={p.label || ""}
@@ -885,7 +885,7 @@ function SeuilBetBuilder({ levels, onChange }: {
                   newCodes[j] = e.target.value.trim().toUpperCase();
                   updateLevel(i, { codes: newCodes });
                 }}
-                style={{ width: "80px", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "13px", fontFamily: "DM Mono, monospace", textAlign: "center" }}
+                style={{ width: "80px", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "13px", fontFamily: "'JetBrains Mono', ui-monospace, monospace", textAlign: "center" }}
               />
             ))}
             <span style={{ fontSize: "11px", color: "var(--mid)", marginLeft: "6px" }}>différent :</span>

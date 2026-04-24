@@ -178,7 +178,7 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
     onChange(next);
   };
 
-  const monoStyle: React.CSSProperties = { fontSize: "11px", color: "var(--mid)", fontFamily: "DM Mono, monospace" };
+  const monoStyle: React.CSSProperties = { fontSize: "11px", color: "var(--mid)", fontFamily: "'JetBrains Mono', ui-monospace, monospace" };
 
   return (
     <div className="q-block">
