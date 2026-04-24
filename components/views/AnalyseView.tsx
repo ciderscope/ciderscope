@@ -1403,29 +1403,29 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
         })}
       </div>
 
-      <div className="grid2">
-        <Card title="Significativité des descripteurs (ANOVA)">
-          <table className="data-table" style={{ fontSize: "12px" }}>
-            <thead>
-              <tr><th>Descripteur</th><th>F-produit</th><th>p-value</th></tr>
-            </thead>
-            <tbody>
-              {anovaRows.filter(r => r.ok).map(r => (
-                <tr key={r.crit}>
-                  <td>{r.crit}</td>
-                  <td className="num">{r.fProd.toFixed(2)}</td>
-                  <td className="num" style={{ fontWeight: r.pProd < 0.05 ? 700 : 400, color: r.pProd < 0.05 ? "#1a6b3a" : "inherit" }}>
-                    {r.pProd < 0.001 ? "< 0,001" : r.pProd.toFixed(3)} {r.pProd < 0.05 ? "*" : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+      <Card title="Significativité des descripteurs (ANOVA)">
+        <table className="data-table" style={{ fontSize: "12px" }}>
+          <thead>
+            <tr><th>Descripteur</th><th>F-produit</th><th>p-value</th></tr>
+          </thead>
+          <tbody>
+            {anovaRows.filter(r => r.ok).map(r => (
+              <tr key={r.crit}>
+                <td>{r.crit}</td>
+                <td className="num">{r.fProd.toFixed(2)}</td>
+                <td className="num" style={{ fontWeight: r.pProd < 0.05 ? 700 : 400, color: r.pProd < 0.05 ? "#1a6b3a" : "inherit" }}>
+                  {r.pProd < 0.001 ? "< 0,001" : r.pProd.toFixed(3)} {r.pProd < 0.05 ? "*" : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
 
-        {pcaRes && (
+      {pcaRes && (
+        <div className="grid2">
           <Card title="ACP — Carte des produits">
-            <div style={{ height: "300px" }}>
+            <div style={{ height: "320px" }}>
               <Scatter
                 data={{
                   datasets: products.map((p, i) => ({
@@ -1457,8 +1457,77 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
               CP1+CP2 : {((pcaRes.explained[0] + (pcaRes.explained[1]||0))*100).toFixed(1)}% de variance expliquée.
             </div>
           </Card>
-        )}
-      </div>
+
+          <Card title="ACP — Descripteurs (cercle des corrélations)">
+            <div style={{ height: "320px" }}>
+              <Scatter
+                data={{
+                  datasets: [
+                    // Cercle unité
+                    {
+                      label: "_circle",
+                      data: Array.from({ length: 65 }, (_, k) => {
+                        const a = (k / 64) * 2 * Math.PI;
+                        return { x: Math.cos(a), y: Math.sin(a) };
+                      }),
+                      borderColor: "rgba(120,120,120,0.35)",
+                      borderWidth: 1,
+                      borderDash: [3, 3],
+                      pointRadius: 0,
+                      showLine: true,
+                      fill: false,
+                    },
+                    // Une flèche (ligne) par descripteur : (0,0) → (loading[0], loading[1])
+                    ...populatedCriteria.map((c, i) => ({
+                      label: c.split(" > ").pop() as string,
+                      data: [
+                        { x: 0, y: 0 },
+                        { x: pcaRes.loadings[i][0], y: pcaRes.loadings[i][1] },
+                      ],
+                      borderColor: COLORS[i % 8],
+                      backgroundColor: COLORS[i % 8],
+                      borderWidth: 2,
+                      pointRadius: [0, 4],
+                      pointHoverRadius: [0, 7],
+                      showLine: true,
+                      fill: false,
+                    })),
+                  ],
+                }}
+                options={{
+                  responsive: true, maintainAspectRatio: false,
+                  scales: {
+                    x: { title: { display: true, text: `CP1 (${(pcaRes.explained[0]*100).toFixed(1)}%)` }, min: -1.1, max: 1.1 },
+                    y: { title: { display: true, text: `CP2 (${((pcaRes.explained[1]||0)*100).toFixed(1)}%)` }, min: -1.1, max: 1.1 },
+                  },
+                  plugins: {
+                    legend: {
+                      display: true, position: "bottom",
+                      labels: {
+                        boxWidth: 12, font: { size: 10 },
+                        filter: (item) => item.text !== "_circle",
+                      },
+                    },
+                    tooltip: {
+                      filter: (ctx) => ctx.dataset.label !== "_circle" && ctx.dataIndex === 1,
+                      callbacks: {
+                        label: (ctx: TooltipItem<"scatter">) => {
+                          const d = ctx.raw as { x: number; y: number };
+                          const r = Math.sqrt(d.x * d.x + d.y * d.y);
+                          return `${ctx.dataset.label}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)}) · r=${r.toFixed(2)}`;
+                        }
+                      }
+                    }
+                  }
+                }}
+              />
+            </div>
+            <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "10px" }}>
+              Longueur de la flèche ≈ importance du descripteur sur le plan CP1-CP2 ; direction ≈ corrélation entre descripteurs.
+            </div>
+          </Card>
+        </div>
+      )}
 
       <Card title="Performance du jury">
         <table className="data-table" style={{ fontSize: "12px" }}>
