@@ -805,6 +805,25 @@ textarea.q-text:focus { border-color: var(--accent); }
 .q-fields .field-wrap.full { grid-column: 1 / -1; }
 .q-type-body { padding: 17px; background: var(--paper); border-top: 1px solid var(--border); }
 
+.q-scope-btn {
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--paper);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .12s;
+  min-height: 36px;
+}
+.q-scope-btn:hover { border-color: rgba(30,46,46,.35); }
+.q-scope-btn.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
 .admin-chip {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 8px 15px;
@@ -899,8 +918,21 @@ textarea.q-text:focus { border-color: var(--accent); }
    ANALYSE — tableaux stats, graphiques
    ══════════════════════════════════════════ */
 .analyse-shell { max-width: min(95%, 2200px); margin: 0 auto; padding: 24px; }
+.analyse-radar-wrap {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 460px;
+  max-height: 60vh;
+  margin: 0 auto;
+  position: relative;
+}
+.analyse-radar-wrap > canvas {
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid2 > * { min-width: 0; }
 
 .stat-card { background: var(--paper2); border-radius: 8px; padding: 17px 20px; }
 .stat-val   { font-weight: 800; font-size: 30px; color: var(--accent); }

@@ -1561,6 +1561,31 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
             </div>
           </div>
 
+          {/* Affichage (scope) : pour qcm / texte / échelle */}
+          {(q.type === "qcm" || q.type === "text" || q.type === "scale") && (
+            <div className="q-fields">
+              <div className="field-wrap full">
+                <label>AFFICHAGE</label>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className={`q-scope-btn ${q.scope === "per-product" ? "active" : ""}`}
+                    onClick={() => onUpdate({ scope: "per-product" })}
+                  >
+                    Pour chaque échantillon
+                  </button>
+                  <button
+                    type="button"
+                    className={`q-scope-btn ${q.scope !== "per-product" ? "active" : ""}`}
+                    onClick={() => onUpdate({ scope: "global" })}
+                  >
+                    Question seule (une fois)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Type-specific UI */}
           <div className="q-type-body">
 

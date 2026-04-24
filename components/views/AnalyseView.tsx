@@ -348,7 +348,7 @@ function computeTabs(anCfg: SessionConfig | null): Tab[] {
   const qs: Question[] = anCfg.questions || [];
   const tabs: Tab[] = [];
 
-  if (qs.some(q => q.type === "scale")) tabs.push({ id: "profil", label: "Profil" });
+  if (qs.some(q => q.type === "scale")) tabs.push({ id: "profil", label: "Échelle" });
 
   if (qs.some(q => q.type === "radar")) tabs.push({ id: "radar", label: "Toile d'araignée" });
 
@@ -470,267 +470,108 @@ export const AnalyseView = ({
   );
 };
 
-// ─── Profil (échelles) ────────────────────────────────────────────────────────
+// ─── Échelle (moyennes des questions de type scale) ─────────────────────────
 
 function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[] }) {
-  void config;
-  const scaleData = data.filter(r => r.type === "scale" && r.valeur !== "" && r.valeur != null);
-  const products = [...new Set(scaleData.map(r => r.produit))] as string[];
-  const criteria = [...new Set(scaleData.map(r => r.question))] as string[];
-  const jurors = [...new Set(scaleData.map(r => r.jury))] as string[];
-
-  if (scaleData.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée d&apos;échelle disponible.</div>;
+  // On ne garde que les questions définies comme "scale" dans la config
+  // (les axes de la toile sont exclus : ils ont type="scale" dans le CSV mais proviennent de questions "radar").
+  const scaleQuestions = (config.questions || []).filter(q => q.type === "scale");
+  if (scaleQuestions.length === 0) {
+    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune question d&apos;échelle dans cette séance.</div>;
   }
 
-  // Cellule (jury, produit, critère) → note (moyenne si doublons)
-  const getNote = (jury: string, prod: string, crit: string): number | null => {
-    const vals = scaleData
-      .filter(r => r.jury === jury && r.produit === prod && r.question === crit)
-      .map(r => parseFloat(r.valeur))
-      .filter(v => !isNaN(v));
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  const scaleLabels = new Set(scaleQuestions.map(q => q.label));
+  const scaleData = data.filter(r =>
+    r.type === "scale" && scaleLabels.has(r.question) && r.valeur !== "" && r.valeur != null
+  );
+
+  if (scaleData.length === 0) {
+    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune réponse d&apos;échelle disponible.</div>;
+  }
+
+  const stats = (vals: number[]) => {
+    if (vals.length === 0) return { n: 0, mean: null as number | null, sd: null as number | null };
+    const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const sd = vals.length > 1
+      ? Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / (vals.length - 1))
+      : null;
+    return { n: vals.length, mean: m, sd };
   };
 
-  const avg = (prod: string, crit: string) => {
-    const vals = scaleData.filter(r => r.produit === prod && r.question === crit).map(r => parseFloat(r.valeur));
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-  };
-
-  const radarData = {
-    labels: criteria,
-    datasets: products.map((p, i) => ({
-      label: p,
-      data: criteria.map(c => avg(p, c)),
-      borderColor: COLORS[i % 8],
-      backgroundColor: COLORS[i % 8] + "22",
-      pointBackgroundColor: COLORS[i % 8],
-    }))
-  };
-
-  // ─── ANOVA à deux facteurs (produit × jury) sans répétition, par critère ───
-  // Modèle additif : y_ij = μ + α_i (produit) + β_j (jury) + ε_ij
-  // SS_tot = SS_prod + SS_jury + SS_err
-  // df_prod = p-1, df_jury = j-1, df_err = (p-1)(j-1)
-  const anovaRows = criteria.map(crit => {
-    const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p, crit)));
-    const flat = mat.flat().filter((v): v is number => v !== null);
-    const p = products.length;
-    const jN = jurors.length;
-    if (flat.length < p * jN || p < 2 || jN < 2) {
-      return { crit, ok: false as const, reason: "Données incomplètes" };
-    }
-    const grand = flat.reduce((a, b) => a + b, 0) / flat.length;
-    const prodMeans = mat.map(row => {
-      const v = row.filter((x): x is number => x !== null);
-      return v.reduce((a, b) => a + b, 0) / v.length;
-    });
-    const juryMeans = jurors.map((_, jIdx) => {
-      const col = mat.map(row => row[jIdx]).filter((x): x is number => x !== null);
-      return col.reduce((a, b) => a + b, 0) / col.length;
-    });
-    let ssProd = 0, ssJury = 0, ssTot = 0;
-    for (let i = 0; i < p; i++) ssProd += jN * (prodMeans[i] - grand) ** 2;
-    for (let j = 0; j < jN; j++) ssJury += p * (juryMeans[j] - grand) ** 2;
-    for (let i = 0; i < p; i++) {
-      for (let j = 0; j < jN; j++) {
-        const v = mat[i][j];
-        if (v !== null) ssTot += (v - grand) ** 2;
-      }
-    }
-    const ssErr = Math.max(0, ssTot - ssProd - ssJury);
-    const dfProd = p - 1, dfJury = jN - 1, dfErr = (p - 1) * (jN - 1);
-    const msProd = ssProd / dfProd, msJury = ssJury / dfJury, msErr = ssErr / dfErr;
-    const fProd = msErr > 0 ? msProd / msErr : 0;
-    const fJury = msErr > 0 ? msJury / msErr : 0;
-    const pProd = msErr > 0 ? fPValue(fProd, dfProd, dfErr) : 1;
-    const pJury = msErr > 0 ? fPValue(fJury, dfJury, dfErr) : 1;
-    return { crit, ok: true as const, fProd, pProd, fJury, pJury, dfProd, dfJury, dfErr };
-  });
-
-  // ─── ACP 2D sur matrice produits × critères (moyennes) ───
-  const pcaMatrix = products.map(p => criteria.map(c => avg(p, c)));
-  const canPca = products.length >= 3 && criteria.length >= 2;
-  const pcaRes = canPca ? pca2D(pcaMatrix) : null;
-
-  const pcaChartData = pcaRes ? {
-    datasets: [{
-      label: "Produits",
-      data: products.map((p, i) => ({ x: pcaRes.scores[i][0], y: pcaRes.scores[i][1], label: p })),
-      backgroundColor: products.map((_, i) => COLORS[i % 8]),
-      borderColor: products.map((_, i) => COLORS[i % 8]),
-      pointRadius: 7,
-      pointHoverRadius: 10,
-    }]
-  } : null;
-
-  // ─── Performance individuelle du jury ───
-  const juryPerf = jurors.map(j => {
-    const paired: Array<{ self: number; panel: number }> = [];
-    const selfAll: number[] = [];
-    products.forEach(p => {
-      criteria.forEach(c => {
-        const v = getNote(j, p, c);
-        if (v !== null) {
-          paired.push({ self: v, panel: avg(p, c) });
-          selfAll.push(v);
-        }
-      });
-    });
-    const conf = paired.length >= 2 ? pearson(paired.map(x => x.self), paired.map(x => x.panel)) : 0;
-    const range = selfAll.length ? Math.max(...selfAll) - Math.min(...selfAll) : 0;
-    const nNotes = selfAll.length;
-    return { jury: j, conf, range, nNotes };
-  }).sort((a, b) => b.conf - a.conf);
-
-  const pFmt = (p: number) => p < 0.001 ? "< 0,001" : p.toFixed(3);
-  const sigMark = (p: number) => p < 0.001 ? "***" : p < 0.01 ? "**" : p < 0.05 ? "*" : "ns";
-  const sigColor = (p: number) => p < 0.05 ? "#1a6b3a" : "#888";
+  const fmt = (n: number | null, d = 2) => n == null ? "—" : n.toFixed(d);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <div className="grid2">
-        <Card title="Radar — Profil moyen">
-          <Radar data={radarData} options={{ scales: { r: { beginAtZero: true, max: 10 } } }} />
-        </Card>
-        <Card title="Moyennes par critère">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Critère</th>
-                {products.map(p => <th key={p}>{p}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {criteria.map(c => (
-                <tr key={c}>
-                  <td>{c}</td>
+      {scaleQuestions.map(q => {
+        const rows = scaleData.filter(r => r.question === q.label);
+        if (rows.length === 0) {
+          return (
+            <Card key={q.id} title={q.label}>
+              <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>Aucune réponse enregistrée.</div>
+            </Card>
+          );
+        }
+
+        if (q.scope === "per-product") {
+          const products = [...new Set(rows.map(r => r.produit))];
+          return (
+            <Card key={q.id} title={q.label}>
+              <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px", fontFamily: "'DM Mono', monospace" }}>
+                Moyenne par échantillon
+              </div>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Échantillon</th>
+                    <th>n</th>
+                    <th>Moyenne</th>
+                    <th>Écart-type</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {products.map(p => {
-                    const vals = scaleData.filter(r => r.produit === p && r.question === c).map(r => parseFloat(r.valeur));
-                    const m = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : "—";
-                    const sd = vals.length > 1
-                      ? Math.sqrt(vals.reduce((a, b) => a + (b - parseFloat(m)) ** 2, 0) / (vals.length - 1)).toFixed(2)
-                      : "—";
-                    return <td key={p} className="num">{m}<br /><span style={{ fontSize: "10px", color: "var(--text-muted)" }}>±{sd}</span></td>;
+                    const vals = rows.filter(r => r.produit === p).map(r => parseFloat(r.valeur)).filter(v => !isNaN(v));
+                    const s = stats(vals);
+                    return (
+                      <tr key={p}>
+                        <td>{p}</td>
+                        <td className="num">{s.n}</td>
+                        <td className="num" style={{ fontWeight: 600 }}>{fmt(s.mean)}</td>
+                        <td className="num">{s.sd == null ? "—" : `±${s.sd.toFixed(2)}`}</td>
+                      </tr>
+                    );
                   })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      </div>
+                </tbody>
+              </table>
+            </Card>
+          );
+        }
 
-      <Card title="ANOVA à deux facteurs (produit × jury) par critère">
-        <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: 0 }}>
-          Modèle additif sans répétition. F_produit teste l&apos;effet produit, F_jury teste l&apos;effet jury (niveau d&apos;utilisation de l&apos;échelle).
-        </p>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Critère</th>
-              <th>F<sub>produit</sub></th>
-              <th>p<sub>produit</sub></th>
-              <th>F<sub>jury</sub></th>
-              <th>p<sub>jury</sub></th>
-              <th>ddl</th>
-            </tr>
-          </thead>
-          <tbody>
-            {anovaRows.map(r => (
-              <tr key={r.crit}>
-                <td>{r.crit}</td>
-                {r.ok ? (
-                  <>
-                    <td className="num">{r.fProd.toFixed(2)}</td>
-                    <td className="num" style={{ color: sigColor(r.pProd), fontWeight: r.pProd < 0.05 ? 700 : 400 }}>
-                      {pFmt(r.pProd)} {sigMark(r.pProd)}
-                    </td>
-                    <td className="num">{r.fJury.toFixed(2)}</td>
-                    <td className="num" style={{ color: sigColor(r.pJury), fontWeight: r.pJury < 0.05 ? 700 : 400 }}>
-                      {pFmt(r.pJury)} {sigMark(r.pJury)}
-                    </td>
-                    <td className="num" style={{ fontSize: "11px" }}>{r.dfProd}, {r.dfJury}, {r.dfErr}</td>
-                  </>
-                ) : (
-                  <td colSpan={5} style={{ color: "var(--text-muted)", fontStyle: "italic" }}>{r.reason}</td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-
-      {pcaRes && pcaChartData && (
-        <Card title={`ACP — Carte produits (CP1 ${pcaRes.explained[0].toFixed(1)}% · CP2 ${pcaRes.explained[1].toFixed(1)}%)`}>
-          <div style={{ height: "360px" }}>
-            <Scatter
-              data={pcaChartData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                  x: { title: { display: true, text: `CP1 (${pcaRes.explained[0].toFixed(1)}%)` }, grid: { color: "#eee" } },
-                  y: { title: { display: true, text: `CP2 (${pcaRes.explained[1].toFixed(1)}%)` }, grid: { color: "#eee" } },
-                },
-                plugins: {
-                  legend: { display: false },
-                  tooltip: {
-                    callbacks: {
-                      label: (ctx: TooltipItem<"scatter">) => {
-                        const d = ctx.raw as { x: number; y: number; label: string };
-                        return `${d.label}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`;
-                      }
-                    }
-                  }
-                }
-              }}
-            />
-          </div>
-          <div style={{ marginTop: "12px", fontSize: "12px", color: "var(--text-muted)" }}>
-            Variance cumulée CP1+CP2 : <strong>{(pcaRes.explained[0] + pcaRes.explained[1]).toFixed(1)}%</strong>
-            {" "}· Saturations (loadings) CP1 : {criteria.map((c, i) => `${c}=${pcaRes.loadings[i][0].toFixed(2)}`).join(", ")}
-          </div>
-        </Card>
-      )}
-
-      <Card title="Performance individuelle des jurys">
-        <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: 0 }}>
-          Conformité = corrélation (Pearson) entre les notes du jury et les moyennes du panel. Amplitude = étendue des notes du jury (utilisation de l&apos;échelle).
-        </p>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Jury</th>
-              <th>n notes</th>
-              <th>Conformité</th>
-              <th>Amplitude</th>
-              <th>Statut</th>
-            </tr>
-          </thead>
-          <tbody>
-            {juryPerf.map(p => {
-              const discordant = p.conf < 0.3;
-              const narrow = p.range < 2;
-              const color = discordant ? "#c0392b" : p.conf >= 0.6 ? "#1a6b3a" : "#c8820a";
-              const statut = discordant ? "discordant" : p.conf >= 0.6 ? "conforme" : "modéré";
-              return (
-                <tr key={p.jury}>
-                  <td>{p.jury}</td>
-                  <td className="num">{p.nNotes}</td>
-                  <td className="num" style={{ color, fontWeight: 600 }}>{p.conf.toFixed(2)}</td>
-                  <td className="num" style={{ color: narrow ? "#c8820a" : "inherit" }}>
-                    {p.range.toFixed(1)}{narrow && " ⚠"}
-                  </td>
-                  <td style={{ color, fontWeight: 600 }}>{statut}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--text-muted)" }}>
-          Conformité : ≥ 0,60 conforme · 0,30–0,60 modéré · &lt; 0,30 discordant. ⚠ amplitude &lt; 2 : jury compresse l&apos;échelle.
-        </div>
-      </Card>
+        // scope global : une seule moyenne pour l'ensemble du questionnaire
+        const vals = rows.map(r => parseFloat(r.valeur)).filter(v => !isNaN(v));
+        const s = stats(vals);
+        return (
+          <Card key={q.id} title={q.label}>
+            <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px", fontFamily: "'DM Mono', monospace" }}>
+              Moyenne sur l&apos;ensemble du questionnaire
+            </div>
+            <div style={{ display: "flex", gap: "28px", alignItems: "baseline", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: "11px", color: "var(--mid)" }}>Moyenne</div>
+                <div style={{ fontSize: "28px", fontWeight: 700 }}>{fmt(s.mean)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "11px", color: "var(--mid)" }}>Écart-type</div>
+                <div style={{ fontSize: "18px" }}>{s.sd == null ? "—" : `±${s.sd.toFixed(2)}`}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "11px", color: "var(--mid)" }}>n réponses</div>
+                <div style={{ fontSize: "18px" }}>{s.n}</div>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -1528,7 +1369,9 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
 
           return (
             <Card key={g.id} title={g.title}>
-              <Radar data={radarData} options={{ scales: { r: { beginAtZero: true, max: 10 } } }} />
+              <div className="analyse-radar-wrap">
+                <Radar data={radarData} options={{ responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 10 } } }} />
+              </div>
               <div style={{ marginTop: "20px" }}>
                 <table className="data-table" style={{ fontSize: "11px" }}>
                   <thead>
@@ -1585,11 +1428,14 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
             <div style={{ height: "300px" }}>
               <Scatter
                 data={{
-                  datasets: [{
-                    label: "Produits",
-                    data: products.map((p, i) => ({ x: pcaRes.scores[i][0], y: pcaRes.scores[i][1], label: p.code })),
-                    backgroundColor: products.map((_, i) => COLORS[i % 8]),
-                  }]
+                  datasets: products.map((p, i) => ({
+                    label: p.code,
+                    data: [{ x: pcaRes.scores[i][0], y: pcaRes.scores[i][1], label: p.code }],
+                    backgroundColor: COLORS[i % 8],
+                    borderColor: COLORS[i % 8],
+                    pointRadius: 7,
+                    pointHoverRadius: 10,
+                  }))
                 }}
                 options={{
                   responsive: true, maintainAspectRatio: false,
@@ -1597,7 +1443,13 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
                     x: { title: { display: true, text: `CP1 (${(pcaRes.explained[0]*100).toFixed(1)}%)` } },
                     y: { title: { display: true, text: `CP2 (${((pcaRes.explained[1]||0)*100).toFixed(1)}%)` } },
                   },
-                  plugins: { tooltip: { callbacks: { label: (ctx: any) => ctx.raw.label } } }
+                  plugins: {
+                    legend: { display: true, position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: (ctx: TooltipItem<"scatter">) => {
+                      const d = ctx.raw as { x: number; y: number; label: string };
+                      return `${d.label}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`;
+                    } } }
+                  }
                 }}
               />
             </div>

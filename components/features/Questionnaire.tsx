@@ -61,7 +61,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
           <div className="product-label">ÉCHANTILLON {step.product.code}</div>
           {step.questions.map((q: Question) => (
             <QuestionInput
-              key={q.id}
+              key={`${step.product.code}:${q.id}`}
               q={q}
               value={ja[step.product.code]?.[q.id]}
               onChange={(val) => handleUpdate(step.product.code, q.id, val)}

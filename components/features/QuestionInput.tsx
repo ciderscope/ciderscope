@@ -135,7 +135,6 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
   const mn = q.min ?? 0;
   const mx = q.max ?? 10;
   const mid = Math.round((mn + mx) / 2);
-  const [newLabel, setNewLabel] = useState("");
 
   // Normalise value → always work as object internally
   const valObj: ScaleAnswer = (() => {
@@ -177,13 +176,6 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
     const next: ScaleAnswer = { ...valObj, _subs: newSubs };
     delete next[label];
     onChange(next);
-  };
-
-  const addSub = () => {
-    const label = newLabel.trim();
-    if (!label || activeSubs.includes(label)) return;
-    onChange({ ...valObj, _subs: [...activeSubs, label], [label]: valObj._ });
-    setNewLabel("");
   };
 
   const monoStyle: React.CSSProperties = { fontSize: "11px", color: "var(--mid)", fontFamily: "DM Mono, monospace" };
@@ -230,26 +222,6 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
               </div>
             );
           })}
-
-          {/* Add row */}
-          <div className="scale-add-sub">
-            <input
-              type="text"
-              className="scale-add-sub-input"
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSub(); } }}
-              placeholder="Préciser (ex : agrumes, fruits rouges…)"
-            />
-            <button
-              className="scale-add-sub-btn"
-              onClick={addSub}
-              type="button"
-              disabled={!newLabel.trim() || activeSubs.includes(newLabel.trim())}
-            >
-              + Ajouter
-            </button>
-          </div>
         </div>
       </div>
     </div>
