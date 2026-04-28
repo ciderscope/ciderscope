@@ -8,8 +8,7 @@ const axes: RadarAxis[] = [
   {
     label: "Épice",
     children: [
-      { label: "Mentholé", children: leaves(["Anis", "Menthe", "Réglisse"]) },
-      { label: "Épice", children: leaves(["Cannelle", "Clou de girofle", "Olive noire", "Poivre"]) },
+      { label: "Épice", children: leaves(["Anis", "Cannelle", "Clou de girofle", "Olive noire", "Poivre", "Réglisse"]) },
     ],
   },
   {
@@ -22,21 +21,26 @@ const axes: RadarAxis[] = [
   {
     label: "Grillé",
     children: [
-      { label: "Lactique", children: leaves(["Beurre", "Levure", "Pain"]) },
-      { label: "Herbe séchée", children: leaves(["Foin", "Tabac", "Thé"]) },
-      { label: "Brûlé", children: leaves(["Café", "Fumé", "Grillé", "Pain grillé"]) },
+      { label: "Herbe séchée", children: leaves(["Foin", "Tabac"]) },
+      { label: "Empyreumatique", children: leaves(["Café", "Caramel", "Chocolat", "Fumé", "Grillé", "Pain grillé", "Pain", "Vanille"]) },
     ],
   },
   {
-    label: "Minéral",
+    label: "Lactique",
     children: [
-      { label: "Minéral", children: leaves(["Silex"]) },
+      { label: "Lactique", children: leaves(["Beurre", "Levure"]) },
     ],
   },
   {
     label: "Chimique",
     children: [
-      { label: "Chimique", children: leaves(["Alcool", "Caoutchouc", "Dissolvant à ongles", "Pétrole", "Sulfure", "Vinaigre"]) },
+      { label: "Chimique", children: leaves(["Alcool", "Caoutchouc", "Dissolvant à ongles", "Vinaigre"]) },
+    ],
+  },
+  {
+    label: "Soufrée",
+    children: [
+      { label: "Soufrée", children: leaves(["Ail", "Choux", "Serpillère", "Oeuf pourri"]) },
     ],
   },
   {
@@ -51,7 +55,7 @@ const axes: RadarAxis[] = [
     label: "Fruit",
     children: [
       { label: "Fruit rouge", children: leaves(["Cassis", "Cerise", "Figue", "Fraise", "Framboise", "Fruit mûr", "Fruit noir", "Groseille", "Mûre", "Myrtille"]) },
-      { label: "Fruit blanc/jaune", children: leaves(["Abricot", "Coing", "Fruit à noyau", "Fruit blanc", "Fruit jaune", "Melon", "Pêche", "Poire", "Pomme", "Prune", "Raisin"]) },
+      { label: "Fruit blanc/jaune", children: leaves(["Abricot", "Coing", "Fruit à noyau", "Melon", "Pêche", "Poire", "Pomme", "Prune", "Raisin"]) },
       { label: "Agrume", children: leaves(["Citron", "Citron vert", "Orange", "Pamplemousse"]) },
       { label: "Fruit tropical", children: leaves(["Ananas", "Fruit de la passion", "Litchi", "Mangue", "Noix de coco"]) },
       { label: "Amylique", children: leaves(["Banane", "Bonbon anglais"]) },
@@ -60,13 +64,12 @@ const axes: RadarAxis[] = [
   {
     label: "Floral",
     children: [
-      { label: "Floral", children: leaves(["Acacia", "Fleur d'oranger", "Jasmin", "Lilas", "Rose", "Violette"]) },
+      { label: "Floral", children: leaves(["Acacia", "Fleur d'oranger", "Jasmin", "Lilas", "Miel", "Rose", "Violette"]) },
     ],
   },
   {
     label: "Fruit sec",
     children: [
-      { label: "Sucré", children: leaves(["Caramel", "Chocolat", "Miel", "Vanille"]) },
       { label: "Fruit sec", children: leaves(["Abricot sec", "Amande", "Noisette", "Noix"]) },
     ],
   },
