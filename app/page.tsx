@@ -54,6 +54,7 @@ export default function CiderScope() {
     sessions,
     curSess,
     jurors, cj, ja, cs, setCs,
+    takenPostes, validatedSteps, handleSelectPoste, validateStep,
     handleSelectSession, handleLoginJury, handleSetJa,
     editCfg, setEditCfg,
     editSessId, setEditSessId,
@@ -87,10 +88,14 @@ export default function CiderScope() {
         cs={cs}
         saveStatus={saveStatus}
         pendingCount={pendingCount}
+        takenPostes={takenPostes}
+        validatedSteps={validatedSteps}
+        onSelectPoste={handleSelectPoste}
+        onValidateStep={validateStep}
         onSelectSession={handleSelectSession}
         onLoginJury={handleLoginJury}
         onSetJa={handleSetJa}
-        onPrevStep={() => setCs(cs - 1)}
+        onPrevStep={() => setCs(Math.max(0, cs - 1))}
         onNextStep={() => {
           const steps = buildSteps(curSess!, cj);
           if (!isStepComplete(cs)) return;

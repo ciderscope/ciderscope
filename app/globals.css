@@ -254,11 +254,78 @@ canvas { max-width: 100%; }
 }
 .modal {
   background: #fff; border-radius: 10px;
-  padding: 28px; max-width: 420px; width: 90%;
+  padding: 28px; max-width: 460px; width: 90%;
   box-shadow: 0 24px 64px rgba(0,0,0,.18);
+  position: relative;
 }
 .modal h2 { font-weight: 700; font-size: 20px; margin-bottom: 8px; }
 .modal p  { color: var(--mid); font-size: 14px; margin-bottom: 16px; }
+.modal-close {
+  position: absolute; top: 10px; right: 10px;
+  width: 28px; height: 28px; border-radius: 50%;
+  border: none; background: transparent; color: var(--mid);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background .12s, color .12s;
+}
+.modal-close:hover { background: var(--paper2); color: var(--ink); }
+
+/* ── Sélection de poste (Mardi/Jeudi × 1..10) ── */
+.poste-screen {
+  max-width: 720px; margin: 30px auto; padding: 26px 22px;
+  background: var(--paper); border-radius: var(--radius-lg);
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.poste-screen h2 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+.poste-screen .hint { font-size: 13px; color: var(--mid); margin: 0; }
+.poste-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  margin-top: 18px;
+}
+.poste-col {
+  background: var(--paper2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px;
+}
+.poste-col-title {
+  font-size: 13px; font-weight: 700; color: var(--primary);
+  margin: 0 0 12px; text-transform: uppercase; letter-spacing: .04em;
+  text-align: center;
+}
+.poste-list {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+}
+.poste-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 10px; min-height: 56px;
+  font-family: inherit; cursor: pointer;
+  transition: all .14s;
+  color: var(--ink);
+}
+.poste-btn:hover:not(:disabled) {
+  border-color: var(--primary); color: var(--primary);
+  background: rgba(98,141,23,.06);
+  transform: translateY(-1px);
+}
+.poste-btn .poste-num {
+  font-size: 20px; font-weight: 800; line-height: 1;
+}
+.poste-btn .poste-owner {
+  font-size: 10px; color: var(--mid); margin-top: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.poste-btn.taken {
+  opacity: .55; cursor: not-allowed;
+  background: var(--paper3); color: var(--mid);
+  border-style: dashed;
+}
+.poste-btn.mine {
+  background: rgba(98,141,23,.10); border-color: var(--primary); color: var(--primary);
+}
+@media (max-width: 480px) {
+  .poste-grid { grid-template-columns: 1fr; }
+  .poste-screen { padding: 18px 14px; margin: 14px 8px; }
+}
 
 /* ══════════════════════════════════════════
    PARTICIPANT — landing, connexion jury, questionnaire

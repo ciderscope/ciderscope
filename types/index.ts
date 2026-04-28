@@ -118,7 +118,13 @@ export type AllAnswers = Record<string, JurorAnswers>;
 
 // ── UI / app state ─────────────────────────────────────────────────────────
 export type AppMode = "participant" | "admin";
-export type AppScreen = "landing" | "jury" | "form" | "done" | "edit";
+export type AppScreen = "landing" | "jury" | "poste" | "form" | "done" | "edit";
+
+export type PosteDay = "mardi" | "jeudi";
+export interface Poste {
+  day: PosteDay;
+  num: number; // 1..10
+}
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "pending";
 
 export type JurorsMap = Record<string, string[]>;

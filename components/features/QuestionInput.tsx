@@ -647,19 +647,19 @@ function CustomDescriptorAdder({ onAdd }: { onAdd: (label: string) => void }) {
   );
 }
 
-function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched }: {
+function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched, showSVG = true }: {
   group: { title: string; axes: RadarAxis[] };
   min: number;
   max: number;
   answer: RadarAnswer;
   onChange: (next: RadarAnswer) => void;
   markFamilyTouched: (label: string) => void;
+  showSVG?: boolean;
 }) {
   const familyDefault = Math.round((min + max) / 2);
   const values = group.axes.map(a => answer[a.label]?._ ?? familyDefault);
 
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
-  const [forcedVisible, setForcedVisible] = useState<Set<string>>(new Set());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
@@ -747,12 +747,6 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched 
       }
       return next;
     });
-    // Force la visibilité de la famille racine même si sa valeur est 0.
-    setForcedVisible(prev => {
-      const next = new Set(prev);
-      next.add(path[0]);
-      return next;
-    });
     const fullKey = path.join("/");
     setHighlightKey(fullKey);
     setSearchOpen(false);
@@ -765,11 +759,9 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched 
     });
   };
 
-  // Filtre : n'affiche dans la sidebar que les familles non-nulles OU rendues visibles via la recherche.
-  const visibleAxes = group.axes.filter(ax => {
-    const v = answer[ax.label]?._ ?? min;
-    return v > min || forcedVisible.has(ax.label);
-  });
+  // Toutes les familles sont toujours visibles (le filtre des familles à 0 a été retiré
+   // pour ne pas masquer un curseur qu'un jury aurait délibérément laissé à zéro).
+  const visibleAxes = group.axes;
 
   return (
     <div className="radar-group-block-participant" ref={blockRef}>
@@ -823,15 +815,15 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched 
           )}
         </div>
       </div>
-      <div className="radar-group-body">
-        <div className="radar-svg-wrap">
-          <RadarSVG axes={group.axes} values={values} max={max} onChange={setAxis} />
-        </div>
+      <div className={`radar-group-body${showSVG ? "" : " no-svg"}`}>
+        {showSVG && (
+          <div className="radar-svg-wrap">
+            <RadarSVG axes={group.axes} values={values} max={max} onChange={setAxis} />
+          </div>
+        )}
         <div className="radar-tree">
           {visibleAxes.length === 0 ? (
-            <div className="radar-tree-empty">
-              Faites glisser un point sur la toile pour ajuster finement une famille ici.
-            </div>
+            <div className="radar-tree-empty">Aucune famille configurée pour cette toile.</div>
           ) : (
             visibleAxes.map(ax => {
               const nodeAnswer = answer[ax.label] ?? { _: familyDefault };
@@ -865,7 +857,7 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
   const groups = useMemo(() => q.radarGroups || [], [q.radarGroups]);
   const allAxes = useMemo(() => groups.flatMap(g => g.axes), [groups]);
 
-  const [mode, setMode] = useState<"radar" | "sliders">("radar");
+  const [mode, setMode] = useState<"radar" | "sliders">("sliders");
   const [touchedFamilies, setTouchedFamilies] = useState<Set<string>>(new Set());
   const markFamilyTouched = (label: string) => {
     setTouchedFamilies(prev => {
@@ -906,55 +898,29 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
       <div className="radar-mode-switch">
         <button
           type="button"
-          className={`radar-mode-btn ${mode === "radar" ? "active" : ""}`}
-          onClick={() => setMode("radar")}
-        >Toile d&apos;araignée</button>
-        <button
-          type="button"
           className={`radar-mode-btn ${mode === "sliders" ? "active" : ""}`}
           onClick={() => setMode("sliders")}
         >Curseurs</button>
+        <button
+          type="button"
+          className={`radar-mode-btn ${mode === "radar" ? "active" : ""}`}
+          onClick={() => setMode("radar")}
+        >Toile d&apos;araignée</button>
       </div>
-      {mode === "radar" ? (
-        <div className="radar-groups">
-          {groups.map(g => (
-            <RadarGroupBlock
-              key={g.id}
-              group={g}
-              min={mn}
-              max={mx}
-              answer={answer}
-              onChange={onChange}
-              markFamilyTouched={markFamilyTouched}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="radar-sliders-only">
-          {groups.map(g => (
-            <div key={g.id} className="radar-group-sliders-section">
-              <h4 className="radar-group-title">{g.title}</h4>
-              {g.axes.map(ax => {
-                const a = answer[ax.label] ?? { _: defaults.family };
-                return (
-                  <div key={ax.label} className="scale-track" style={{ marginBottom: 6 }}>
-                    <span className="radar-slider-label">{ax.label}</span>
-                    <input
-                      type="range" min={mn} max={mx} value={a._}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value);
-                        markFamilyTouched(ax.label);
-                        onChange(setNodeAtPath(answer, [ax.label], v));
-                      }}
-                    />
-                    <span className="scale-value">{a._}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="radar-groups">
+        {groups.map(g => (
+          <RadarGroupBlock
+            key={g.id}
+            group={g}
+            min={mn}
+            max={mx}
+            answer={answer}
+            onChange={onChange}
+            markFamilyTouched={markFamilyTouched}
+            showSVG={mode === "radar"}
+          />
+        ))}
+      </div>
 
       {untouchedFamilies.length > 0 && (
         <div className="radar-untouched-warn" role="status">

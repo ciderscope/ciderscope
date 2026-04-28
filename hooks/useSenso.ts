@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, Product, SessionStep, CSVRow, AllAnswers, AppMode, AppScreen, SaveStatus } from "../types";
+import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, Product, SessionStep, CSVRow, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
 import { hsh, wlm, formatVal } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
@@ -14,9 +14,14 @@ export const useSenso = () => {
   const [curSessId, setCurSessId] = useState<string | null>(null);
   const [curSess, setCurSess] = useState<SessionConfig | null>(null);
   const [jurors, setJurors] = useState<string[]>([]);
+  // Map des postes pris pour la séance courante : "mardi-3" -> juryName.
+  const [takenPostes, setTakenPostes] = useState<Record<string, string>>({});
   const [cj, setCj] = useState<string>("");
+  const [poste, setPoste] = useState<Poste | null>(null);
   const [ja, setJa] = useState<JurorAnswers>({});
   const [cs, setCs] = useState<number>(0);
+  // Suivi des étapes déjà validées par le jury : il faudra une autorisation pour y revenir.
+  const [validatedSteps, setValidatedSteps] = useState<Set<number>>(new Set());
   const [editCfg, setEditCfg] = useState<SessionConfig | null>(null);
   const [editSessId, setEditSessId] = useState<string | null>(null);
   const [curEditTab, setCurEditTab] = useState<string>("session");
@@ -96,6 +101,22 @@ export const useSenso = () => {
     return data.config as SessionConfig;
   };
 
+  const posteKey = (p: Poste) => `${p.day}-${p.num}`;
+  const readPoste = (jaData: JurorAnswers | null | undefined): Poste | null => {
+    const meta = jaData?.["_poste"];
+    if (!meta || typeof meta !== "object") return null;
+    const day = (meta as Record<string, unknown>).day;
+    const num = (meta as Record<string, unknown>).num;
+    if ((day === "mardi" || day === "jeudi") && typeof num === "number" && num >= 1 && num <= 10) {
+      return { day, num };
+    }
+    return null;
+  };
+  const posteToIndex = (p: Poste | null): number | null => {
+    if (!p) return null;
+    return (p.day === "jeudi" ? 10 : 0) + (p.num - 1);
+  };
+
   const handleSelectSession = async (id: string) => {
     const cfg = await loadSessionConfig(id);
     if (!cfg) return;
@@ -103,10 +124,17 @@ export const useSenso = () => {
     setCurSess(cfg);
     const { data, error } = await supabase
       .from("answers")
-      .select("juror_name")
+      .select("juror_name, data")
       .eq("session_id", id);
     if (error) console.error("Erreur lors du chargement des jurys:", error);
-    setJurors(data ? (data as { juror_name: string }[]).map(r => r.juror_name) : []);
+    const rows = (data || []) as Array<{ juror_name: string; data: JurorAnswers | null }>;
+    setJurors(rows.map(r => r.juror_name));
+    const taken: Record<string, string> = {};
+    rows.forEach(r => {
+      const p = readPoste(r.data || undefined);
+      if (p) taken[posteKey(p)] = r.juror_name;
+    });
+    setTakenPostes(taken);
     setScreen("jury");
   };
 
@@ -123,20 +151,23 @@ export const useSenso = () => {
     return idx >= 0 ? idx : jurorList.length;
   };
 
-  const getOrderedItems = <T,>(items: T[], mode: string, name: string, jurorList: string[], sessionName: string): T[] => {
+  const getOrderedItems = <T,>(items: T[], mode: string, name: string, jurorList: string[], sessionName: string, posteIdx?: number | null): T[] => {
     if (!items || items.length === 0) return [];
     if (mode === "fixed") return [...items];
 
-    const idx = getJurorIndex(name, jurorList);
+    // Le numéro de poste, s'il est renseigné, prend le pas sur l'index alphabétique :
+    // l'ordre de service de la feuille papier doit être respecté.
+    const idx = (posteIdx != null) ? posteIdx : getJurorIndex(name, jurorList);
 
     if (mode === "latin") {
       const sq = wlm(items.length);
       return sq[idx % sq.length].map((i: number) => items[i]);
     }
-    
-    // Random mode: use a stable seed based on session + juror name
+
+    // Random mode: use a stable seed based on session + poste|name
     const a = [...items];
-    let sd = hsh((sessionName || "") + name);
+    const seedKey = (posteIdx != null) ? `poste${posteIdx}` : name;
+    let sd = hsh((sessionName || "") + seedKey);
     for (let k = a.length - 1; k > 0; k--) {
       sd = ((sd * 1103515245 + 12345) & 0x7fffffff);
       [a[k], a[sd % (k + 1)]] = [a[sd % (k + 1)], a[k]];
@@ -144,11 +175,13 @@ export const useSenso = () => {
     return a;
   };
 
-  const buildSteps = (cfg: SessionConfig, jurorName: string, jurorList?: string[]) => {
+  const buildSteps = (cfg: SessionConfig, jurorName: string, jurorList?: string[], posteOverride?: Poste | null) => {
     if (!cfg) return [];
     const jl = jurorList || jurors;
     const mode = cfg.presMode || "fixed";
-    
+    const effectivePoste = (posteOverride !== undefined) ? posteOverride : poste;
+    const posteIdx = posteToIndex(effectivePoste);
+
     const steps: SessionStep[] = [];
     
     // 1. Per-product questions: organize by product to ensure each product is shown only once
@@ -168,7 +201,7 @@ export const useSenso = () => {
     if (productMap.size > 0) {
       const activeCodes = Array.from(productMap.keys());
       // Important: only randomize products that are actually part of the evaluation
-      const orderedCodes = getOrderedItems(activeCodes, mode, jurorName, jl, cfg.name);
+      const orderedCodes = getOrderedItems(activeCodes, mode, jurorName, jl, cfg.name, posteIdx);
       
       orderedCodes.forEach(code => {
         const product = cfg.products.find(p => p.code === code) || { code };
@@ -185,36 +218,29 @@ export const useSenso = () => {
     const globalQuestions = standaloneQuestions.filter(q => q.type === "text" || q.type === "qcm" || q.scope === "global");
 
     // Randomize the order of the series themselves if requested
-    const orderedSeries = getOrderedItems(seriesQuestions, mode, jurorName, jl, cfg.name + "series");
+    const orderedSeries = getOrderedItems(seriesQuestions, mode, jurorName, jl, cfg.name + "series", posteIdx);
 
     orderedSeries.forEach(q => {
       const type = (q.type === "classement" || q.type === "seuil") ? "ranking" : "discrim";
-      
+
       let finalCodes = [...(q.codes || [])];
       if (finalCodes.length === 0 && (q.type === "classement" || q.type === "seuil")) {
         finalCodes = cfg.products.map(p => p.code);
       }
-      
+
       // Randomize the codes for this juror
-      let randomizedCodes: string[];
-      if (q.type === "duo-trio") {
-        // For Duo-Trio, we often want to keep the test sample at the end or randomize refs only
-        // But let's follow the general rule unless specified
-        randomizedCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id);
-      } else {
-        randomizedCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id);
-      }
-      
+      const randomizedCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id, posteIdx);
+
       const finalQ = { ...q, codes: randomizedCodes };
 
       // Deep randomization for complex types
       if (q.type === "seuil-bet" && q.betLevels) {
         finalQ.betLevels = q.betLevels.map((lv: BetLevel, lIdx: number) => ({
           ...lv,
-          codes: getOrderedItems([...lv.codes], mode, jurorName, jl, cfg.name + q.id + "l" + lIdx) as [string, string, string]
+          codes: getOrderedItems([...lv.codes], mode, jurorName, jl, cfg.name + q.id + "l" + lIdx, posteIdx) as [string, string, string]
         }));
       }
-      
+
       steps.push({ type, question: finalQ });
     });
 
@@ -235,20 +261,63 @@ export const useSenso = () => {
       .eq("session_id", curSessId)
       .eq("juror_name", name)
       .maybeSingle();
-    const answers = data?.data || {};
+    const answers = (data?.data || {}) as JurorAnswers;
     setJa(answers);
-    const jl = jurors.includes(name) ? jurors : [...jurors, name];
-    const steps = buildSteps(curSess, name, jl);
-    let firstIncomplete = 0;
-    for (let i = 0; i < steps.length; i++) {
-      if (!isStepDone(steps[i], answers)) {
-        firstIncomplete = i;
-        break;
+    setValidatedSteps(new Set());
+
+    // Si le jury a déjà un poste enregistré (reprise), on saute l'écran de sélection.
+    const existing = readPoste(answers);
+    if (existing) {
+      setPoste(existing);
+      const jl = jurors.includes(name) ? jurors : [...jurors, name];
+      const steps = buildSteps(curSess, name, jl, existing);
+      let firstIncomplete = 0;
+      for (let i = 0; i < steps.length; i++) {
+        if (!isStepDone(steps[i], answers)) {
+          firstIncomplete = i;
+          break;
+        }
+        if (i === steps.length - 1) firstIncomplete = i;
       }
-      if (i === steps.length - 1) firstIncomplete = i;
+      setCs(firstIncomplete);
+      setScreen("form");
+      return;
     }
-    setCs(firstIncomplete);
+
+    setPoste(null);
+    setScreen("poste");
+  };
+
+  const handleSelectPoste = async (day: PosteDay, num: number) => {
+    if (!curSess || !curSessId || !cj) return;
+    const p: Poste = { day, num };
+    const key = posteKey(p);
+    if (takenPostes[key] && takenPostes[key] !== cj) return; // déjà pris par un autre
+    setPoste(p);
+    setTakenPostes(prev => ({ ...prev, [key]: cj }));
+    // Persister le poste dans les réponses du jury
+    const next: JurorAnswers = { ...ja, _poste: { day, num } as Record<string, string | number> };
+    setJa(next);
+    if (curSessId && cj) {
+      await supabase.from("answers").upsert({
+        session_id: curSessId,
+        juror_name: cj,
+        data: next,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "session_id,juror_name" });
+    }
+    setCs(0);
+    setValidatedSteps(new Set());
     setScreen("form");
+  };
+
+  const validateStep = (idx: number) => {
+    setValidatedSteps(prev => {
+      if (prev.has(idx)) return prev;
+      const next = new Set(prev);
+      next.add(idx);
+      return next;
+    });
   };
 
   const handleSetJa = async (newJa: JurorAnswers) => {
@@ -512,6 +581,8 @@ export const useSenso = () => {
     loadSessionConfig,
     curSessId, curSess,
     jurors, cj, ja, cs, setCs,
+    poste, takenPostes, handleSelectPoste,
+    validatedSteps, validateStep,
     handleSelectSession, handleLoginJury, handleSetJa,
     editCfg, setEditCfg,
     editSessId, setEditSessId,

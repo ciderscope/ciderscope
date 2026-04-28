@@ -1285,6 +1285,19 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     return Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / (vals.length - 1));
   };
 
+  // ── Niveau d'affichage / ACP — types et états (déclarés tôt pour être en scope partout) ──
+  type PcaLevel = "famille" | "classe" | "descripteur";
+  const [displayLevel, setDisplayLevel] = useState<PcaLevel>("famille");
+  const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
+  const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
+  const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
+  const levelLabel: Record<PcaLevel, string> = {
+    famille: "Famille",
+    classe: "Classe",
+    descripteur: "Descripteur",
+  };
+  const depthOf = (c: string) => c.split(" > ").length;
+
   // Performance individuelle
   const juryPerf = jurors.map(j => {
     const paired: Array<{ self: number; panel: number }> = [];
@@ -1303,9 +1316,16 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     return { jury: j, conf, range, n: selfAll.length };
   }).sort((a, b) => b.conf - a.conf);
 
-  // ANOVA par critère (uniquement pour les familles de premier niveau)
-  const families = (question.radarGroups || []).flatMap(g => g.axes.map(ax => ax.label));
-  const anovaRows = families.map(crit => {
+  // ANOVA par critère, restreint au niveau d'affichage choisi.
+  const anovaCriteria = criteria.filter(c => {
+    const groupId = groups.find(g => (criteriaByGroup[g.id] || []).includes(c))?.id;
+    if (!groupId) return false;
+    const groupCriteria = criteriaByGroup[groupId] || [];
+    const isFlat = groupCriteria.length > 0 && groupCriteria.every(x => !x.includes(" > "));
+    const lvl: PcaLevel = isFlat ? "famille" : displayLevel;
+    return depthOf(c) === levelDepth[lvl];
+  });
+  const anovaRows = anovaCriteria.map(crit => {
     const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p.code, crit)));
     const flat = mat.flat().filter((v): v is number => v !== null);
     const pN = products.length;
@@ -1336,17 +1356,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     return { crit, ok: true as const, fProd, pProd };
   });
 
-  // ACP — groupe (toile des arômes / profil gustatif / …) + niveau (famille / classe / descripteur)
-  type PcaLevel = "famille" | "classe" | "descripteur";
-  const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
-  const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
-  const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
-  const levelLabel: Record<PcaLevel, string> = {
-    famille: "Famille",
-    classe: "Classe",
-    descripteur: "Descripteur",
-  };
-  const depthOf = (c: string) => c.split(" > ").length;
+  // ACP — groupe (toile des arômes / profil gustatif / …)
   const activeGroup = groups.find(g => g.id === pcaGroupId) || groups[0];
   const scopeCriteria = activeGroup ? (criteriaByGroup[activeGroup.id] || []) : criteria;
   // Un groupe "plat" (ex. Profil gustatif : Acidité, Amertume, …) n'a qu'un niveau pertinent :
@@ -1369,6 +1379,24 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>{question.label}</h3>
 
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'JetBrains Mono', ui-monospace, monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
+          Niveau d&apos;affichage
+        </span>
+        <div className="pca-level-switch">
+          {(["famille", "classe", "descripteur"] as const).map(lv => (
+            <button
+              key={lv}
+              type="button"
+              className={`pca-level-btn ${displayLevel === lv ? "active" : ""}`}
+              onClick={() => setDisplayLevel(lv)}
+            >
+              {levelLabel[lv]}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid2">
         {(question.radarGroups || []).map((g, gi) => {
           const groupCriteria: string[] = [];
@@ -1381,8 +1409,13 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
           };
           walk(g.axes);
 
-          // Filtrer pour ne garder que les critères qui ont des données ou sont top-level
-          const displayCriteria = groupCriteria.filter(c => !c.includes(">") || products.some(p => avg(p.code, c) > 0));
+          // Critères sélectionnés selon le niveau d'affichage. Les groupes "plats" (sans
+          // hiérarchie, ex. profil gustatif) restent affichés tels quels au niveau famille.
+          const isFlat = groupCriteria.length > 0 && groupCriteria.every(c => !c.includes(" > "));
+          const effectiveDisplayLevel: PcaLevel = isFlat ? "famille" : displayLevel;
+          const displayCriteria = groupCriteria
+            .filter(c => depthOf(c) === levelDepth[effectiveDisplayLevel])
+            .filter(c => products.some(p => avg(p.code, c) > 0));
 
           const radarData = {
             labels: displayCriteria.map(c => c.split(" > ").pop()),

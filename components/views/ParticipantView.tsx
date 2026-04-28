@@ -1,8 +1,9 @@
-import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud, FiAlertCircle, FiLoader } from "react-icons/fi";
+import { useState } from "react";
+import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud, FiAlertCircle, FiLoader, FiX } from "react-icons/fi";
 import { Button } from "../ui/Button";
 import { SessionCard } from "../features/SessionCard";
 import { Questionnaire } from "../features/Questionnaire";
-import { Product, SessionListItem, SessionConfig, JurorAnswers, SessionStep, AppScreen, SaveStatus } from "../../types";
+import { Product, SessionListItem, SessionConfig, JurorAnswers, SessionStep, AppScreen, SaveStatus, Poste, PosteDay } from "../../types";
 
 interface ParticipantViewProps {
   screen: AppScreen;
@@ -14,6 +15,10 @@ interface ParticipantViewProps {
   cs: number;
   saveStatus: SaveStatus;
   pendingCount: number;
+  takenPostes: Record<string, string>;
+  validatedSteps: Set<number>;
+  onSelectPoste: (day: PosteDay, num: number) => void;
+  onValidateStep: (idx: number) => void;
   onSelectSession: (id: string) => void;
   onLoginJury: (name: string) => void;
   onPrevStep: () => void;
@@ -97,6 +102,85 @@ const LandingScreen = ({ sessions, onSelectSession }: { sessions: SessionListIte
   </div>
 );
 
+const ConfirmModal = ({
+  title, message, confirmLabel, cancelLabel, onConfirm, onCancel, tone = "default",
+}: {
+  title: string;
+  message: React.ReactNode;
+  confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel?: () => void;
+  tone?: "default" | "warn";
+}) => (
+  <div className="modal-overlay" onClick={() => onCancel?.()}>
+    <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <button className="modal-close" onClick={() => onCancel?.()} aria-label="Fermer"><FiX /></button>
+      <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{title}</h3>
+      <div style={{ marginTop: "12px", fontSize: "13.5px", color: tone === "warn" ? "#8a4a00" : "var(--ink)", lineHeight: 1.5 }}>
+        {message}
+      </div>
+      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "20px", flexWrap: "wrap" }}>
+        {cancelLabel && (
+          <Button variant="ghost" size="sm" onClick={() => onCancel?.()}>{cancelLabel}</Button>
+        )}
+        <Button size="sm" onClick={onConfirm}>{confirmLabel}</Button>
+      </div>
+    </div>
+  </div>
+);
+
+const PosteScreen = ({
+  curSess, cj, takenPostes, onSelectPoste, onGoBack,
+}: {
+  curSess: SessionConfig | null;
+  cj: string;
+  takenPostes: Record<string, string>;
+  onSelectPoste: (day: PosteDay, num: number) => void;
+  onGoBack: () => void;
+}) => {
+  const days: PosteDay[] = ["mardi", "jeudi"];
+  const numbers = Array.from({ length: 10 }, (_, i) => i + 1);
+  return (
+    <div className="poste-screen">
+      <h2>Choisissez votre poste</h2>
+      <p className="hint">{curSess?.name} — {cj}</p>
+      <p style={{ fontSize: "13px", color: "var(--mid)", marginTop: "4px", marginBottom: "20px" }}>
+        Sélectionnez le numéro indiqué sur votre feuille de service.
+      </p>
+      <div className="poste-grid">
+        {days.map(d => (
+          <div key={d} className="poste-col">
+            <h3 className="poste-col-title">{d.charAt(0).toUpperCase() + d.slice(1)}</h3>
+            <div className="poste-list">
+              {numbers.map(n => {
+                const key = `${d}-${n}`;
+                const owner = takenPostes[key];
+                const taken = !!owner && owner !== cj;
+                const mine = owner === cj;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`poste-btn ${taken ? "taken" : ""} ${mine ? "mine" : ""}`}
+                    onClick={() => !taken && onSelectPoste(d, n)}
+                    disabled={taken}
+                    title={taken ? `Pris par ${owner}` : `Poste ${n}`}
+                  >
+                    <span className="poste-num">{n}</span>
+                    {taken && <span className="poste-owner">{owner}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <Button variant="ghost" size="sm" className="mt16" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
+    </div>
+  );
+};
+
 const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome }: { curSess: SessionConfig | null, jurors: string[], onLoginJury: (name: string) => void, onHome: () => void }) => (
   <div className="jury-login">
     <h2>Identifiez-vous</h2>
@@ -127,17 +211,46 @@ const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome }: { curSess: Se
 );
 
 const FormScreen = ({
-  curSess, cj, steps, cs, ja, onSetJa, onGoBack, onPrevStep, onNextStep, isStepComplete, saveStatus, pendingCount
+  curSess, cj, steps, cs, ja, onSetJa, onGoBack, onPrevStep, onNextStep, isStepComplete, saveStatus, pendingCount,
+  validatedSteps, onValidateStep,
 }: {
   curSess: SessionConfig, cj: string, steps: SessionStep[], cs: number, ja: JurorAnswers, onSetJa: (ja: JurorAnswers) => void,
   onGoBack: () => void, onPrevStep: () => void, onNextStep: () => void,
-  isStepComplete: (idx: number) => boolean, saveStatus: SaveStatus, pendingCount: number
+  isStepComplete: (idx: number) => boolean, saveStatus: SaveStatus, pendingCount: number,
+  validatedSteps: Set<number>, onValidateStep: (idx: number) => void,
 }) => {
   const products: Product[] = curSess.products || [];
   const total = steps.length;
   const done = steps.filter((_, i) => isStepComplete(i)).length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   const canAdvance = isStepComplete(cs);
+  const isLastStep = cs >= total - 1;
+  const prevAlreadyValidated = cs > 0 && validatedSteps.has(cs - 1);
+
+  const [confirmNext, setConfirmNext] = useState(false);
+  const [confirmPrev, setConfirmPrev] = useState(false);
+
+  const handleNextClick = () => {
+    if (!canAdvance) return;
+    setConfirmNext(true);
+  };
+  const handleConfirmNext = () => {
+    onValidateStep(cs);
+    setConfirmNext(false);
+    onNextStep();
+  };
+  const handlePrevClick = () => {
+    if (cs === 0) return;
+    if (prevAlreadyValidated) {
+      setConfirmPrev(true);
+    } else {
+      onPrevStep();
+    }
+  };
+  const handleConfirmPrev = () => {
+    setConfirmPrev(false);
+    onPrevStep();
+  };
 
   return (
     <>
@@ -204,19 +317,49 @@ const FormScreen = ({
             <span style={{ fontSize: "11px", color: "#c0392b" }}>Répondez à la question pour continuer.</span>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={onPrevStep} style={{ visibility: cs === 0 ? "hidden" : "visible" }}>
+        <Button variant="ghost" size="sm" onClick={handlePrevClick} style={{ visibility: cs === 0 ? "hidden" : "visible" }}>
           <FiArrowLeft />
         </Button>
         <Button
           size="sm"
-          onClick={onNextStep}
+          onClick={handleNextClick}
           disabled={!canAdvance}
           style={{ opacity: canAdvance ? 1 : 0.5, cursor: canAdvance ? "pointer" : "not-allowed" }}
         >
-          {cs >= steps.length - 1 ? <><FiCheck /> Terminer</> : <>Suivant <FiArrowRight /></>}
+          {isLastStep ? <><FiCheck /> Terminer</> : <>Valider <FiArrowRight /></>}
         </Button>
       </div>
       <SaveIndicator status={saveStatus} pendingCount={pendingCount} />
+
+      {confirmNext && (
+        <ConfirmModal
+          tone="warn"
+          title={isLastStep ? "Terminer le questionnaire ?" : "Valider cet échantillon ?"}
+          message={
+            isLastStep ? (
+              <>Une fois vos réponses envoyées, vous ne pourrez plus modifier celles de cette séance sans autorisation. Confirmer la validation finale ?</>
+            ) : (
+              <>Une fois validé, vous passerez à l&apos;échantillon suivant et il <strong>ne sera plus possible de revenir en arrière</strong> sans autorisation. Continuer ?</>
+            )
+          }
+          confirmLabel={isLastStep ? "Terminer" : "Valider et continuer"}
+          cancelLabel="Annuler"
+          onConfirm={handleConfirmNext}
+          onCancel={() => setConfirmNext(false)}
+        />
+      )}
+
+      {confirmPrev && (
+        <ConfirmModal
+          tone="warn"
+          title="Revenir à l'échantillon précédent ?"
+          message={<>Cet échantillon a déjà été validé. Avez-vous reçu l&apos;<strong>autorisation de l&apos;animateur</strong> pour revenir en arrière ?</>}
+          confirmLabel="Oui, j'ai l'autorisation"
+          cancelLabel="Non, annuler"
+          onConfirm={handleConfirmPrev}
+          onCancel={() => setConfirmPrev(false)}
+        />
+      )}
     </>
   );
 };
@@ -235,6 +378,7 @@ const DoneScreen = ({ onReviewAnswers, onHome }: { onReviewAnswers: () => void, 
 
 export const ParticipantView = ({
   screen, sessions, curSess, jurors, cj, ja, cs, saveStatus, pendingCount,
+  takenPostes, validatedSteps, onSelectPoste, onValidateStep,
   onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, onReviewAnswers, buildSteps, isStepComplete,
 }: ParticipantViewProps) => {
   const activeSessions = sessions.filter(s => s.active);
@@ -244,13 +388,24 @@ export const ParticipantView = ({
       return <LandingScreen sessions={activeSessions} onSelectSession={onSelectSession} />;
     case "jury":
       return <JuryLoginScreen curSess={curSess} jurors={jurors} onLoginJury={onLoginJury} onHome={onHome} />;
+    case "poste":
+      return (
+        <PosteScreen
+          curSess={curSess}
+          cj={cj}
+          takenPostes={takenPostes}
+          onSelectPoste={onSelectPoste}
+          onGoBack={onGoBack}
+        />
+      );
     case "form":
       if (!curSess) return null;
       return (
-        <FormScreen 
-          curSess={curSess} cj={cj} steps={buildSteps(curSess, cj)} cs={cs} ja={ja} 
-          onSetJa={onSetJa} onGoBack={onGoBack} onPrevStep={onPrevStep} onNextStep={onNextStep} 
-          isStepComplete={isStepComplete} saveStatus={saveStatus} pendingCount={pendingCount} 
+        <FormScreen
+          curSess={curSess} cj={cj} steps={buildSteps(curSess, cj)} cs={cs} ja={ja}
+          onSetJa={onSetJa} onGoBack={onGoBack} onPrevStep={onPrevStep} onNextStep={onNextStep}
+          isStepComplete={isStepComplete} saveStatus={saveStatus} pendingCount={pendingCount}
+          validatedSteps={validatedSteps} onValidateStep={onValidateStep}
         />
       );
     case "done":
