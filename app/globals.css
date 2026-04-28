@@ -51,7 +51,10 @@
 
 /* ── Reset & base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scrollbar-gutter: stable; }
+html { scrollbar-gutter: stable; overflow-x: clip; }
+@supports not (overflow-x: clip) {
+  html { overflow-x: hidden; }
+}
 
 body {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -62,7 +65,15 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
 }
+@supports not (overflow-x: clip) {
+  body { overflow-x: hidden; }
+}
+
+img, svg, canvas, video { max-width: 100%; }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: inherit;
@@ -482,6 +493,7 @@ input[type=range]::-webkit-slider-thumb {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 8px; background: var(--paper); border: 1px solid var(--accent);
   border-radius: 999px; min-width: 220px;
+  max-width: 100%;
 }
 .radar-search-input {
   flex: 1; border: none; outline: none; background: transparent;
@@ -1103,19 +1115,36 @@ textarea.q-text:focus { border-color: var(--accent); }
 /* ══════════════════════════════════════════
    RESPONSIVE — containers, scroll safety, breakpoints
    ══════════════════════════════════════════ */
-.card, .q-builder, .sess-list-card, .live-panel, .export-panel { max-width: 100%; }
+.app-main, .admin-shell, .analyse-shell, .form-shell, .landing, .jury-login {
+  max-width: 100%;
+  overflow-x: clip;
+}
+@supports not (overflow-x: clip) {
+  .app-main, .admin-shell, .analyse-shell, .form-shell, .landing, .jury-login {
+    overflow-x: hidden;
+  }
+}
+.card, .q-builder, .sess-list-card, .live-panel, .export-panel, .product-card { max-width: 100%; }
 .data-table, .preview-table { max-width: 100%; }
 
-@media (max-width: 1100px) {
-  .card, .q-builder, .live-panel, .export-panel { overflow-x: auto; }
-}
+/* Les tableaux à contenu non sécable sont scrollables horizontalement
+   à l'intérieur de leur carte, sans déborder. */
+.card { overflow-x: auto; }
+.card > * { min-width: 0; }
 
-.topbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.topbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100vw; }
 .topbar::-webkit-scrollbar { display: none; }
 
 /* ── Mobile (≤ 480px) ── */
 @media (max-width: 480px) {
   body { font-size: 14px; }
+
+  .radar-search-box { min-width: 0; flex: 1 1 100%; }
+  .radar-tree-label { flex: 0 0 88px !important; font-size: 12px; }
+  .radar-tree-row { gap: 6px; }
+  .radar-search-results { left: 0; right: 0; max-width: 100%; }
+  .info-box { padding: 10px 12px; }
+  .field input, .field select, .field textarea { font-size: 13px; padding: 9px 11px; }
 
   .topbar { gap: 5px; padding: 0 10px; height: 52px; }
   .app-main { padding-top: 52px; }
