@@ -1140,11 +1140,30 @@ textarea.q-text:focus { border-color: var(--accent); }
   body { font-size: 14px; }
 
   .radar-search-box { min-width: 0; flex: 1 1 100%; }
-  .radar-tree-label { flex: 0 0 88px !important; font-size: 12px; }
-  .radar-tree-row { gap: 6px; }
   .radar-search-results { left: 0; right: 0; max-width: 100%; }
   .info-box { padding: 10px 12px; }
   .field input, .field select, .field textarea { font-size: 13px; padding: 9px 11px; }
+
+  /* Tree des familles/classes/descripteurs : label sur sa propre ligne,
+     slider + valeur + bouton sur la suivante → fonctionne quelle que soit la profondeur. */
+  .radar-tree-row { flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+  .radar-tree-label,
+  .radar-tree-node.depth-1 .radar-tree-label,
+  .radar-tree-node.depth-2 .radar-tree-label {
+    flex: 1 1 100% !important;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+  .radar-tree-row input[type=range] { flex: 1 1 0; min-width: 60px; }
+  .radar-tree-val { flex: 0 0 auto; }
+  .radar-tree-toggle { flex: 0 0 auto; }
+  /* Indent réduit par niveau pour libérer de la largeur utile aux contrôles */
+  .radar-tree-node.depth-1 { margin-left: 8px; padding: 6px 8px; }
+  .radar-tree-node.depth-2 { margin-left: 6px; padding: 4px 6px; }
+  .radar-tree-children { margin-top: 4px; }
+  .radar-tree-custom-add { padding-left: 8px; }
+  .radar-tree-node.depth-custom .radar-tree-row { padding-left: 8px; }
 
   .topbar { gap: 5px; padding: 0 10px; height: 52px; }
   .app-main { padding-top: 52px; }
