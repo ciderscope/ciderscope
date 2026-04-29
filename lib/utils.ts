@@ -7,7 +7,10 @@ export const hsh = (s: string) => {
   return Math.abs(h);
 };
 
+const _wlmCache = new Map<number, number[][]>();
 export const wlm = (n: number) => {
+  const cached = _wlmCache.get(n);
+  if (cached) return cached;
   const R: number[][] = [];
   if (n % 2 === 0) {
     for (let i = 0; i < n; i++) {
@@ -22,6 +25,7 @@ export const wlm = (n: number) => {
       R.push(r);
     }
   }
+  _wlmCache.set(n, R);
   return R;
 };
 

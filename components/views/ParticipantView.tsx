@@ -3,7 +3,7 @@ import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud
 import { Button } from "../ui/Button";
 import { SessionCard } from "../features/SessionCard";
 import { Questionnaire } from "../features/Questionnaire";
-import { Product, SessionListItem, SessionConfig, JurorAnswers, SessionStep, AppScreen, SaveStatus, Poste, PosteDay } from "../../types";
+import { Product, SessionListItem, SessionConfig, JurorAnswers, SessionStep, AppScreen, SaveStatus, PosteDay } from "../../types";
 
 interface ParticipantViewProps {
   screen: AppScreen;
@@ -27,6 +27,8 @@ interface ParticipantViewProps {
   onGoBack: () => void;
   onHome: () => void;
   onReviewAnswers: () => void;
+  steps: SessionStep[];
+  completion: boolean[];
   buildSteps: (cfg: SessionConfig, name: string) => SessionStep[];
   isStepComplete: (idx: number) => boolean;
 }
@@ -181,49 +183,55 @@ const PosteScreen = ({
   );
 };
 
-const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome }: { curSess: SessionConfig | null, jurors: string[], onLoginJury: (name: string) => void, onHome: () => void }) => (
-  <div className="jury-login">
-    <h2>Identifiez-vous</h2>
-    <p className="hint">{curSess?.name}</p>
-    <div className="jury-input-wrap">
-      <input
-        type="text"
-        placeholder="Votre prénom…"
-        onKeyDown={(e) => e.key === "Enter" && onLoginJury((e.target as HTMLInputElement).value)}
-        id="juryNameInput"
-      />
-    </div>
-    <Button onClick={() => onLoginJury((document.getElementById("juryNameInput") as HTMLInputElement).value)}>
-      Commencer <FiArrowRight />
-    </Button>
-    {jurors.length > 0 && (
-      <div className="jury-existing">
-        <div className="jury-existing-title">Reprendre :</div>
-        <div className="jury-existing-grid">
-          {jurors.map(n => (
-            <button key={n} className="jury-existing-btn" onClick={() => onLoginJury(n)}>{n}</button>
-          ))}
-        </div>
+const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome }: { curSess: SessionConfig | null, jurors: string[], onLoginJury: (name: string) => void, onHome: () => void }) => {
+  const [name, setName] = useState("");
+  const submit = () => { if (name.trim()) onLoginJury(name.trim()); };
+  return (
+    <div className="jury-login">
+      <h2>Identifiez-vous</h2>
+      <p className="hint">{curSess?.name}</p>
+      <div className="jury-input-wrap">
+        <input
+          type="text"
+          placeholder="Votre prénom…"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+        />
       </div>
-    )}
-    <Button variant="ghost" size="sm" className="mt16" onClick={onHome}><FiArrowLeft /> Retour</Button>
-  </div>
-);
+      <Button onClick={submit}>
+        Commencer <FiArrowRight />
+      </Button>
+      {jurors.length > 0 && (
+        <div className="jury-existing">
+          <div className="jury-existing-title">Reprendre :</div>
+          <div className="jury-existing-grid">
+            {jurors.map(n => (
+              <button key={n} className="jury-existing-btn" onClick={() => onLoginJury(n)}>{n}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      <Button variant="ghost" size="sm" className="mt16" onClick={onHome}><FiArrowLeft /> Retour</Button>
+    </div>
+  );
+};
 
 const FormScreen = ({
-  curSess, cj, steps, cs, ja, onSetJa, onGoBack, onPrevStep, onNextStep, isStepComplete, saveStatus, pendingCount,
+  curSess, cj, steps, completion, cs, ja, onSetJa, onGoBack, onPrevStep, onNextStep, saveStatus, pendingCount,
   validatedSteps, onValidateStep,
 }: {
-  curSess: SessionConfig, cj: string, steps: SessionStep[], cs: number, ja: JurorAnswers, onSetJa: (ja: JurorAnswers) => void,
+  curSess: SessionConfig, cj: string, steps: SessionStep[], completion: boolean[], cs: number, ja: JurorAnswers, onSetJa: (ja: JurorAnswers) => void,
   onGoBack: () => void, onPrevStep: () => void, onNextStep: () => void,
-  isStepComplete: (idx: number) => boolean, saveStatus: SaveStatus, pendingCount: number,
+  saveStatus: SaveStatus, pendingCount: number,
   validatedSteps: Set<number>, onValidateStep: (idx: number) => void,
 }) => {
   const products: Product[] = curSess.products || [];
   const total = steps.length;
-  const done = steps.filter((_, i) => isStepComplete(i)).length;
-  const pct = total ? Math.round((done / total) * 100) : 0;
-  const canAdvance = isStepComplete(cs);
+  let doneCount = 0;
+  for (const c of completion) if (c) doneCount++;
+  const pct = total ? Math.round((doneCount / total) * 100) : 0;
+  const canAdvance = completion[cs] ?? true;
   const isLastStep = cs >= total - 1;
   const prevAlreadyValidated = cs > 0 && validatedSteps.has(cs - 1);
 
@@ -267,7 +275,7 @@ const FormScreen = ({
         <div className="form-progress-wrap" style={{ padding: "0 16px", marginTop: "4px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--mid)", marginBottom: "4px" }}>
             <span>Étape {cs + 1} / {total}</span>
-            <span>{done} / {total} complétées ({pct}%)</span>
+            <span>{doneCount} / {total} complétées ({pct}%)</span>
           </div>
           <div style={{ height: "6px", background: "var(--paper2)", borderRadius: "999px", overflow: "hidden" }}>
             <div
@@ -279,7 +287,7 @@ const FormScreen = ({
           </div>
           <div className="step-list" style={{ display: "flex", gap: "4px", marginTop: "8px", overflowX: "auto", paddingBottom: "4px" }}>
             {steps.map((s, i) => {
-              const complete = isStepComplete(i);
+              const complete = completion[i] ?? false;
               const active = i === cs;
               const bg = active ? "var(--accent)" : complete ? "#1a6b3a22" : "var(--paper2)";
               const col = active ? "#fff" : complete ? "#1a6b3a" : "var(--mid)";
@@ -379,7 +387,8 @@ const DoneScreen = ({ onReviewAnswers, onHome }: { onReviewAnswers: () => void, 
 export const ParticipantView = ({
   screen, sessions, curSess, jurors, cj, ja, cs, saveStatus, pendingCount,
   takenPostes, validatedSteps, onSelectPoste, onValidateStep,
-  onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, onReviewAnswers, buildSteps, isStepComplete,
+  onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, onReviewAnswers,
+  steps, completion,
 }: ParticipantViewProps) => {
   const activeSessions = sessions.filter(s => s.active);
 
@@ -402,9 +411,9 @@ export const ParticipantView = ({
       if (!curSess) return null;
       return (
         <FormScreen
-          curSess={curSess} cj={cj} steps={buildSteps(curSess, cj)} cs={cs} ja={ja}
+          curSess={curSess} cj={cj} steps={steps} completion={completion} cs={cs} ja={ja}
           onSetJa={onSetJa} onGoBack={onGoBack} onPrevStep={onPrevStep} onNextStep={onNextStep}
-          isStepComplete={isStepComplete} saveStatus={saveStatus} pendingCount={pendingCount}
+          saveStatus={saveStatus} pendingCount={pendingCount}
           validatedSteps={validatedSteps} onValidateStep={onValidateStep}
         />
       );

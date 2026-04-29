@@ -1,38 +1,20 @@
 "use client";
 
 import { useRef } from "react";
-import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-} from "chart.js";
+import dynamic from "next/dynamic";
 
 import { ParticipantView } from "../components/views/ParticipantView";
-import { AdminView } from "../components/views/AdminView";
 import { AdminLoginView } from "../components/views/AdminLoginView";
 import { validateSession } from "../lib/validation";
 import { hsh } from "../lib/utils";
 import { useApp } from "./AppProviders";
-import type { CSVRow, JurorAnswers, Question, SessionConfig, AllAnswers } from "../types";
+import type { CSVRow } from "../types";
 
-ChartJS.register(
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-  CategoryScale,
-  LinearScale,
-  BarElement
-);
+// L'admin n'est jamais chargé côté participant — split du bundle.
+const AdminView = dynamic(() => import("../components/views/AdminView").then(m => m.AdminView), {
+  ssr: false,
+  loading: () => <div style={{ padding: 32, color: "var(--mid)" }}>Chargement…</div>,
+});
 
 const downloadCSV = (rows: CSVRow[], name: string) => {
   if (rows.length === 0) return;
@@ -73,6 +55,9 @@ export default function CiderScope() {
     saveStatus,
     pendingCount,
     isStepComplete,
+    currentSteps,
+    completion,
+    flushSave,
     adminAuth, setAdminAuth,
   } = useApp();
 
@@ -97,14 +82,17 @@ export default function CiderScope() {
         onSetJa={handleSetJa}
         onPrevStep={() => setCs(Math.max(0, cs - 1))}
         onNextStep={() => {
-          const steps = buildSteps(curSess!, cj);
           if (!isStepComplete(cs)) return;
-          if (cs >= steps.length - 1) setScreen("done");
+          // Force la persistance immédiate avant la validation finale.
+          void flushSave();
+          if (cs >= currentSteps.length - 1) setScreen("done");
           else setCs(cs + 1);
         }}
         onGoBack={() => setScreen("jury")}
         onHome={() => setScreen("landing")}
         onReviewAnswers={() => handleLoginJury(cj)}
+        steps={currentSteps}
+        completion={completion}
         buildSteps={buildSteps}
         isStepComplete={isStepComplete}
       />
@@ -182,20 +170,6 @@ export default function CiderScope() {
         } else {
           alert("Erreur lors de l'enregistrement.");
         }
-      }}
-      buildCSVRows={(cfg: SessionConfig, ans: AllAnswers) => {
-        const rows: CSVRow[] = [];
-        cfg.questions.filter((q: Question) => q.scope === "per-product").forEach((q: Question) => {
-          Object.entries(ans).forEach(([j, ja]: [string, JurorAnswers]) => {
-            cfg.products.forEach(p => rows.push({
-              jury: j,
-              produit: p.code,
-              question: q.label,
-              valeur: String(ja[p.code]?.[q.id] ?? ""),
-            }));
-          });
-        });
-        return rows;
       }}
       downloadCSV={downloadCSV}
       loadSessionConfig={loadSessionConfig}

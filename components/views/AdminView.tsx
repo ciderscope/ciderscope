@@ -1,19 +1,28 @@
 "use client";
 import React, { useState, useRef, useEffect, Dispatch, SetStateAction } from "react";
+import dynamic from "next/dynamic";
 import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPrinter } from "react-icons/fi";
 import { QuestionInput } from "../features/QuestionInput";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
-import { AnalyseView } from "./AnalyseView";
-import { Question, QuestionType, Product, BetLevel, RadarGroup, RadarAxis, SessionConfig, SessionListItem, AllAnswers, JurorAnswers, CSVRow, AnswerValue, AppScreen } from "../../types";
+import { Question, QuestionType, Product, BetLevel, RadarGroup, RadarAxis, SessionConfig, SessionListItem, AllAnswers, CSVRow, AnswerValue, AppScreen } from "../../types";
 import { wlm } from "../../lib/utils";
 import { AROMA_PRESET } from "../../lib/aromaPreset";
 
-// Génère un id unique pour une nouvelle question/groupe. Extrait hors composants
-// pour éviter le faux-positif de la règle react-hooks/purity sur Date.now().
-let _idCounter = 0;
-const nextId = (prefix: string): string => `${prefix}_${++_idCounter}_${Date.now()}`;
+// AnalyseView (Chart.js, calculs lourds) chargée à la demande.
+const AnalyseView = dynamic(() => import("./AnalyseView").then(m => m.AnalyseView), {
+  ssr: false,
+  loading: () => <div style={{ padding: 32, color: "var(--mid)" }}>Chargement de l&apos;analyse…</div>,
+});
+
+// Génère un id unique pour une nouvelle question/groupe.
+const nextId = (prefix: string): string => {
+  const rnd = typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
+  return `${prefix}_${rnd}`;
+};
 
 // ─── Fiche de service ─────────────────────────────────────────────────────────
 function printServiceSheet(sessionName: string, cfg: SessionConfig) {
@@ -175,7 +184,6 @@ interface AdminViewProps {
   onSetEditTab: (tab: string) => void;
   onSaveEdit: () => void;
   onHome: () => void;
-  buildCSVRows: (cfg: SessionConfig, ans: AllAnswers) => CSVRow[];
   downloadCSV: (rows: CSVRow[], filename: string) => void;
   loadSessionConfig: (id: string) => Promise<SessionConfig | null>;
   listJurorsForSession: (id: string) => Promise<string[]>;
@@ -193,7 +201,7 @@ interface AdminViewProps {
 export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
   onNewSession, onEditSession, onToggleActive, onDuplicateSession, onDeleteSession,
-  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, buildCSVRows, downloadCSV, loadSessionConfig,
+  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, downloadCSV, loadSessionConfig,
   listJurorsForSession, deleteJury,
   allAnswers, anSessId, anCfg, csvData, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
@@ -365,12 +373,20 @@ export const AdminView = ({
           )}
           {curEditTab === "données" && (
             <Card title="Export des données">
-              <Button onClick={() => {
-                const all: AllAnswers = {};
-                const jl = JSON.parse(localStorage.getItem(`sp_j_${editSessId}`) || "[]") as string[];
-                jl.forEach((n: string) => { all[n] = JSON.parse(localStorage.getItem(`sp_a_${editSessId}_${n}`) || "{}") as JurorAnswers; });
-                downloadCSV(buildCSVRows(editCfg, all), editCfg.name);
-              }}>Télécharger CSV</Button>
+              <p style={{ fontSize: "12px", color: "var(--mid)", marginBottom: "10px" }}>
+                Pour exporter les réponses détaillées (toutes questions, par jury), utilisez l&apos;onglet <strong>Analyse</strong> de la séance.
+              </p>
+              <Button
+                onClick={() => {
+                  if (!editSessId) return;
+                  // Charge la séance dans le panneau Analyse, qui calcule csvData côté hook.
+                  onAnSessChange(editSessId);
+                  alert("Les données ont été chargées dans l'onglet Analyse — utilisez ↓ CSV depuis Analyse pour télécharger.");
+                }}
+                disabled={!editSessId}
+              >
+                Préparer les données pour l&apos;analyse
+              </Button>
             </Card>
           )}
         </div>
@@ -1081,10 +1097,9 @@ function ANonABuilder({ products, codes, correctAnswer, refCode, onChangeCodes, 
             if (refCode && refCode !== c && !newCodes.includes(refCode)) newCodes.push(refCode);
             onChangeCodes(newCodes);
             // Also clean correctAnswer from new ref if needed
-            const newAss = Object.fromEntries(Object.entries(
-              Object.fromEntries((typeof correctAnswer === "string" ? correctAnswer : "").split(",").map((p: string) => p.split(":")).filter((a: string[]) => a.length === 2))
-            ).filter(([k]) => k !== c));
-            onChangeCorrect(Object.entries(newAss).map(([k, v]) => `${k}:${v}`).join(","));
+            const parsed = parseAnswer(typeof correctAnswer === "string" ? correctAnswer : "");
+            delete parsed[c];
+            onChangeCorrect(serializeAnswer(parsed));
             onChangeRef(c);
           }
           setOverRef(false);
@@ -1463,7 +1478,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: SessionConfig; on
       if (!prev) return prev;
       const src: Question = prev.questions[i];
       const copy: Question = {
-        ...JSON.parse(JSON.stringify(src)) as Question,
+        ...structuredClone(src),
         id: nextId("q"),
         label: `${src.label} (copie)`,
       };

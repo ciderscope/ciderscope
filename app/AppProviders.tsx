@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useMemo, useCallback, type ReactNode } from "react";
 import { Topbar } from "../components/ui/Topbar";
 import { useSenso } from "../hooks/useSenso";
 
@@ -30,12 +30,16 @@ export function AppProviders({ children }: { children: ReactNode }) {
     return false;
   });
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     sessionStorage.removeItem("admin_auth");
     setAdminAuth(false);
-  };
+  }, []);
 
-  const value: AppContextValue = { ...senso, adminAuth, setAdminAuth, handleLogout };
+  // Stabilise la value du contexte : on ne réémet que si une des sorties du hook change.
+  const value = useMemo<AppContextValue>(
+    () => ({ ...senso, adminAuth, setAdminAuth, handleLogout }),
+    [senso, adminAuth, handleLogout]
+  );
 
   return (
     <AppContext.Provider value={value}>

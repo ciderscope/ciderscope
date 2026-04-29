@@ -3,8 +3,26 @@ import { useMemo, useState } from "react";
 import { Card } from "../ui/Card";
 import { ScrollableTabs } from "../ui/ScrollableTabs";
 import { Radar, Bar, Scatter } from "react-chartjs-2";
-import type { TooltipItem } from "chart.js";
-import type { SessionConfig, SessionListItem, Question, BetLevel, AllAnswers, CSVRow, Product, RadarGroup, RadarAxis, RadarAnswer, JurorAnswers } from "../../types";
+import {
+  Chart as ChartJS,
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  type TooltipItem,
+} from "chart.js";
+import type { SessionConfig, SessionListItem, Question, BetLevel, AllAnswers, CSVRow, Product, RadarAxis, RadarAnswer } from "../../types";
+
+// Enregistrement Chart.js localisé : seul l'admin chargeant l'analyse paye le coût.
+ChartJS.register(
+  RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend,
+  CategoryScale, LinearScale, BarElement
+);
 
 const COLORS = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
 
@@ -1212,19 +1230,18 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: SessionCo
 
 // ─── Toile d&apos;araignée (Radar) ──────────────────────────────────────────────────
 
-function flattenRadarAnswers(ans: RadarAnswer, prefix = ""): Record<string, number> {
-  let result: Record<string, number> = {};
-  if (!ans) return result;
+function flattenRadarAnswers(ans: RadarAnswer, prefix = "", out: Record<string, number> = {}): Record<string, number> {
+  if (!ans) return out;
   for (const [label, node] of Object.entries(ans)) {
     const fullLabel = prefix ? `${prefix} > ${label}` : label;
     if (node._ !== undefined && node._ !== null) {
-      result[fullLabel] = node._;
+      out[fullLabel] = node._;
     }
     if (node.children) {
-      result = { ...result, ...flattenRadarAnswers(node.children, fullLabel) };
+      flattenRadarAnswers(node.children, fullLabel, out);
     }
   }
-  return result;
+  return out;
 }
 
 function AnalyseRadar({ config, allAnswers }: { config: SessionConfig; allAnswers: AllAnswers }) {
@@ -1265,25 +1282,55 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
   });
   const criteria = Array.from(allCriteriaNames);
 
-  // Helper to get a note: (jury, product, criterion) -> number | null
+  // Précalcul d'une map { jury → produit → crit → note } pour éviter de re-flatten à chaque accès.
+  const noteMap = useMemo(() => {
+    const map: Record<string, Record<string, Record<string, number>>> = {};
+    for (const j of jurors) {
+      const perProduct: Record<string, Record<string, number>> = {};
+      for (const p of products) {
+        const ja = allAnswers[j]?.[p.code]?.[question.id] as RadarAnswer | undefined;
+        perProduct[p.code] = ja ? flattenRadarAnswers(ja) : {};
+      }
+      map[j] = perProduct;
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jurors, products, question.id, allAnswers]);
+
   const getNote = (j: string, p: string, crit: string): number | null => {
-    const ja = allAnswers[j]?.[p]?.[question.id] as RadarAnswer;
-    if (!ja) return null;
-    const flat = flattenRadarAnswers(ja);
-    return flat[crit] ?? null;
+    const v = noteMap[j]?.[p]?.[crit];
+    return v == null ? null : v;
   };
 
-  const avg = (p: string, crit: string) => {
-    const vals = jurors.map(j => getNote(j, p, crit)).filter((v): v is number => v !== null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-  };
+  // Stats agrégées pré-calculées (évite des dizaines de filtres dans le rendu).
+  const productStats = useMemo(() => {
+    const stats: Record<string, Record<string, { mean: number; sd: number; n: number }>> = {};
+    for (const p of products) {
+      const perCrit: Record<string, { mean: number; sd: number; n: number }> = {};
+      for (const j of jurors) {
+        const flat = noteMap[j]?.[p.code] || {};
+        for (const c of Object.keys(flat)) {
+          if (!perCrit[c]) perCrit[c] = { mean: 0, sd: 0, n: 0 };
+        }
+      }
+      for (const c of Object.keys(perCrit)) {
+        const vals: number[] = [];
+        for (const j of jurors) {
+          const v = noteMap[j]?.[p.code]?.[c];
+          if (typeof v === "number") vals.push(v);
+        }
+        const n = vals.length;
+        const mean = n ? vals.reduce((a, b) => a + b, 0) / n : 0;
+        const sdv = n > 1 ? Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : 0;
+        perCrit[c] = { mean, sd: sdv, n };
+      }
+      stats[p.code] = perCrit;
+    }
+    return stats;
+  }, [products, jurors, noteMap]);
 
-  const sd = (p: string, crit: string) => {
-    const vals = jurors.map(j => getNote(j, p, crit)).filter((v): v is number => v !== null);
-    if (vals.length < 2) return 0;
-    const m = vals.reduce((a, b) => a + b, 0) / vals.length;
-    return Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / (vals.length - 1));
-  };
+  const avg = (p: string, crit: string) => productStats[p]?.[crit]?.mean ?? 0;
+  const sd = (p: string, crit: string) => productStats[p]?.[crit]?.sd ?? 0;
 
   // ── Niveau d'affichage / ACP — types et états (déclarés tôt pour être en scope partout) ──
   type PcaLevel = "famille" | "classe" | "descripteur";
@@ -1675,10 +1722,10 @@ const STOP_WORDS = new Set(["le","la","les","de","du","des","un","une","en","et"
 function buildWordFreq(rows: CSVRow[]): [string, number][] {
   const wordFreq: Record<string, number> = {};
   rows.forEach(r => {
-    (r.valeur)
+    (r.valeur || "")
       .toLowerCase()
       .split(/[\s,;.!?''"()\[\]]+/)
-      .map((w: string) => w.replace(/[^a-zàâäéèêëîïôùûüç-]/g, ""))
+      .map((w: string) => w.replace(/[^a-zàâäéèêëîïôùûüÿœæç-]/g, ""))
       .filter((w: string) => w.length > 2 && !STOP_WORDS.has(w))
       .forEach((w: string) => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
   });
@@ -1686,7 +1733,7 @@ function buildWordFreq(rows: CSVRow[]): [string, number][] {
 }
 
 function WordCloudDisplay({ rows, title }: { rows: CSVRow[]; title: string }) {
-  const sorted = buildWordFreq(rows);
+  const sorted = useMemo(() => buildWordFreq(rows), [rows]);
   const maxFreq = sorted[0]?.[1] || 1;
   if (sorted.length === 0) return null;
   return (

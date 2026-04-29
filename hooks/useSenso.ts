@@ -1,9 +1,12 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, Product, SessionStep, CSVRow, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
 import { hsh, wlm, formatVal } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
+
+// Cache mémoire des configs de séance (invalidé sur saveSession/deleteSession).
+const _configCache = new Map<string, SessionConfig>();
 
 export const useSenso = () => {
   const [mode, setMode] = useState<AppMode>("participant");
@@ -89,6 +92,8 @@ export const useSenso = () => {
   };
 
   const loadSessionConfig = async (id: string): Promise<SessionConfig | null> => {
+    const cached = _configCache.get(id);
+    if (cached) return cached;
     const { data, error } = await supabase
       .from("sessions")
       .select("config")
@@ -98,7 +103,9 @@ export const useSenso = () => {
       console.error("Erreur lors du chargement de la config:", error);
       return null;
     }
-    return data.config as SessionConfig;
+    const cfg = data.config as SessionConfig;
+    _configCache.set(id, cfg);
+    return cfg;
   };
 
   const posteKey = (p: Poste) => `${p.day}-${p.num}`;
@@ -175,7 +182,7 @@ export const useSenso = () => {
     return a;
   };
 
-  const buildSteps = (cfg: SessionConfig, jurorName: string, jurorList?: string[], posteOverride?: Poste | null) => {
+  const buildSteps = useCallback((cfg: SessionConfig, jurorName: string, jurorList?: string[], posteOverride?: Poste | null) => {
     if (!cfg) return [];
     const jl = jurorList || jurors;
     const mode = cfg.presMode || "fixed";
@@ -250,7 +257,10 @@ export const useSenso = () => {
     }
 
     return steps;
-  };
+    // getOrderedItems est une fonction pure des arguments — sa redéfinition à chaque
+    // render ne change pas le résultat de buildSteps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jurors, poste]);
 
   const handleLoginJury = async (name: string) => {
     if (!name || !curSessId || !curSess) return;
@@ -320,9 +330,18 @@ export const useSenso = () => {
     });
   };
 
-  const handleSetJa = async (newJa: JurorAnswers) => {
-    setJa(newJa);
-    if (!cj || !curSessId) return;
+  // Upsert différé : on agrège les saisies rapides (sliders, drag) en une seule requête.
+  const _saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const _pendingJaRef = useRef<JurorAnswers | null>(null);
+
+  const flushSave = useCallback(async () => {
+    if (_saveTimerRef.current) {
+      clearTimeout(_saveTimerRef.current);
+      _saveTimerRef.current = null;
+    }
+    const newJa = _pendingJaRef.current;
+    _pendingJaRef.current = null;
+    if (!newJa || !cj || !curSessId) return;
     setSaveStatus("saving");
     const { error } = await supabase.from("answers").upsert({
       session_id: curSessId,
@@ -347,24 +366,34 @@ export const useSenso = () => {
         .from("sessions")
         .update({ juror_count: newJurors.length })
         .eq("id", curSessId);
-      setSessions(sessions.map(s =>
+      setSessions(prev => prev.map(s =>
         s.id === curSessId ? { ...s, jurorCount: newJurors.length } : s
       ));
     }
+  }, [cj, curSessId, jurors]);
+
+  const handleSetJa = (newJa: JurorAnswers) => {
+    setJa(newJa);
+    if (!cj || !curSessId) return;
+    _pendingJaRef.current = newJa;
+    if (_saveTimerRef.current) clearTimeout(_saveTimerRef.current);
+    _saveTimerRef.current = setTimeout(() => { void flushSave(); }, 400);
   };
 
   // Flush de la file d'attente hors-ligne dès qu'on est en ligne (montage + bascule online).
   const flushPending = async () => {
     const entries = listPending();
     if (entries.length === 0) { setPendingCount(0); return; }
-    let ok = 0;
-    for (const e of entries) {
-      const { error } = await supabase.from("answers").upsert({
+    const results = await Promise.all(entries.map(e =>
+      supabase.from("answers").upsert({
         session_id: e.sessionId,
         juror_name: e.jurorName,
         data: e.data,
         updated_at: new Date(e.ts).toISOString(),
-      }, { onConflict: "session_id,juror_name" });
+      }, { onConflict: "session_id,juror_name" }).then(({ error }) => ({ e, error }))
+    ));
+    let ok = 0;
+    for (const { e, error } of results) {
       if (!error) { clearPending(e.sessionId, e.jurorName); ok++; }
     }
     setPendingCount(countPending());
@@ -380,6 +409,18 @@ export const useSenso = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
 
+  // Flush la sauvegarde différée à chaque changement d'étape (sécurité supplémentaire).
+  useEffect(() => {
+    if (_pendingJaRef.current) void flushSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cs]);
+
+  // Flush au démontage pour éviter les pertes lors d'une navigation.
+  useEffect(() => {
+    return () => { if (_pendingJaRef.current) void flushSave(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Masque le statut "saved" après 1,5s ; "error" reste affiché (l'utilisateur doit voir).
   useEffect(() => {
     if (saveStatus !== "saved") return;
@@ -387,20 +428,22 @@ export const useSenso = () => {
     return () => clearTimeout(t);
   }, [saveStatus]);
 
-  // Indique si l'étape courante est complète (gate Suivant)
-  const isStepComplete = (stepIdx: number): boolean => {
-    if (!curSess) return true;
-    const steps = buildSteps(curSess, cj);
-    const s = steps[stepIdx];
+  // Steps mémoïsés pour le jury courant — recalculés uniquement quand la config / nom / poste / liste change.
+  const currentSteps = useMemo<SessionStep[]>(() => {
+    if (!curSess || !cj) return [];
+    return buildSteps(curSess, cj);
+  }, [curSess, cj, buildSteps]);
+
+  // Vérifie la complétion d'un step donné contre un état de réponses.
+  const checkStepDone = (s: SessionStep, jaState: JurorAnswers): boolean => {
     if (!s) return true;
     if (s.type === "product") {
-      const pa = ja[s.product.code] || {};
-      // "Non évalué" (null) vaut réponse pour les échelles.
+      const pa = jaState[s.product.code] || {};
       return s.questions.every(q => q.type === "scale" || (pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null));
     }
-    if (s.type === "ranking") return Array.isArray(ja["_rank"]?.[s.question.id]);
+    if (s.type === "ranking") return Array.isArray(jaState["_rank"]?.[s.question.id]);
     if (s.type === "discrim") {
-      const v = ja["_discrim"]?.[s.question.id];
+      const v = jaState["_discrim"]?.[s.question.id];
       if (s.question.type === "a-non-a") {
         const codes: string[] = s.question.codes || [];
         if (!v || typeof v !== "object" || Array.isArray(v)) return false;
@@ -416,11 +459,20 @@ export const useSenso = () => {
       return v != null && v !== "";
     }
     if (s.type === "global") {
-      const ga = ja["_global"] || {};
+      const ga = jaState["_global"] || {};
       return s.questions.every(q => q.type === "scale" || (ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null));
     }
     return true;
   };
+
+  // Tableau de complétion par étape — calculé une seule fois par changement de ja/steps.
+  const completion = useMemo<boolean[]>(
+    () => currentSteps.map(s => checkStepDone(s, ja)),
+    [currentSteps, ja]
+  );
+
+  // Indique si l'étape courante est complète (gate Suivant)
+  const isStepComplete = (stepIdx: number): boolean => completion[stepIdx] ?? true;
 
   const handleAnSessChange = async (id: string) => {
     setAnSessId(id);
@@ -431,7 +483,7 @@ export const useSenso = () => {
       .select("juror_name, data")
       .eq("session_id", id);
     const ans: Record<string, JurorAnswers> = {};
-    if (data) data.forEach((r: { juror_name: string; data: JurorAnswers }) => { ans[r.juror_name] = r.data; });
+    if (data) data.forEach((r: { juror_name: string; data: JurorAnswers | null }) => { ans[r.juror_name] = r.data || {}; });
     setAllAnswers(ans);
   };
 
@@ -448,12 +500,14 @@ export const useSenso = () => {
       console.error("Erreur lors de l'enregistrement de la séance:", error);
       return { success: false, error };
     }
+    _configCache.set(id, cfg);
     return { success: true };
   };
 
   const deleteSession = async (id: string) => {
     const { error } = await supabase.from("sessions").delete().eq("id", id);
     if (error) console.error("Erreur lors de la suppression:", error);
+    _configCache.delete(id);
   };
 
   const listJurorsForSession = async (sessionId: string): Promise<string[]> => {
@@ -515,13 +569,15 @@ export const useSenso = () => {
     const discQ = anCfg.questions.filter(q => ["triangulaire", "duo-trio", "a-non-a", "seuil-bet"].includes(q.type));
     const glQ = anCfg.questions.filter(q => q.scope === "global" && !["classement", "seuil", "seuil-bet", "triangulaire", "duo-trio", "a-non-a"].includes(q.type));
 
-    // Build positional column keys for ranking/seuil questions
+    // Build positional column keys for ranking/seuil questions (calculé une fois).
     const maxPositions = rkQ.length > 0
       ? Math.max(...rkQ.map(q => q.codes?.length || q.correctOrder?.length || anCfg.products?.length || 0))
       : 0;
     const posKeys = Array.from({ length: maxPositions }, (_, i) => `position ${i + 1}`);
     const corPosKeys = Array.from({ length: maxPositions }, (_, i) => `correct position ${i + 1}`);
-    const emptyPos = [...posKeys, ...corPosKeys].reduce<Record<string, string>>((o, k) => { o[k] = ""; return o; }, {});
+    const emptyPos: Record<string, string> = {};
+    for (const k of posKeys) emptyPos[k] = "";
+    for (const k of corPosKeys) emptyPos[k] = "";
 
     Object.entries(allAnswers).forEach(([j, jans]: [string, JurorAnswers]) => {
       anCfg.products.forEach((p: Product) => {
@@ -557,9 +613,10 @@ export const useSenso = () => {
       rkQ.forEach(q => {
         const ranked: string[] = Array.isArray(ra[q.id]) ? ra[q.id]! : [];
         const correctOrder: string[] = q.correctOrder || [];
-        const posCols = posKeys.reduce<Record<string, string>>((o, key, idx) => { o[key] = ranked[idx] || ""; return o; }, {});
-        const corPosCols = corPosKeys.reduce<Record<string, string>>((o, key, idx) => { o[key] = correctOrder[idx] || ""; return o; }, {});
-        rows.push({ jury: j, produit: "_classement", question: q.label, type: q.type, valeur: ranked.join(">"), correct: correctOrder.join(">"), ...posCols, ...corPosCols });
+        const row: CSVRow = { jury: j, produit: "_classement", question: q.label, type: q.type, valeur: ranked.join(">"), correct: correctOrder.join(">"), ...emptyPos };
+        for (let idx = 0; idx < posKeys.length; idx++) row[posKeys[idx]] = ranked[idx] || "";
+        for (let idx = 0; idx < corPosKeys.length; idx++) row[corPosKeys[idx]] = correctOrder[idx] || "";
+        rows.push(row);
       });
       const da = jans["_discrim"] || {};
       discQ.forEach(q => {
@@ -602,5 +659,8 @@ export const useSenso = () => {
     pendingCount,
     flushPending,
     isStepComplete,
+    currentSteps,
+    completion,
+    flushSave,
   };
 };

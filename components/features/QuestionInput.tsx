@@ -358,7 +358,7 @@ function collectNodes(axes: RadarAxis[], trail: string[] = []): Array<{ path: st
   return out;
 }
 
-function RadarSVG({ axes, values, max, onChange }: {
+const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
   axes: RadarAxis[];
   values: number[];   // length = axes.length
   max: number;
@@ -493,11 +493,11 @@ function RadarSVG({ axes, values, max, onChange }: {
       })}
     </svg>
   );
-}
+});
 
 // Nœud récursif : slider + bouton d'expansion vers ses enfants.
 // `pathPrefix` permet d'insérer des segments de chemin cachés (aplatissement famille→classe unique).
-function RadarTreeNode({
+const RadarTreeNode = React.memo(function RadarTreeNode({
   axis, nodeAnswer, min, max, path, expandedPaths, togglePath, setPathValue, highlightKey,
   customChildren, onAddCustomChild,
 }: {
@@ -616,7 +616,7 @@ function RadarTreeNode({
       )}
     </div>
   );
-}
+});
 
 function CustomDescriptorAdder({ onAdd }: { onAdd: (label: string) => void }) {
   const [val, setVal] = useState("");
