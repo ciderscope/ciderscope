@@ -770,49 +770,92 @@ export const useSenso = () => {
       anCfg.products.forEach((p: Product) => {
         const pa = jans[p.code] || {};
         ppQ.forEach(q => {
-          // Only include if the question applies to this product
           if (q.codes && q.codes.length > 0 && !q.codes.includes(p.code)) return;
 
           if (q.type === "radar") {
-            // Explose chaque axe en ligne "scale" pour compat AnalyseProfil
-            const answer = pa[q.id];
-            if (answer && typeof answer === "object" && !Array.isArray(answer)) {
-              (q.radarGroups || []).forEach(g => {
-                (g.axes || []).forEach(ax => {
-                  const axAns = (answer as Record<string, unknown>)[ax.label];
-                  const main = (typeof axAns === "object" && axAns !== null)
-                    ? (axAns as { _?: number })._
-                    : axAns;
-                  rows.push({
-                    jury: j, produit: p.code, question: ax.label, type: "scale",
-                    valeur: typeof main === "number" ? String(main) : "",
-                    correct: "", ...emptyPos,
-                  });
+            (q.radarGroups || []).forEach(g => {
+              (g.axes || []).forEach(ax => {
+                const axAns = (pa[q.id] as RadarAnswer)?.[ax.label];
+                const main = (typeof axAns === "object" && axAns !== null) ? axAns._ : axAns;
+                rows.push({
+                  jury: j, produit: p.code, nom_produit: p.label || "", 
+                  question: ax.label, type: "scale",
+                  valeur: typeof main === "number" ? String(main) : "",
+                  correct: "", score: "", ...emptyPos,
                 });
               });
-            }
+            });
             return;
           }
-          rows.push({ jury: j, produit: p.code, question: q.label, type: q.type, valeur: formatVal(pa[q.id], q.type), correct: q.correctAnswer || "", ...emptyPos });
+          const val = formatVal(pa[q.id], q.type);
+          rows.push({ 
+            jury: j, produit: p.code, nom_produit: p.label || "", 
+            question: q.label, type: q.type, valeur: val, 
+            correct: q.correctAnswer || "", 
+            score: (q.correctAnswer && val === q.correctAnswer) ? "1" : "0",
+            ...emptyPos 
+          });
         });
       });
+
       const ra = (jans["_rank"] || {}) as Record<string, string[] | undefined>;
       rkQ.forEach(q => {
         const ranked: string[] = Array.isArray(ra[q.id]) ? ra[q.id]! : [];
         const correctOrder: string[] = q.correctOrder || [];
-        const row: CSVRow = { jury: j, produit: "_classement", question: q.label, type: q.type, valeur: ranked.join(">"), correct: correctOrder.join(">"), ...emptyPos };
+        const row: CSVRow = { 
+          jury: j, produit: "_classement", nom_produit: "", 
+          question: q.label, type: q.type, valeur: ranked.join(">"), 
+          correct: correctOrder.join(">"), 
+          score: ranked.join(">") === correctOrder.join(">") ? "1" : "0",
+          ...emptyPos 
+        };
         for (let idx = 0; idx < posKeys.length; idx++) row[posKeys[idx]] = ranked[idx] || "";
         for (let idx = 0; idx < corPosKeys.length; idx++) row[corPosKeys[idx]] = correctOrder[idx] || "";
         rows.push(row);
       });
+
       const da = jans["_discrim"] || {};
       discQ.forEach(q => {
         const val = da[q.id];
-        const valStr = typeof val === "object" && val !== null ? JSON.stringify(val) : String(val ?? "");
-        rows.push({ jury: j, produit: "_test", question: q.label, type: q.type, valeur: valStr, correct: q.correctAnswer || "", ...emptyPos });
+        let valStr = "";
+        let score = "0";
+
+        if (q.type === "a-non-a") {
+          try {
+            const vObj = val as Record<string, string>;
+            const cObj = Object.fromEntries((q.correctAnswer || "").split(",").map(x => x.split(":")));
+            valStr = Object.entries(vObj).map(([c, v]) => `${c}:${v}`).join(", ");
+            const ok = Object.keys(cObj).every(k => vObj[k] === cObj[k]);
+            score = ok ? "1" : "0";
+          } catch { valStr = String(val ?? ""); }
+        } else if (q.type === "seuil-bet") {
+          try {
+            const vObj = val as Record<string, string>;
+            const levels = q.betLevels || [];
+            valStr = levels.map((l, i) => vObj[i] === l.correctAnswer ? "+" : "-").join("");
+            // Pour BET, le score n'est pas binaire sur tout le test, mais on peut mettre 1 si tout est bon
+            score = valStr.includes("-") ? "0" : "1";
+          } catch { valStr = String(val ?? ""); }
+        } else {
+          valStr = String(val ?? "");
+          score = valStr === q.correctAnswer ? "1" : "0";
+        }
+
+        rows.push({ 
+          jury: j, produit: "_test", nom_produit: "", 
+          question: q.label, type: q.type, valeur: valStr, 
+          correct: q.correctAnswer || "", 
+          score,
+          ...emptyPos 
+        });
       });
+
       const ga = jans["_global"] || {};
-      glQ.forEach(q => rows.push({ jury: j, produit: "_global", question: q.label, type: q.type, valeur: formatVal(ga[q.id], q.type), correct: "", ...emptyPos }));
+      glQ.forEach(q => rows.push({ 
+        jury: j, produit: "_global", nom_produit: "", 
+        question: q.label, type: q.type, valeur: formatVal(ga[q.id], q.type), 
+        correct: "", score: "", ...emptyPos 
+      }));
     });
     return rows;
   }, [anCfg, allAnswers]);

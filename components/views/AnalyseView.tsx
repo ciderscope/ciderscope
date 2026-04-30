@@ -1693,53 +1693,48 @@ function AnalyseJury({ config, allAnswers }: { config: SessionConfig; allAnswers
 
 // ─── Données brutes ───────────────────────────────────────────────────────────
 
-function computeResultat(r: CSVRow): string {
-  if (!r.correct || !r.valeur) return "";
-  const type: string = r.type || "";
-  if (type === "scale" || type === "text" || type === "seuil-bet") return "";
-  if (type === "a-non-a") {
-    // valeur is JSON string of {code: "A"|"non-A"}, correct is "CODE:A,CODE2:non-A"
-    try {
-      const valObj: Record<string, string> = JSON.parse(r.valeur);
-      const corrObj: Record<string, string> = Object.fromEntries(
-        r.correct.split(",").map((p: string) => p.split(":")).filter((a: string[]) => a.length === 2)
-      );
-      const codes = Object.keys(corrObj);
-      if (codes.length === 0) return "";
-      const allCorrect = codes.every(c => valObj[c] === corrObj[c]);
-      const someCorrect = codes.some(c => valObj[c] === corrObj[c]);
-      return allCorrect ? "✓" : someCorrect ? "~" : "✗";
-    } catch { return ""; }
-  }
-  return String(r.valeur) === String(r.correct) ? "✓" : "✗";
-}
-
 function AnalyseDonnees({ data }: { data: CSVRow[] }) {
   if (data.length === 0) return <AnalysisEmpty>Aucune donnée.</AnalysisEmpty>;
 
-  const enriched: Record<string, string | undefined>[] = data.map(r => ({ ...r, résultat: computeResultat(r) }));
-  const headers = Object.keys(enriched[0]);
+  // On ordonne les colonnes pour que ce soit plus lisible
+  const preferredOrder = ["jury", "produit", "nom_produit", "question", "type", "valeur", "correct", "score"];
+  const allKeys = Object.keys(data[0]);
+  const headers = [
+    ...preferredOrder.filter(k => allKeys.includes(k)),
+    ...allKeys.filter(k => !preferredOrder.includes(k))
+  ];
 
   return (
     <Card title="Données brutes">
-      <div className="max-h-[500px] overflow-auto">
-        <table className="data-table">
-          <thead>
-            <tr>{headers.map(h => <th key={h}>{h}</th>)}</tr>
+      <div className="max-h-[600px] overflow-auto border border-[var(--border)] rounded-md">
+        <table className="data-table text-[11px] whitespace-nowrap">
+          <thead className="sticky top-0 bg-[var(--paper)] shadow-sm z-10">
+            <tr>{headers.map(h => <th key={h} className="text-left px-3 py-2 uppercase tracking-wider">{h.replace("_", " ")}</th>)}</tr>
           </thead>
-          <tbody>
-            {enriched.slice(0, 200).map((r, i) => (
-              <tr key={i}>{headers.map(h => (
-                <td key={h} className={h === "résultat" ? rawResultClass(r[h]) : undefined}>
-                  {r[h]}
-                </td>
-              ))}</tr>
+          <tbody className="divide-y divide-[var(--border)]">
+            {data.slice(0, 500).map((r, i) => (
+              <tr key={i} className="hover:bg-[var(--bg)] transition-colors">
+                {headers.map(h => {
+                  const val = r[h];
+                  let cellClass = "px-3 py-1.5";
+                  if (h === "score") {
+                    cellClass += val === "1" ? ` font-bold ${OK_TEXT}` : val === "0" ? ` font-bold ${DANGER_TEXT}` : "";
+                  }
+                  if (h === "jury" || h === "produit") cellClass += " font-mono";
+                  
+                  return (
+                    <td key={h} className={cellClass}>
+                      {h === "score" && val === "1" ? "✓" : h === "score" && val === "0" ? "✗" : val}
+                    </td>
+                  );
+                })}
+              </tr>
             ))}
           </tbody>
         </table>
-        {data.length > 200 && (
-          <div className="p-2 text-xs text-[var(--text-muted)]">
-            Affichage des 200 premières lignes sur {data.length}. Exportez le CSV pour tout voir.
+        {data.length > 500 && (
+          <div className="p-3 text-xs text-[var(--text-muted)] bg-[var(--paper2)] border-t border-[var(--border)] italic">
+            Affichage des 500 premières lignes sur {data.length}. Utilisez l&apos;export CSV pour l&apos;intégralité des données.
           </div>
         )}
       </div>
