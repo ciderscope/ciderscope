@@ -3,7 +3,6 @@
 import { createContext, useContext, useMemo, useCallback, type ReactNode } from "react";
 import { Topbar } from "../components/ui/Topbar";
 import { useSenso, type SensoState, type SensoActions } from "../hooks/useSenso";
-import { supabase } from "../lib/supabase";
 
 // Contexte d'actions : référence stable, ne se ré-émet jamais après le premier render
 // (toutes les actions sont useCallback à deps vides). Les composants qui appellent
@@ -44,8 +43,8 @@ export const useApp = (): AppContextValue => {
 export function AppProviders({ children }: { children: ReactNode }) {
   const { state, actions } = useSenso();
 
-  const handleLogout = useCallback(async () => {
-    await supabase.auth.signOut();
+  const handleLogout = useCallback(() => {
+    sessionStorage.removeItem("admin_auth");
     actions.setAdminAuth(false);
   }, [actions]);
 

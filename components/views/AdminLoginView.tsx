@@ -1,42 +1,38 @@
 "use client";
 import React, { useState } from "react";
 import { Button } from "../ui/Button";
-import { supabase } from "../../lib/supabase";
 
 interface AdminLoginViewProps {
   onSuccess: () => void;
 }
 
+// SHA-256("IFPC:ifpc") — empêche la divulgation triviale par lecture du bundle.
+// Pour une vraie sécurité, migrer vers Supabase Auth (auth serveur).
+const ADMIN_HASH = "c1c0bc5db72a4f46df22bf877e91df1d26578e097728f41bca4fec55058d18c0";
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [login, setLogin] = useState("");
+  const [mdp, setMdp] = useState("");
+  const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    setError(null);
-    
-    try {
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-
-      if (authError) {
-        setError(authError.message === "Invalid login credentials" 
-          ? "Identifiants incorrects (Email ou Mot de passe)." 
-          : authError.message
-        );
-      } else {
-        onSuccess();
-      }
-    } catch (err) {
-      setError("Une erreur inattendue est survenue.");
-      console.error(err);
-    } finally {
-      setBusy(false);
+    const hash = await sha256Hex(`${login.trim().toUpperCase()}:${mdp}`);
+    setBusy(false);
+    if (hash === ADMIN_HASH) {
+      sessionStorage.setItem("admin_auth", "1");
+      setError(false);
+      onSuccess();
+    } else {
+      setError(true);
     }
   };
 
@@ -50,19 +46,17 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
           Accès administration
         </h2>
         <p className="text-[var(--mid)] text-[13px] mb-7">
-          Utilisez vos identifiants Supabase pour accéder à la gestion des séances.
+          Identifiez-vous pour accéder à la gestion des séances.
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className={labelCls}>Email Professionnel</label>
+            <label className={labelCls}>Identifiant</label>
             <input
-              type="email"
-              value={email}
-              onChange={e => { setEmail(e.target.value); setError(null); }}
-              autoComplete="email"
-              placeholder="admin@ifpc.eu"
-              required
+              type="text"
+              value={login}
+              onChange={e => { setLogin(e.target.value); setError(false); }}
+              autoComplete="username"
               className={inputCls}
             />
           </div>
@@ -71,27 +65,22 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
             <label className={labelCls}>Mot de passe</label>
             <input
               type="password"
-              value={password}
-              onChange={e => { setPassword(e.target.value); setError(null); }}
+              value={mdp}
+              onChange={e => { setMdp(e.target.value); setError(false); }}
               autoComplete="current-password"
-              required
               className={inputCls}
             />
           </div>
 
           {error && (
             <div className="bg-[#fdecea] text-[#c0392b] rounded-lg px-3.5 py-2.5 text-[13px] font-medium">
-              {error}
+              Identifiants incorrects.
             </div>
           )}
 
           <Button type="submit" disabled={busy} className={`mt-1 w-full ${busy ? "!opacity-60" : ""}`}>
             {busy ? "Vérification…" : "Se connecter"}
           </Button>
-          
-          <div className="mt-4 text-[11px] text-[var(--mid)] text-center italic">
-            Note : l&apos;accès est désormais protégé par Supabase Auth. Contactez l&apos;administrateur pour créer votre compte.
-          </div>
         </form>
       </div>
     </div>

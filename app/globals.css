@@ -5,6 +5,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
+/* ── Theme Tailwind v4 : aligne `font-sans` / `font-mono` sur la charte IFPC. ── */
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 /* ── Design tokens — charte IFPC ── */
 :root {
   /* Brand — vert IFPC primaire, orange IFPC en accent, jaune pâle highlight, sable */
@@ -519,9 +525,16 @@ input[type=range]::-webkit-slider-thumb {
 .radar-axis { stroke: var(--border); stroke-width: 1; opacity: .7; }
 .radar-axis:hover { stroke: var(--accent); opacity: 1; }
 .radar-value { fill: var(--accent); fill-opacity: .18; stroke: var(--accent); stroke-width: 2; pointer-events: none; }
-.radar-handle { fill: #fff; stroke: var(--accent); stroke-width: 2; cursor: grab; touch-action: none; transition: r .1s, fill .15s; }
+.radar-axis { pointer-events: none; }
+.radar-handle { fill: #fff; stroke: var(--accent); stroke-width: 2; cursor: grab; touch-action: none; transition: r .1s, fill .15s, stroke-width .15s; }
 .radar-handle:hover { fill: var(--accent); }
+.radar-handle.arming { stroke-width: 3; r: 12; animation: radar-handle-pulse .6s ease-out infinite; }
 .radar-handle.dragging { fill: var(--accent); cursor: grabbing; r: 11; }
+@keyframes radar-handle-pulse {
+  0%   { stroke-opacity: 1;   r: 11; }
+  50%  { stroke-opacity: .55; r: 13; }
+  100% { stroke-opacity: 1;   r: 11; }
+}
 .radar-label { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; fill: var(--ink); font-weight: 600; pointer-events: none; user-select: none; }
 .radar-value-text { font-family: inherit; font-size: 11px; font-weight: 800; fill: var(--accent); pointer-events: none; user-select: none; }
 

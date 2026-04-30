@@ -358,6 +358,14 @@ function collectNodes(axes: RadarAxis[], trail: string[] = []): Array<{ path: st
   return out;
 }
 
+// Délai d'armement tactile : il faut maintenir la poignée appuyée pendant ce
+// temps avant qu'un déplacement ne soit pris en compte. Évite les ajustements
+// involontaires en faisant glisser un doigt sur la toile.
+const TOUCH_HOLD_MS = 220;
+// Tolérance de mouvement pendant le hold tactile : au-delà, on considère que
+// l'utilisateur a "raté" la pression et on annule l'armement.
+const HOLD_MOVE_TOLERANCE_PX = 8;
+
 const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
   axes: RadarAxis[];
   values: number[];   // length = axes.length
@@ -367,7 +375,23 @@ const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
   const N = axes.length;
   const cx = 200, cy = 200, R = 140;
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // dragIdx === null : aucune poignée n'est en train d'être manipulée
+  // dragIdx >= 0 : la poignée correspondante est armée et suit le pointeur
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  // armingIdx : poignée touchée mais pas encore armée (feedback visuel pendant le hold tactile).
+  const [armingIdx, setArmingIdx] = useState<number | null>(null);
+
+  // État du press en cours. Persistant via ref pour être lisible dans les
+  // setTimeout sans capturer de stale closures.
+  const pressRef = useRef<{
+    axisIdx: number;
+    pointerId: number;
+    isTouch: boolean;
+    armed: boolean;
+    startX: number;
+    startY: number;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null>(null);
 
   const angleFor = (i: number) => -Math.PI / 2 + (2 * Math.PI * i) / N;
   const pointFor = (i: number, v: number) => {
@@ -406,36 +430,73 @@ const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
     return Math.max(0, Math.min(max, Math.round(v)));
   };
 
-  const handlePointerDown = (i: number) => (e: React.PointerEvent<SVGCircleElement>) => {
-    e.preventDefault();
-    (e.target as SVGCircleElement).setPointerCapture(e.pointerId);
-    setDragIdx(i);
-    onChange(i, valueFromPointer(i, e.clientX, e.clientY));
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<SVGCircleElement>) => {
-    if (dragIdx === null) return;
-    onChange(dragIdx, valueFromPointer(dragIdx, e.clientX, e.clientY));
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<SVGCircleElement>) => {
-    if (dragIdx === null) return;
-    try { (e.target as SVGCircleElement).releasePointerCapture(e.pointerId); } catch {}
+  const cancelPress = () => {
+    const p = pressRef.current;
+    if (p?.timer) clearTimeout(p.timer);
+    pressRef.current = null;
+    setArmingIdx(null);
     setDragIdx(null);
   };
 
-  // Clic sur l'axe (en dehors de la poignée) pour positionner directement
-  const handleAxisClick = (i: number) => (e: React.MouseEvent<SVGLineElement>) => {
-    onChange(i, valueFromPointer(i, e.clientX, e.clientY));
+  const handlePointerDown = (i: number) => (e: React.PointerEvent<SVGCircleElement>) => {
+    e.preventDefault();
+    (e.target as SVGCircleElement).setPointerCapture(e.pointerId);
+
+    const isTouch = e.pointerType === "touch" || e.pointerType === "pen";
+    const press = {
+      axisIdx: i,
+      pointerId: e.pointerId,
+      isTouch,
+      armed: !isTouch, // souris : armé immédiatement (mais on ne déplace toujours pas tant que pointermove n'a pas eu lieu)
+      startX: e.clientX,
+      startY: e.clientY,
+      timer: null as ReturnType<typeof setTimeout> | null,
+    };
+    pressRef.current = press;
+
+    if (isTouch) {
+      // Tactile : feedback "armement en cours", puis arm après le hold.
+      setArmingIdx(i);
+      press.timer = setTimeout(() => {
+        if (pressRef.current !== press) return;
+        press.armed = true;
+        setArmingIdx(null);
+        setDragIdx(i);
+        // Vibration courte si supportée — confirme à l'utilisateur que la poignée est saisie.
+        try { navigator.vibrate?.(12); } catch { /* ignore */ }
+      }, TOUCH_HOLD_MS);
+    } else {
+      setDragIdx(i);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<SVGCircleElement>) => {
+    const p = pressRef.current;
+    if (!p) return;
+    if (!p.armed) {
+      // Pendant le hold tactile : si le doigt bouge trop, on annule l'armement.
+      const dx = e.clientX - p.startX;
+      const dy = e.clientY - p.startY;
+      if (Math.hypot(dx, dy) > HOLD_MOVE_TOLERANCE_PX) {
+        cancelPress();
+      }
+      return;
+    }
+    onChange(p.axisIdx, valueFromPointer(p.axisIdx, e.clientX, e.clientY));
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<SVGCircleElement>) => {
+    try { (e.target as SVGCircleElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    cancelPress();
   };
 
   return (
     <svg ref={svgRef} viewBox="0 0 400 400" className="radar-svg" role="img">
-      {/* grille concentrique */}
+      {/* grille concentrique — purement décorative, plus de clic-pour-déplacer */}
       {gridPolys.map((pts, k) => (
         <polygon key={k} points={pts} className="radar-grid" />
       ))}
-      {/* axes */}
+      {/* axes — plus de handler de clic : seules les poignées modifient les valeurs */}
       {axes.map((_, i) => {
         const a = angleFor(i);
         const ex = cx + R * Math.cos(a);
@@ -445,8 +506,6 @@ const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
             key={`ax${i}`}
             x1={cx} y1={cy} x2={ex} y2={ey}
             className="radar-axis"
-            onClick={handleAxisClick(i)}
-            style={{ cursor: "pointer" }}
           />
         );
       })}
@@ -455,15 +514,18 @@ const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
       {/* poignées */}
       {axes.map((_, i) => {
         const p = pointFor(i, values[i] ?? 0);
+        const isDragging = dragIdx === i;
+        const isArming = armingIdx === i;
         return (
           <circle
             key={`h${i}`}
             cx={p.x} cy={p.y} r={9}
-            className={`radar-handle ${dragIdx === i ? "dragging" : ""}`}
+            className={`radar-handle${isDragging ? " dragging" : ""}${isArming ? " arming" : ""}`}
             onPointerDown={handlePointerDown(i)}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            style={{ touchAction: "none" }}
           />
         );
       })}

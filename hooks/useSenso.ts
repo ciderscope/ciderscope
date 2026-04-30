@@ -149,20 +149,14 @@ export const useSenso = () => {
       const savedAnT = localStorage.getItem("senso_curAnT");
       const savedAdminSection = localStorage.getItem("senso_admin_section") as "seances" | "analyse";
 
-      // Vraie vérification de session via Supabase
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) setAdminAuth(true);
+      // Auth admin local : un flag dans sessionStorage suffit (auth simple par hash).
+      if (sessionStorage.getItem("admin_auth") === "1") setAdminAuth(true);
 
       if (savedMode) setMode(savedMode);
       if (savedScreen) setScreen(savedScreen);
       if (savedAdminSection === "analyse" || savedAdminSection === "seances") setAdminSection(savedAdminSection);
-      
-      const promises: Promise<unknown>[] = [];
 
-      // Écoute des changements d'auth (ex: logout depuis un autre onglet)
-      supabase.auth.onAuthStateChange((_event, session) => {
-        setAdminAuth(!!session);
-      });
+      const promises: Promise<unknown>[] = [];
 
       if (savedEditSessId) {
         setEditSessId(savedEditSessId);
@@ -683,7 +677,12 @@ export const useSenso = () => {
       config: cfg,
     });
     if (error) {
-      console.error("Erreur lors de l'enregistrement de la séance:", error);
+      // L'objet PostgrestError peut sérialiser vide via JSON.stringify ; on logge
+      // explicitement chaque champ pour diagnostiquer (notamment les blocages RLS).
+      console.error(
+        "Erreur lors de l'enregistrement de la séance:",
+        { message: error.message, code: error.code, details: error.details, hint: error.hint }
+      );
       return { success: false, error };
     }
     _configCache.set(id, { cfg, ts: Date.now() });
