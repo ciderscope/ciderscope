@@ -525,6 +525,60 @@ input[type=range]::-webkit-slider-thumb {
 .radar-axis { stroke: var(--border); stroke-width: 1; opacity: .7; }
 .radar-axis:hover { stroke: var(--accent); opacity: 1; }
 .radar-value { fill: var(--accent); fill-opacity: .18; stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+/* TouchSafeSlider — alternative tactile-safe à <input type="range"> */
+.ts-slider {
+  position: relative;
+  height: 36px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  outline: none;
+  cursor: pointer;
+  /* Empêche le double-tap zoom & autres délais, gardé compatible avec pan-y inline. */
+  -webkit-tap-highlight-color: transparent;
+}
+.ts-slider:focus-visible .ts-slider-thumb { box-shadow: 0 0 0 4px rgba(238, 140, 0, .25); }
+.ts-slider-track {
+  position: absolute; left: 0; right: 0;
+  height: 6px; background: var(--paper3); border-radius: 3px;
+  pointer-events: none;
+}
+.ts-slider-fill {
+  position: absolute; left: 0;
+  height: 6px; background: var(--accent); border-radius: 3px;
+  pointer-events: none;
+}
+.ts-slider-thumb {
+  position: absolute; top: 50%;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #fff; border: 2px solid var(--accent);
+  transform: translate(-50%, -50%);
+  transition: transform .15s, box-shadow .15s, background .15s;
+  pointer-events: none;
+}
+.ts-slider.arming .ts-slider-thumb {
+  border-width: 3px;
+  animation: ts-thumb-pulse .6s ease-out infinite;
+}
+.ts-slider.dragging .ts-slider-thumb {
+  background: var(--accent);
+  box-shadow: 0 0 0 8px rgba(238, 140, 0, .18);
+}
+@keyframes ts-thumb-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50%      { transform: translate(-50%, -50%) scale(1.18); }
+}
+
+/* Optimisation tactile globale : élimine le délai 300ms sur les boutons et
+   évite que le double-tap ne déclenche un zoom indésirable. Les zones non
+   interactives (texte, fond) restent en touch-action auto pour scroll natif. */
+button, [role="button"], a.btn, .Button, .btn {
+  touch-action: manipulation;
+}
+
 .radar-axis { pointer-events: none; }
 .radar-handle { fill: #fff; stroke: var(--accent); stroke-width: 2; cursor: grab; touch-action: none; transition: r .1s, fill .15s, stroke-width .15s; }
 .radar-handle:hover { fill: var(--accent); }

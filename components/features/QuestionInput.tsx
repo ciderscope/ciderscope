@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../ui/Badge";
+import { TouchSafeSlider } from "../ui/TouchSafeSlider";
 import { Question, Product, RadarAxis, AnswerValue, ScaleAnswer, RadarAnswer, RadarNodeAnswer } from "../../types";
 import { FiChevronLeft, FiSearch, FiX, FiPlus, FiMinus } from "react-icons/fi";
 interface QuestionInputProps {
@@ -186,13 +187,12 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
       <div className="scale-wrap">
         <div className="scale-track">
           <span className={monoCls}>{q.labelMin || mn}</span>
-          <input
-            type="range"
+          <TouchSafeSlider
             min={mn}
             max={mx}
             value={mainValue}
-            onChange={(e) => updateMain(parseInt(e.target.value))}
-            className="cursor-pointer"
+            onChange={updateMain}
+            ariaLabel={q.label}
           />
           <span className={monoCls}>{q.labelMax || mx}</span>
           <span className="scale-value">{mainValue}</span>
@@ -208,13 +208,12 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
                   <span className="scale-sub-label">{label}</span>
                   <div className="scale-track scale-track-sub">
                     <span className={`${monoCls} min-w-5`}>{mn}</span>
-                    <input
-                      type="range"
+                    <TouchSafeSlider
                       min={mn}
                       max={mx}
                       value={subVal}
-                      onChange={(e) => updateSub(label, parseInt(e.target.value))}
-                      className="cursor-pointer"
+                      onChange={(v) => updateSub(label, v)}
+                      ariaLabel={label}
                     />
                     <span className={`${monoCls} min-w-5`}>{mx}</span>
                     <span className="scale-value scale-value-sub">{subVal}</span>
@@ -604,12 +603,12 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
     <div className={`radar-tree-node depth-${path.length - 1}${isHighlight ? " highlight" : ""}`} data-path={pathKey}>
       <div className="radar-tree-row">
         <span className="radar-tree-label">{axis.label}</span>
-        <input
-          type="range"
+        <TouchSafeSlider
           min={min}
           max={max}
           value={v}
-          onChange={(e) => setPathValue(path, parseInt(e.target.value))}
+          onChange={(nv) => setPathValue(path, nv)}
+          ariaLabel={axis.label}
         />
         <span className="radar-tree-val">{v}</span>
         {hasDisplayChildren ? (
@@ -658,12 +657,12 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
               <div key={`custom:${label}`} className="radar-tree-node depth-custom">
                 <div className="radar-tree-row">
                   <span className="radar-tree-label radar-tree-label-custom">{label}</span>
-                  <input
-                    type="range"
+                  <TouchSafeSlider
                     min={min}
                     max={max}
                     value={childAnswer._}
-                    onChange={(e) => setPathValue([...realParentPath, label], parseInt(e.target.value))}
+                    onChange={(nv) => setPathValue([...realParentPath, label], nv)}
+                    ariaLabel={label}
                   />
                   <span className="radar-tree-val">{childAnswer._}</span>
                   <span className="radar-tree-toggle placeholder" aria-hidden="true" />
