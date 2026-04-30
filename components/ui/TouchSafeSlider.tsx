@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 // Délai d'armement tactile : il faut maintenir le doigt appuyé sans bouger
 // pendant ce temps avant que la valeur ne change. Évite les ajustements
 // involontaires en faisant glisser le doigt sur le questionnaire.
-const TOUCH_HOLD_MS = 220;
+const TOUCH_HOLD_MS = 55;
 // Tolérance de mouvement pendant le hold tactile : au-delà, on annule
 // (l'utilisateur a glissé pour scroller, pas pour ajuster).
 const HOLD_MOVE_TOLERANCE_PX = 8;
@@ -20,7 +20,7 @@ export interface TouchSafeSliderProps {
 }
 
 /**
- * Curseur tactile-safe : sur tactile, exige un appui long (~220 ms) avant que
+ * Curseur tactile-safe : sur tactile, exige un appui court (~110 ms) avant que
  * la valeur ne change ; tout mouvement avant l'armement annule la manipulation
  * (le doigt sert alors à scroller). Sur souris, comportement standard.
  *
