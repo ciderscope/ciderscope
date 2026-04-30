@@ -6,6 +6,7 @@ import { QuestionInput } from "../features/QuestionInput";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
+import { ConfirmDialog, DangerGhostButton, MutedText } from "../ui/ViewPrimitives";
 import { Question, QuestionType, Product, BetLevel, RadarGroup, RadarAxis, SessionConfig, SessionListItem, AllAnswers, CSVRow, AnswerValue, AppScreen } from "../../types";
 import { wlm } from "../../lib/utils";
 import { AROMA_PRESET } from "../../lib/aromaPreset";
@@ -13,7 +14,7 @@ import { AROMA_PRESET } from "../../lib/aromaPreset";
 // AnalyseView (Chart.js, calculs lourds) chargée à la demande.
 const AnalyseView = dynamic(() => import("./AnalyseView").then(m => m.AnalyseView), {
   ssr: false,
-  loading: () => <div style={{ padding: 32, color: "var(--mid)" }}>Chargement de l&apos;analyse…</div>,
+  loading: () => <div className="p-8 text-[var(--mid)]">Chargement de l&apos;analyse…</div>,
 });
 
 // Génère un id unique pour une nouvelle question/groupe.
@@ -175,6 +176,8 @@ interface AdminViewProps {
   editCfg: SessionConfig | null;
   curEditTab: string;
   editSessId: string | null;
+  adminSection: "seances" | "analyse";
+  setAdminSection: (v: "seances" | "analyse") => void;
   onNewSession: () => void;
   onEditSession: (id: string) => void;
   onToggleActive: (id: string) => void;
@@ -200,12 +203,12 @@ interface AdminViewProps {
 
 export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
+  adminSection, setAdminSection,
   onNewSession, onEditSession, onToggleActive, onDuplicateSession, onDeleteSession,
   onSetEditCfg, onSetEditTab, onSaveEdit, onHome, downloadCSV, loadSessionConfig,
   listJurorsForSession, deleteJury,
   allAnswers, anSessId, anCfg, csvData, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
-  const [adminSection, setAdminSection] = useState<"seances" | "analyse">("seances");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   if (screen === "landing") {
@@ -246,9 +249,9 @@ export const AdminView = ({
 
         {adminSection === "seances" && (
         <>
-        <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px", flexWrap: "wrap" }}>
-          <h2 style={{ fontWeight: 800, fontSize: "22px" }}>Séances</h2>
-          <div style={{ flex: 1 }}></div>
+        <div className="flex items-center gap-3.5 mb-6 flex-wrap">
+          <h2 className="font-extrabold text-[22px]">Séances</h2>
+          <div className="flex-1"></div>
           <Button size="sm" onClick={onNewSession}>+ Nouvelle</Button>
         </div>
         <div id="sessList">
@@ -273,12 +276,12 @@ export const AdminView = ({
                   }}><FiPrinter /></Button>
                   <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer"><FiCopy /></Button>
                   {confirmingId === s.id ? (
-                    <div style={{ display: "flex", gap: "4px" }}>
+                    <div className="flex gap-1">
                       <Button variant="danger" size="sm" onClick={() => { onDeleteSession(s.id); setConfirmingId(null); }}>Confirmer ?</Button>
                       <Button variant="ghost" size="sm" onClick={() => setConfirmingId(null)}>Annuler</Button>
                     </div>
                   ) : (
-                    <Button variant="ghost" size="sm" style={{ color: "var(--danger)" }} onClick={() => setConfirmingId(s.id)} title="Supprimer"><FiX /></Button>
+                    <DangerGhostButton onClick={() => setConfirmingId(s.id)} title="Supprimer"><FiX /></DangerGhostButton>
                   )}
                 </div>
               </div>
@@ -323,14 +326,14 @@ export const AdminView = ({
               </Card>
               <Card title="Échantillons">
                 {editCfg.products.map((p: Product, i: number) => (
-                  <div key={i} className="flex" style={{ marginBottom: "8px", gap: "6px" }}>
+                  <div key={i} className="flex mb-2 gap-1.5">
                     <input
                       value={p.code}
                       onChange={(e) => {
                         const nl = [...editCfg.products]; nl[i].code = e.target.value;
                         onSetEditCfg({ ...editCfg, products: nl });
                       }}
-                      style={{ width: "90px", border: "1px solid var(--border)", borderRadius: "7px", padding: "7px", fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: "13px" }}
+                      className="w-[90px] border border-[var(--border)] rounded-[7px] p-[7px] font-mono text-[13px]"
                     />
                     <input
                       value={p.label || ""}
@@ -339,11 +342,11 @@ export const AdminView = ({
                         const nl = [...editCfg.products]; nl[i].label = e.target.value;
                         onSetEditCfg({ ...editCfg, products: nl });
                       }}
-                      style={{ flex: 1, border: "1px solid var(--border)", borderRadius: "7px", padding: "7px", fontSize: "13px" }}
+                      className="flex-1 border border-[var(--border)] rounded-[7px] p-[7px] text-[13px]"
                     />
-                    <Button variant="ghost" size="sm" style={{ color: "var(--danger)" }} onClick={() => {
+                    <DangerGhostButton onClick={() => {
                       onSetEditCfg({ ...editCfg, products: editCfg.products.filter((_: Product, idx: number) => idx !== i) });
-                    }}><FiX /></Button>
+                    }}><FiX /></DangerGhostButton>
                   </div>
                 ))}
                 <div className="flex mt8">
@@ -373,7 +376,7 @@ export const AdminView = ({
           )}
           {curEditTab === "données" && (
             <Card title="Export des données">
-              <p style={{ fontSize: "12px", color: "var(--mid)", marginBottom: "10px" }}>
+              <p className="text-xs text-[var(--mid)] mb-2.5">
                 Pour exporter les réponses détaillées (toutes questions, par jury), utilisez l&apos;onglet <strong>Analyse</strong> de la séance.
               </p>
               <Button
@@ -390,7 +393,7 @@ export const AdminView = ({
             </Card>
           )}
         </div>
-        <div className="flex mt24" style={{ justifyContent: "flex-end" }}>
+        <div className="flex mt24 justify-end">
           <Button variant="ghost" size="sm" onClick={onHome}><FiArrowLeft /> Liste</Button>
           <Button variant="ok" onClick={onSaveEdit}><FiCheck /> Enregistrer</Button>
         </div>
@@ -424,28 +427,23 @@ function ParticipantsTab({ sessionId, listJurorsForSession, deleteJury }: {
   return (
     <Card title="Participants ayant répondu">
       {jurors === null ? (
-        <div style={{ color: "var(--mid)" }}>Chargement…</div>
+        <MutedText>Chargement…</MutedText>
       ) : jurors.length === 0 ? (
-        <div style={{ color: "var(--mid)" }}>Aucun participant n&apos;a encore répondu à cette séance.</div>
+        <MutedText>Aucun participant n&apos;a encore répondu à cette séance.</MutedText>
       ) : (
         <>
-          <p style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "10px" }}>
+          <p className="text-[11px] text-[var(--mid)] mb-2.5">
             Cliquez sur la croix pour supprimer définitivement les réponses d&apos;un participant.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div className="flex flex-col gap-1.5">
             {jurors.map(n => (
-              <div key={n} style={{
-                display: "flex", alignItems: "center", gap: "8px",
-                padding: "8px 12px", background: "var(--paper2)", borderRadius: "8px",
-                border: "1px solid var(--border)",
-              }}>
-                <span style={{ flex: 1, fontWeight: 600 }}>{n}</span>
+              <div key={n} className="flex items-center gap-2 px-3 py-2 bg-[var(--paper2)] rounded-lg border border-[var(--border)]">
+                <span className="flex-1 font-semibold">{n}</span>
                 <button
                   type="button"
-                  className="chip-x"
+                  className="chip-x !text-[var(--danger)]"
                   title="Supprimer ce participant"
                   onClick={() => setConfirmDelete(n)}
-                  style={{ color: "var(--danger)" }}
                 >
                   <FiX size={14} />
                 </button>
@@ -456,53 +454,26 @@ function ParticipantsTab({ sessionId, listJurorsForSession, deleteJury }: {
       )}
 
       {confirmDelete && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => { if (!busy) setConfirmDelete(null); }}
-          style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
+        <ConfirmDialog
+          title="Supprimer ce participant ?"
+          busy={busy}
+          confirmLabel={busy ? "Suppression…" : "Supprimer"}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={async () => {
+            if (!confirmDelete) return;
+            setBusy(true);
+            const res = await deleteJury(sessionId, confirmDelete);
+            setBusy(false);
+            if (res?.success) {
+              setJurors(prev => (prev || []).filter(j => j !== confirmDelete));
+            } else {
+              alert("Erreur lors de la suppression.");
+            }
+            setConfirmDelete(null);
           }}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: "var(--paper)", borderRadius: "12px",
-              padding: "22px 24px", maxWidth: "380px", width: "90%",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-            }}
-          >
-            <div style={{ fontSize: "15px", fontWeight: 700, marginBottom: "8px" }}>
-              Supprimer ce participant ?
-            </div>
-            <div style={{ fontSize: "13px", color: "var(--mid)", marginBottom: "18px" }}>
-              Toutes les réponses de <strong>{confirmDelete}</strong> seront définitivement supprimées de cette séance.
-            </div>
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-              <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(null)} disabled={busy}>Annuler</Button>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={busy}
-                onClick={async () => {
-                  if (!confirmDelete) return;
-                  setBusy(true);
-                  const res = await deleteJury(sessionId, confirmDelete);
-                  setBusy(false);
-                  if (res?.success) {
-                    setJurors(prev => (prev || []).filter(j => j !== confirmDelete));
-                  } else {
-                    alert("Erreur lors de la suppression.");
-                  }
-                  setConfirmDelete(null);
-                }}
-              >
-                {busy ? "Suppression…" : "Supprimer"}
-              </Button>
-            </div>
-          </div>
-        </div>
+          Toutes les réponses de <strong>{confirmDelete}</strong> seront définitivement supprimées de cette séance.
+        </ConfirmDialog>
       )}
     </Card>
   );
@@ -652,8 +623,8 @@ function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
 
   if (codes.length === 0) {
     return (
-      <div 
-        className={`serie-empty${overEmpty ? " drag-over" : ""}`}
+      <div
+        className={`serie-empty${overEmpty ? " drag-over" : ""} border-2 border-dashed border-[var(--border)] rounded-xl p-6 text-center transition-all duration-150`}
         onDragOver={(e) => { e.preventDefault(); setOverEmpty(true); }}
         onDragLeave={() => setOverEmpty(false)}
         onDrop={(e) => {
@@ -663,16 +634,9 @@ function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
           const fromSerie = e.dataTransfer.getData("from-serie");
           if (code && fromSerie !== "1" && onAdd) onAdd(code);
         }}
-        style={{ 
-          border: "2px dashed var(--border)", 
-          borderRadius: "12px", 
-          padding: "24px", 
-          textAlign: "center",
-          transition: "all .15s"
-        }}
       >
         Cliquez sur un échantillon ci-dessus pour l&apos;ajouter à la série <br/>
-        <span style={{ fontSize: "11px", color: "var(--mid)" }}>ou glissez-le ici</span>
+        <span className="text-[11px] text-[var(--mid)]">ou glissez-le ici</span>
       </div>
     );
   }
@@ -689,7 +653,7 @@ function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
         >
           {/* Handle — seule partie draggable */}
           <span
-            className="drag-handle"
+            className="drag-handle cursor-grab"
             draggable
             onDragStart={(e) => {
               setDragIdx(i);
@@ -697,21 +661,12 @@ function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
               e.dataTransfer.setData("from-serie", "1");
             }}
             onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
-            style={{ cursor: "grab" }}
           >&#8942;&#8942;</span>
           <span className="rank-pos">{i + 1}</span>
           <span className="rank-code">{code}</span>
           {/* × — onClick avec stopPropagation pour éviter les interférences */}
           <button
-            className="chip-x"
-            style={{ 
-              marginLeft: "auto", 
-              padding: "6px", 
-              borderRadius: "4px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
+            className="chip-x ml-auto p-1.5 rounded flex items-center justify-center"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -763,8 +718,7 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
       </div>
       <div
         ref={poolRef}
-        className={`chip-pool${overPool ? " drag-over" : ""}`}
-        style={{ minHeight: "54px", border: "1.5px dashed var(--border)", borderRadius: "10px", padding: "8px", transition: "border-color .15s, background .15s" }}
+        className={`chip-pool${overPool ? " drag-over" : ""} min-h-[54px] border-[1.5px] border-dashed border-[var(--border)] rounded-[10px] p-2 transition-[border-color,background] duration-150`}
         onDragOver={(e) => { e.preventDefault(); setOverPool(true); }}
         onDragLeave={(e) => {
           // Ne pas réinitialiser si la souris entre dans un élément enfant du pool
@@ -796,17 +750,17 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
       </div>
 
       {/* Série — selected + orderable */}
-      <div className="builder-section-label" style={{ marginTop: "16px" }}>
+      <div className="builder-section-label mt-4">
         SÉRIE — {codes.length} échantillon{codes.length > 1 ? "s" : ""} · glissez pour réordonner · × pour retirer
       </div>
-      <div style={{ fontSize: "11px", color: "var(--mid)", fontStyle: "italic", marginBottom: "6px" }}>
+      <div className="text-[11px] text-[var(--mid)] italic mb-1.5">
         Position 1 = valeur la plus faible{codes.length > 1 ? ` · Position ${codes.length} = valeur la plus élevée` : ""}
       </div>
       <DraggableSerie codes={codes} onChange={onChangeCodes} onRemove={removeFromSerie} onAdd={addToSerie} />
 
       {/* Correct order — classement only, optional */}
       {type === "classement" && codes.length > 1 && (
-        <div style={{ marginTop: "16px" }}>
+        <div className="mt-4">
           <label className="toggle-row">
             <input
               type="checkbox"
@@ -816,11 +770,11 @@ function ClassementBuilder({ type, products, codes, correctOrder, onChangeCodes,
                 if (!e.target.checked) onChangeOrder([]);
               }}
             />
-            <span className="builder-section-label" style={{ margin: 0 }}>ORDRE ATTENDU (optionnel) — définir la bonne réponse</span>
+            <span className="builder-section-label !m-0">ORDRE ATTENDU (optionnel) — définir la bonne réponse</span>
           </label>
           {showCorrectOrder && (
             <>
-              <div style={{ fontSize: "12px", color: "var(--mid)", margin: "6px 0 8px" }}>
+              <div className="text-xs text-[var(--mid)] mt-1.5 mb-2">
                 Glissez les échantillons dans l&apos;ordre correct attendu du jury
               </div>
               <DraggableSerie
@@ -863,20 +817,20 @@ function SeuilBetBuilder({ levels, onChange }: {
   return (
     <div>
       <div className="builder-section-label">NIVEAUX DE SEUIL (ordre croissant de concentration)</div>
-      <p style={{ fontSize: "11px", color: "var(--mid)", marginTop: "4px" }}>
+      <p className="text-[11px] text-[var(--mid)] mt-1">
         À chaque niveau, 3 codes (2 identiques + 1 différent). Le jury doit identifier le verre différent (3-AFC).
         Le BET individuel est la moyenne géométrique entre les deux concentrations encadrant le premier passage d&apos;erreur → succès (ASTM E679).
       </p>
 
       {levels.map((lv, i) => (
-        <div key={i} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "12px", marginTop: "10px", background: "var(--paper)" }}>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
-            <span style={{ fontWeight: 700, fontSize: "12px", color: "var(--mid)" }}>#{i + 1}</span>
+        <div key={i} className="border border-[var(--border)] rounded-lg p-3 mt-2.5 bg-[var(--paper)]">
+          <div className="flex gap-2 items-center mb-2">
+            <span className="font-bold text-xs text-[var(--mid)]">#{i + 1}</span>
             <input
               value={lv.label}
               placeholder="Libellé (ex. 0,1 g/L)"
               onChange={e => updateLevel(i, { label: e.target.value })}
-              style={{ flex: 1, padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "13px" }}
+              className="flex-1 px-2.5 py-1.5 rounded-md border border-[var(--border)] text-[13px]"
             />
             <input
               type="number"
@@ -884,13 +838,13 @@ function SeuilBetBuilder({ levels, onChange }: {
               step="any"
               placeholder="conc."
               onChange={e => updateLevel(i, { concentration: parseFloat(e.target.value) || 0 })}
-              style={{ width: "90px", padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "13px" }}
+              className="w-[90px] px-2.5 py-1.5 rounded-md border border-[var(--border)] text-[13px]"
               title="Valeur numérique (unité cohérente sur toute la série) utilisée pour le calcul BET"
             />
             <button className="q-del" title="Supprimer le niveau" onClick={() => removeLevel(i)}><FiX /></button>
           </div>
 
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div className="flex gap-2 items-center">
             {[0, 1, 2].map(j => (
               <input
                 key={j}
@@ -901,11 +855,11 @@ function SeuilBetBuilder({ levels, onChange }: {
                   newCodes[j] = e.target.value.trim().toUpperCase();
                   updateLevel(i, { codes: newCodes });
                 }}
-                style={{ width: "80px", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "13px", fontFamily: "'JetBrains Mono', ui-monospace, monospace", textAlign: "center" }}
+                className="w-20 px-2 py-1.5 rounded-md border border-[var(--border)] text-[13px] font-mono text-center"
               />
             ))}
-            <span style={{ fontSize: "11px", color: "var(--mid)", marginLeft: "6px" }}>différent :</span>
-            <div style={{ display: "flex", gap: "4px" }}>
+            <span className="text-[11px] text-[var(--mid)] ml-1.5">différent :</span>
+            <div className="flex gap-1">
               {lv.codes.filter(Boolean).map(code => (
                 <Chip key={code} code={code} active={lv.correctAnswer === code} onClick={() => updateLevel(i, { correctAnswer: code })} />
               ))}
@@ -935,7 +889,7 @@ function TriangulaireBuilder({ products, codes, correctAnswer, onChangeCodes, on
       <SampleToggle products={products} selected={codes} onChange={onChangeCodes} max={3} />
       {codes.length === 3 && (
         <>
-          <div className="builder-section-label" style={{ marginTop: "16px" }}>ÉCHANTILLON DIFFÉRENT (réponse correcte)</div>
+          <div className="builder-section-label mt-4">ÉCHANTILLON DIFFÉRENT (réponse correcte)</div>
           <div className="chip-pool">
             {codes.map(c => (
               <Chip key={c} code={c} active={correctAnswer === c} onClick={() => onChangeCorrect(c)} />
@@ -987,7 +941,7 @@ function DuoTrioBuilder({ products, codes, correctAnswer, onChangeCodes, onChang
       </div>
       {refA && refB && (
         <>
-          <div className="builder-section-label" style={{ marginTop: "16px" }}>RÉPONSE CORRECTE — le verre test est identique à :</div>
+          <div className="builder-section-label mt-4">RÉPONSE CORRECTE — le verre test est identique à :</div>
           <div className="chip-pool">
             {[refA, refB].map(ref => (
               <Chip key={ref} code={ref} active={correctAnswer === ref} onClick={() => onChangeCorrect(ref)} />
@@ -1084,8 +1038,7 @@ function ANonABuilder({ products, codes, correctAnswer, refCode, onChangeCodes, 
       {/* Reference sample */}
       <div className="builder-section-label">ÉCHANTILLON DE RÉFÉRENCE (A) — glissez l&apos;échantillon servant de référence</div>
       <div
-        className={`drop-slot${overRef ? " drag-over" : ""}${refCode ? " filled" : ""}`}
-        style={{ maxWidth: "200px", marginBottom: "16px" }}
+        className={`drop-slot${overRef ? " drag-over" : ""}${refCode ? " filled" : ""} max-w-[200px] mb-4`}
         onDragOver={(e) => { e.preventDefault(); setOverRef(true); }}
         onDragLeave={() => setOverRef(false)}
         onDrop={(e) => {
@@ -1105,7 +1058,7 @@ function ANonABuilder({ products, codes, correctAnswer, refCode, onChangeCodes, 
           setOverRef(false);
         }}
       >
-        <div className="drop-slot-label" style={{ color: "var(--accent)" }}>Référence A</div>
+        <div className="drop-slot-label text-[var(--accent)]">Référence A</div>
         {refCode
           ? <Chip code={refCode} active removable onRemove={() => {
               // Put refCode back into codes when removed as reference
@@ -1217,8 +1170,8 @@ function QCMOptions({ options, correctAnswer, onChange, onChangeCorrect }: {
 }) {
   return (
     <div className="qcm-options-builder">
-      <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px" }}>
-        Cliquez sur <FiCheck size={11} style={{ verticalAlign: "middle" }} /> pour marquer la bonne réponse (utilisée en analyse pour calculer le score)
+      <div className="text-[11px] text-[var(--mid)] mb-2">
+        Cliquez sur <FiCheck size={11} className="align-middle" /> pour marquer la bonne réponse (utilisée en analyse pour calculer le score)
       </div>
       {options.map((opt, i) => (
         <div key={i} className="qcm-option-row">
@@ -1243,7 +1196,7 @@ function QCMOptions({ options, correctAnswer, onChange, onChangeCorrect }: {
           </button>
         </div>
       ))}
-      <Button variant="ghost" size="sm" onClick={() => onChange([...options, ""])} style={{ marginTop: "6px" }}>
+      <Button variant="ghost" size="sm" onClick={() => onChange([...options, ""])} className="mt-1.5">
         <FiPlus /> Ajouter une option
       </Button>
     </div>
@@ -1308,10 +1261,9 @@ function RadarAxisNodeEditor({
         />
         <button
           type="button"
-          className="chip-add"
+          className="chip-add w-6 h-6 rounded-full border border-[var(--border)] bg-[var(--paper)] inline-flex items-center justify-center cursor-pointer text-[var(--accent)]"
           onClick={() => onAddChild(path)}
           title="Ajouter un enfant"
-          style={{ width: "24px", height: "24px", borderRadius: "50%", border: "1px solid var(--border)", background: "var(--paper)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--accent)" }}
         >
           <FiPlus size={14} />
         </button>
@@ -1371,7 +1323,7 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
         <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
       </div>
 
-      <div style={{ display: "flex", gap: "10px", marginTop: "12px", marginBottom: "8px" }}>
+      <div className="flex gap-2.5 mt-3 mb-2">
         <Button variant="secondary" size="sm" onClick={() => setIsConfiguring(!isConfiguring)}>
           {isConfiguring ? "Masquer le paramétrage" : "Paramétrer les catégories"}
         </Button>
@@ -1379,7 +1331,7 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
 
       {isConfiguring && (
         <>
-          <p style={{ fontSize: "11px", color: "var(--mid)", margin: "8px 0 4px" }}>
+          <p className="text-[11px] text-[var(--mid)] mt-2 mb-1">
             Arbre de décision : catégorie (axe de la toile) → sous-catégorie → descripteur. Le jury ne peut rien ajouter, seulement explorer l&apos;arbre défini ici.
           </p>
 
@@ -1390,7 +1342,7 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
                   value={g.title}
                   onChange={(e) => updateGroup(gi, { title: e.target.value })}
                   placeholder="Titre du radar"
-                  style={{ fontWeight: 600, flex: 1 }}
+                  className="font-semibold flex-1"
                 />
                 <button className="chip-x" onClick={() => removeGroup(gi)} type="button" title="Supprimer le groupe">
                   <FiX size={12} />
@@ -1409,13 +1361,13 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
                   />
                 ))}
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setGroupAxes(gi, [...g.axes, { label: "" }])} style={{ marginTop: "4px" }}>
+              <Button variant="ghost" size="sm" onClick={() => setGroupAxes(gi, [...g.axes, { label: "" }])} className="mt-1">
                 <FiPlus /> Catégorie racine
               </Button>
             </div>
           ))}
 
-          <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+          <div className="flex gap-2 mt-2 flex-wrap">
             <Button variant="ghost" size="sm" onClick={addGroup}>
               <FiPlus /> Ajouter un groupe radar
             </Button>
@@ -1432,6 +1384,24 @@ function RadarBuilder({ q, onUpdate }: { q: Question; onUpdate: (patch: Partial<
 // ─────────────────────────────────────────────
 // Main question builder
 // ─────────────────────────────────────────────
+
+// Retourne un libellé par défaut cohérent avec le type de question si le champ est vide.
+const getDefaultLabel = (type: QuestionType): string => {
+  switch (type) {
+    case "radar": return "décrivez le profil aromatique et gustatif de cet échantillon";
+    case "triangulaire": return "Quel échantillon est différent des deux autres ?";
+    case "duo-trio": return "Lequel de ces deux échantillons est identique au témoin ?";
+    case "a-non-a": return "Cet échantillon présente-t-il le défaut ?";
+    case "classement": return "Classez ces échantillons par ordre de préférence";
+    case "seuil": return "Indiquez le rang de cet échantillon";
+    case "seuil-bet": return "Identifiez l'échantillon différent à chaque niveau";
+    case "scale": return "Notez cet échantillon";
+    case "qcm": return "Sélectionnez une option";
+    case "text": return "Commentaires libres";
+    default: return "Nouvelle question";
+  }
+};
+
 function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: SessionConfig; onSetEditCfg: Dispatch<SetStateAction<SessionConfig | null>> }) {
   const products: Product[] = editCfg.products || [];
 
@@ -1441,7 +1411,7 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: SessionConfig; on
     const newQ: Question = {
       id,
       type,
-      label: type === "triangulaire" ? "Quel échantillon est différent des deux autres ?" : "Nouvelle question",
+      label: getDefaultLabel(type),
       scope: ["classement", "seuil", "seuil-bet", "triangulaire", "duo-trio", "a-non-a"].includes(type) ? "standalone" : "per-product",
     };
     if (type === "scale") { newQ.min = 0; newQ.max = 10; }
@@ -1518,9 +1488,9 @@ function QuestionBuilder({ editCfg, onSetEditCfg }: { editCfg: SessionConfig; on
       ))}
 
       {/* Add question buttons */}
-      <div style={{ marginTop: "20px" }}>
+      <div className="mt-5">
         <div className="builder-section-label">AJOUTER UNE QUESTION</div>
-        <div className="flex mt8" style={{ flexWrap: "wrap" }}>
+        <div className="flex mt8 flex-wrap">
           {TYPES.map(t => (
             <Button key={t} variant="secondary" size="sm" onClick={() => addQuestion(t)}>
               <FiPlus /> {TYPE_LABELS[t] || t}
@@ -1551,11 +1521,10 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
           <div className="q-builder-header">
             <span className="q-num">Q{index + 1}</span>
             <Badge variant="ns">{typeLabel}</Badge>
-            <span style={{ flex: 1 }} />
+            <span className="flex-1" />
             <button
-              className="q-del"
+              className={`q-del ${preview ? "!text-[var(--accent)]" : ""}`}
               title={preview ? "Masquer l'aperçu" : "Aperçu participant"}
-              style={{ color: preview ? "var(--accent)" : undefined }}
               onClick={() => setPreview(p => !p)}
             >
               {preview ? <FiEyeOff /> : <FiEye />}
@@ -1572,7 +1541,14 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
           <div className="q-fields">
             <div className="field-wrap full">
               <label>LIBELLÉ</label>
-              <input value={q.label} onChange={(e) => onUpdate({ label: e.target.value })} />
+              <input
+                value={q.label}
+                onChange={(e) => onUpdate({ label: e.target.value })}
+                onBlur={() => {
+                  if (!q.label.trim()) onUpdate({ label: getDefaultLabel(q.type) });
+                }}
+                placeholder={getDefaultLabel(q.type)}
+              />
             </div>
           </div>
 
@@ -1581,7 +1557,7 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
             <div className="q-fields">
               <div className="field-wrap full">
                 <label>AFFICHAGE</label>
-                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                <div className="flex gap-1.5 flex-wrap">
                   <button
                     type="button"
                     className={`q-scope-btn ${q.scope === "per-product" ? "active" : ""}`}
@@ -1642,7 +1618,7 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
 
             {q.type === "duo-trio" && (
               <>
-                <div className="q-fields" style={{ marginBottom: "12px" }}>
+                <div className="q-fields mb-3">
                   <div className="field-wrap full">
                     <label>CONSIGNE PERSONNALISÉE (laisser vide pour la consigne par défaut)</label>
                     <input
@@ -1664,7 +1640,7 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
 
             {q.type === "a-non-a" && (
               <>
-                <div className="q-fields" style={{ marginBottom: "12px" }}>
+                <div className="q-fields mb-3">
                   <div className="field-wrap full">
                     <label>CONSIGNE PERSONNALISÉE (laisser vide pour la consigne par défaut)</label>
                     <input
@@ -1705,8 +1681,8 @@ function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDuplicate, 
           </div>
 
           {preview && (
-            <div style={{ marginTop: "12px", padding: "14px", background: "var(--paper2)", borderLeft: "3px solid var(--accent)", borderRadius: "6px" }}>
-              <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--mid)", marginBottom: "8px" }}>
+            <div className="mt-3 p-3.5 bg-[var(--paper2)] border-l-[3px] border-[var(--accent)] rounded-md">
+              <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--mid)] mb-2">
                 Aperçu participant
               </div>
               <QuestionInput

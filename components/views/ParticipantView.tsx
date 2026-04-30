@@ -51,7 +51,7 @@ const SaveIndicator = ({ status, pendingCount }: { status: SaveStatus; pendingCo
   if (status === "idle" && pendingCount === 0) return null;
   const map = {
     idle:    { icon: <FiCloud size={13} />, text: `${pendingCount} en attente de synchronisation`, color: "#c8820a" },
-    saving:  { icon: <FiLoader size={13} style={{ animation: "spin 1s linear infinite" }} />, text: "Enregistrement…", color: "var(--mid)" },
+    saving:  { icon: <FiLoader size={13} className="animate-spin" />, text: "Enregistrement…", color: "var(--mid)" },
     saved:   { icon: <FiCloud size={13} />, text: "Enregistré", color: "#1a6b3a" },
     pending: { icon: <FiAlertCircle size={13} />, text: `Hors-ligne — ${pendingCount} en file d'attente locale`, color: "#c8820a" },
     error:   { icon: <FiAlertCircle size={13} />, text: "Erreur serveur — réessai automatique", color: "#c0392b" },
@@ -61,14 +61,8 @@ const SaveIndicator = ({ status, pendingCount }: { status: SaveStatus; pendingCo
     <div
       role="status"
       aria-live="polite"
-      className="save-indicator"
-      style={{
-        position: "fixed", zIndex: 50,
-        display: "flex", alignItems: "center", gap: "6px",
-        padding: "6px 10px", background: "var(--paper)", border: `1px solid ${m.color}22`,
-        borderRadius: "999px", fontSize: "12px", color: m.color,
-        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-      }}
+      className="save-indicator fixed z-50 flex items-center gap-1.5 py-1.5 px-2.5 bg-[var(--paper)] rounded-full text-xs shadow-sm"
+      style={{ border: `1px solid ${m.color}22`, color: m.color }}
     >
       {m.icon}<span>{m.text}</span>
     </div>
@@ -84,7 +78,7 @@ const LandingScreen = ({ sessions, onSelectSession }: { sessions: SessionListIte
     <div id="landingContent">
       {sessions.length === 0 ? (
         <div className="no-session">
-          <FiClipboard size={36} style={{ margin: "0 auto 8px", display: "block", color: "var(--mid)" }} />
+          <FiClipboard size={36} className="block mx-auto mb-2 text-[var(--mid)]" />
           <strong>Aucune séance active</strong>
         </div>
       ) : (
@@ -118,11 +112,11 @@ const ConfirmModal = ({
   <div className="modal-overlay" onClick={() => onCancel?.()}>
     <div className="modal" onClick={(e) => e.stopPropagation()}>
       <button className="modal-close" onClick={() => onCancel?.()} aria-label="Fermer"><FiX /></button>
-      <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{title}</h3>
-      <div style={{ marginTop: "12px", fontSize: "13.5px", color: tone === "warn" ? "#8a4a00" : "var(--ink)", lineHeight: 1.5 }}>
+      <h3 className="m-0 text-base font-bold">{title}</h3>
+      <div className={`mt-3 text-[13.5px] leading-normal ${tone === "warn" ? "text-[#8a4a00]" : "text-[var(--ink)]"}`}>
         {message}
       </div>
-      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "20px", flexWrap: "wrap" }}>
+      <div className="flex gap-2 justify-end mt-5 flex-wrap">
         {cancelLabel && (
           <Button variant="ghost" size="sm" onClick={() => onCancel?.()}>{cancelLabel}</Button>
         )}
@@ -147,7 +141,7 @@ const PosteScreen = ({
     <div className="poste-screen">
       <h2>Choisissez votre poste</h2>
       <p className="hint">{curSess?.name} — {cj}</p>
-      <p style={{ fontSize: "13px", color: "var(--mid)", marginTop: "4px", marginBottom: "20px" }}>
+      <p className="text-[13px] text-[var(--mid)] mt-1 mb-5">
         Sélectionnez le numéro indiqué sur votre feuille de service.
       </p>
       <div className="poste-grid">
@@ -272,20 +266,18 @@ const FormScreen = ({
           <Button variant="ghost" size="sm" onClick={onGoBack}><FiArrowLeft /> Changer</Button>
         </div>
 
-        <div className="form-progress-wrap" style={{ padding: "0 16px", marginTop: "4px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--mid)", marginBottom: "4px" }}>
+        <div className="form-progress-wrap px-4 mt-1">
+          <div className="flex justify-between text-[11px] text-[var(--mid)] mb-1">
             <span>Étape {cs + 1} / {total}</span>
             <span>{doneCount} / {total} complétées ({pct}%)</span>
           </div>
-          <div style={{ height: "6px", background: "var(--paper2)", borderRadius: "999px", overflow: "hidden" }}>
+          <div className="h-1.5 bg-[var(--paper2)] rounded-full overflow-hidden">
             <div
-              style={{
-                height: "100%", width: `${pct}%`, background: "var(--accent)",
-                transition: "width 200ms ease",
-              }}
+              className="h-full bg-[var(--accent)] transition-[width] duration-200 ease-in-out"
+              style={{ width: `${pct}%` }}
             />
           </div>
-          <div className="step-list" style={{ display: "flex", gap: "4px", marginTop: "8px", overflowX: "auto", paddingBottom: "4px" }}>
+          <div className="step-list flex gap-1 mt-2 overflow-x-auto pb-1">
             {steps.map((s, i) => {
               const complete = completion[i] ?? false;
               const active = i === cs;
@@ -295,13 +287,8 @@ const FormScreen = ({
                 <div
                   key={i}
                   title={`Étape ${i + 1}${complete ? " — complète" : ""}`}
-                  className={`step-item ${active ? "active" : ""} ${complete ? "complete" : ""}`}
-                  style={{
-                    flex: "0 0 auto", padding: "3px 8px",
-                    background: bg, color: col,
-                    borderRadius: "999px", fontSize: "10px", fontWeight: active ? 700 : 500,
-                    whiteSpace: "nowrap",
-                  }}
+                  className={`step-item flex-none px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap ${active ? "active font-bold" : "font-medium"} ${complete ? "complete" : ""}`}
+                  style={{ background: bg, color: col }}
                 >
                   {stepShortLabel(s)}{complete && !active ? " ✓" : ""}
                 </div>
@@ -322,17 +309,17 @@ const FormScreen = ({
       <div className="product-nav">
         <div className="product-nav-info">
           {!canAdvance && (
-            <span style={{ fontSize: "11px", color: "#c0392b" }}>Répondez à la question pour continuer.</span>
+            <span className="text-[11px] text-[#c0392b]">Répondez à la question pour continuer.</span>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={handlePrevClick} style={{ visibility: cs === 0 ? "hidden" : "visible" }}>
+        <Button variant="ghost" size="sm" onClick={handlePrevClick} className={cs === 0 ? "invisible" : "visible"}>
           <FiArrowLeft />
         </Button>
         <Button
           size="sm"
           onClick={handleNextClick}
           disabled={!canAdvance}
-          style={{ opacity: canAdvance ? 1 : 0.5, cursor: canAdvance ? "pointer" : "not-allowed" }}
+          className={!canAdvance ? "opacity-50 cursor-not-allowed" : ""}
         >
           {isLastStep ? <><FiCheck /> Terminer</> : <>Valider <FiArrowRight /></>}
         </Button>
@@ -372,17 +359,35 @@ const FormScreen = ({
   );
 };
 
-const DoneScreen = ({ onReviewAnswers, onHome }: { onReviewAnswers: () => void, onHome: () => void }) => (
-  <div className="done-screen">
-    <div className="done-icon"><FiCheckCircle size={48} color="var(--ok)" /></div>
-    <h2>Merci !</h2>
-    <p>Réponses enregistrées.</p>
-    <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-      <Button variant="ghost" size="sm" onClick={onReviewAnswers}>Revoir mes réponses</Button>
-      <Button variant="secondary" onClick={onHome}><FiArrowLeft /> Retour</Button>
+const DoneScreen = ({ onReviewAnswers, onHome }: { onReviewAnswers: () => void, onHome: () => void }) => {
+  const [confirmReview, setConfirmReview] = useState(false);
+  return (
+    <div className="done-screen">
+      <div className="done-icon"><FiCheckCircle size={48} color="var(--ok)" /></div>
+      <h2>Merci !</h2>
+      <p>Réponses enregistrées.</p>
+      <div className="flex gap-3 justify-center flex-wrap">
+        <Button variant="ghost" size="sm" onClick={() => setConfirmReview(true)}>Revoir mes réponses</Button>
+        <Button variant="secondary" onClick={onHome}><FiArrowLeft /> Retour</Button>
+      </div>
+
+      {confirmReview && (
+        <ConfirmModal
+          tone="warn"
+          title="Revoir mes réponses ?"
+          message={<>Avez-vous reçu l&apos;<strong>autorisation de l&apos;animateur</strong> pour modifier vos réponses terminées ?</>}
+          confirmLabel="Oui, j'ai l'autorisation"
+          cancelLabel="Non, annuler"
+          onConfirm={() => {
+            setConfirmReview(false);
+            onReviewAnswers();
+          }}
+          onCancel={() => setConfirmReview(false)}
+        />
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 export const ParticipantView = ({
   screen, sessions, curSess, jurors, cj, ja, cs, saveStatus, pendingCount,

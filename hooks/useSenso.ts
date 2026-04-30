@@ -5,14 +5,20 @@ import { hsh, wlm, formatVal } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
 
-// Cache mémoire des configs de séance (invalidé sur saveSession/deleteSession).
-const _configCache = new Map<string, SessionConfig>();
+// Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
+// et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
+// d'autres clients qui auraient modifié la séance entre-temps.
+type ConfigCacheEntry = { cfg: SessionConfig; ts: number };
+const _configCache = new Map<string, ConfigCacheEntry>();
+const CONFIG_CACHE_TTL_MS = 60_000;
 
 export const useSenso = () => {
   const [mode, setMode] = useState<AppMode>("participant");
   const [screen, setScreen] = useState<AppScreen>("landing");
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restored, setRestored] = useState(false);
+  const [adminAuth, setAdminAuth] = useState(false);
   const [online, setOnline] = useState(false);
   const [curSessId, setCurSessId] = useState<string | null>(null);
   const [curSess, setCurSess] = useState<SessionConfig | null>(null);
@@ -32,8 +38,87 @@ export const useSenso = () => {
   const [anCfg, setAnCfg] = useState<SessionConfig | null>(null);
   const [allAnswers, setAllAnswers] = useState<AllAnswers>({});
   const [curAnT, setCurAnT] = useState<string>("profil");
+  const [adminSection, setAdminSection] = useState<"seances" | "analyse">("seances");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [pendingCount, setPendingCount] = useState<number>(0);
+
+  // Snapshot d'état lu par les handlers stables (useCallback avec deps vides).
+  // Mis à jour à chaque render avant l'effect — les callbacks lisent toujours
+  // la valeur fraîche via stateRef.current sans avoir à se rebuilder.
+  type SensoStateSnapshot = {
+    mode: AppMode; screen: AppScreen; sessions: SessionListItem[];
+    curSessId: string | null; curSess: SessionConfig | null;
+    jurors: string[]; takenPostes: Record<string, string>;
+    cj: string; poste: Poste | null; ja: JurorAnswers; cs: number;
+    validatedSteps: Set<number>;
+    editCfg: SessionConfig | null; editSessId: string | null; curEditTab: string;
+    anSessId: string | null; anCfg: SessionConfig | null; allAnswers: AllAnswers;
+    curAnT: string; adminSection: "seances" | "analyse";
+    saveStatus: SaveStatus; pendingCount: number;
+  };
+  const stateRef = useRef<SensoStateSnapshot>({
+    mode, screen, sessions, curSessId, curSess, jurors, takenPostes,
+    cj, poste, ja, cs, validatedSteps, editCfg, editSessId, curEditTab,
+    anSessId, anCfg, allAnswers, curAnT, adminSection, saveStatus, pendingCount,
+  });
+  stateRef.current = {
+    mode, screen, sessions, curSessId, curSess, jurors, takenPostes,
+    cj, poste, ja, cs, validatedSteps, editCfg, editSessId, curEditTab,
+    anSessId, anCfg, allAnswers, curAnT, adminSection, saveStatus, pendingCount,
+  };
+
+  // Persistence unifiée : un seul effect debouncé écrit toutes les clés en bloc.
+  // Évite la cascade de 11 setItem synchrones à chaque transition d'étape, et coalesce
+  // les rafales de mises à jour (changement d'onglet + de session + de jury, etc.).
+  const _persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Snapshot des dernières valeurs écrites pour ne pas réécrire des clés inchangées.
+  const _persistSnapshotRef = useRef<Record<string, string | null>>({});
+
+  useEffect(() => {
+    if (!restored) return;
+    if (_persistTimerRef.current) clearTimeout(_persistTimerRef.current);
+    _persistTimerRef.current = setTimeout(() => {
+      _persistTimerRef.current = null;
+      const next: Record<string, string | null> = {
+        senso_mode: mode,
+        senso_screen: screen,
+        senso_admin_section: adminSection,
+        senso_cj: cj,
+        senso_cs: cs.toString(),
+        senso_curEditTab: curEditTab,
+        senso_curAnT: curAnT,
+        senso_curSessId: curSessId,
+        senso_editSessId: editSessId,
+        senso_anSessId: anSessId,
+      };
+      const prev = _persistSnapshotRef.current;
+      try {
+        for (const key in next) {
+          const v = next[key];
+          if (prev[key] === v) continue;
+          if (v == null || v === "") {
+            // Valeurs nulles/vides : retirées plutôt que persistées en chaîne vide.
+            if (key === "senso_cj" || key === "senso_cs") {
+              localStorage.setItem(key, v ?? "");
+            } else {
+              localStorage.removeItem(key);
+            }
+          } else {
+            localStorage.setItem(key, v);
+          }
+        }
+        _persistSnapshotRef.current = next;
+      } catch (err) {
+        console.warn("Persistance localStorage échouée:", err);
+      }
+    }, 200);
+    return () => {
+      if (_persistTimerRef.current) {
+        clearTimeout(_persistTimerRef.current);
+        _persistTimerRef.current = null;
+      }
+    };
+  }, [restored, mode, screen, adminSection, cj, cs, curEditTab, curAnT, curSessId, editSessId, anSessId]);
 
   // Online/offline detection
   useEffect(() => {
@@ -47,13 +132,87 @@ export const useSenso = () => {
     };
   }, []);
 
-  // Load session list on mount
+  // Load session list and restore state on mount
   useEffect(() => {
-    loadSessions();
+    const restoreApp = async () => {
+      setLoading(true);
+      await loadSessions(true);
+
+      const savedMode = localStorage.getItem("senso_mode") as AppMode;
+      const savedScreen = localStorage.getItem("senso_screen") as AppScreen;
+      const savedSessId = localStorage.getItem("senso_curSessId");
+      const savedCj = localStorage.getItem("senso_cj");
+      const savedCs = localStorage.getItem("senso_cs");
+      const savedEditSessId = localStorage.getItem("senso_editSessId");
+      const savedEditTab = localStorage.getItem("senso_curEditTab");
+      const savedAnSessId = localStorage.getItem("senso_anSessId");
+      const savedAnT = localStorage.getItem("senso_curAnT");
+      const savedAdminSection = localStorage.getItem("senso_admin_section") as "seances" | "analyse";
+
+      // Vraie vérification de session via Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) setAdminAuth(true);
+
+      if (savedMode) setMode(savedMode);
+      if (savedScreen) setScreen(savedScreen);
+      if (savedAdminSection === "analyse" || savedAdminSection === "seances") setAdminSection(savedAdminSection);
+      
+      const promises: Promise<unknown>[] = [];
+
+      // Écoute des changements d'auth (ex: logout depuis un autre onglet)
+      supabase.auth.onAuthStateChange((_event, session) => {
+        setAdminAuth(!!session);
+      });
+
+      if (savedEditSessId) {
+        setEditSessId(savedEditSessId);
+        promises.push(loadSessionConfig(savedEditSessId).then(cfg => {
+          if (cfg) setEditCfg(cfg);
+        }));
+      }
+      if (savedEditTab) setCurEditTab(savedEditTab);
+      if (savedAnT) setCurAnT(savedAnT);
+      if (savedCs) setCs(parseInt(savedCs, 10));
+
+      if (savedSessId) {
+        setCurSessId(savedSessId);
+        promises.push(loadSessionData(savedSessId).then(async () => {
+          if (savedCj) {
+            setCj(savedCj);
+            await reloadJuryData(savedSessId, savedCj);
+          }
+        }));
+      }
+
+      if (savedAnSessId) {
+        promises.push(handleAnSessChange(savedAnSessId));
+      }
+      
+      await Promise.all(promises);
+      
+      setRestored(true);
+      setLoading(false);
+    };
+
+    void restoreApp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadSessions = async () => {
-    setLoading(true);
+  const reloadJuryData = useCallback(async (sessionId: string, jurorName: string) => {
+    const { data } = await supabase
+      .from("answers")
+      .select("data")
+      .eq("session_id", sessionId)
+      .eq("juror_name", jurorName)
+      .maybeSingle();
+    const answers = (data?.data || {}) as JurorAnswers;
+    setJa(answers);
+    const p = readPoste(answers);
+    if (p) setPoste(p);
+  }, []);
+
+  const loadSessions = useCallback(async (keepLoading?: boolean) => {
+    if (!keepLoading) setLoading(true);
     const { data, error } = await supabase
       .from("sessions")
       .select("id, name, date, active, juror_count, config")
@@ -84,16 +243,27 @@ export const useSenso = () => {
         };
       }));
     }
-    setLoading(false);
-  };
+    if (!keepLoading) setLoading(false);
+  }, []);
 
-  const saveSessions = async (newList: SessionListItem[]) => {
+  const saveSessions = useCallback(async (newList: SessionListItem[]) => {
     setSessions(newList);
-  };
+  }, []);
 
-  const loadSessionConfig = async (id: string): Promise<SessionConfig | null> => {
+  // Lecture du cache : on accepte une entrée fraîche (< TTL) sauf si `force` est demandé.
+  // Les entrées expirées sont supprimées pour ne pas grossir la map indéfiniment.
+  const loadSessionConfig = useCallback(async (
+    id: string,
+    opts?: { force?: boolean }
+  ): Promise<SessionConfig | null> => {
     const cached = _configCache.get(id);
-    if (cached) return cached;
+    const now = Date.now();
+    if (!opts?.force && cached && (now - cached.ts) < CONFIG_CACHE_TTL_MS) {
+      return cached.cfg;
+    }
+    if (cached && (now - cached.ts) >= CONFIG_CACHE_TTL_MS) {
+      _configCache.delete(id);
+    }
     const { data, error } = await supabase
       .from("sessions")
       .select("config")
@@ -104,9 +274,9 @@ export const useSenso = () => {
       return null;
     }
     const cfg = data.config as SessionConfig;
-    _configCache.set(id, cfg);
+    _configCache.set(id, { cfg, ts: now });
     return cfg;
-  };
+  }, []);
 
   const posteKey = (p: Poste) => `${p.day}-${p.num}`;
   const readPoste = (jaData: JurorAnswers | null | undefined): Poste | null => {
@@ -124,10 +294,9 @@ export const useSenso = () => {
     return (p.day === "jeudi" ? 10 : 0) + (p.num - 1);
   };
 
-  const handleSelectSession = async (id: string) => {
+  const loadSessionData = useCallback(async (id: string) => {
     const cfg = await loadSessionConfig(id);
-    if (!cfg) return;
-    setCurSessId(id);
+    if (!cfg) return null;
     setCurSess(cfg);
     const { data, error } = await supabase
       .from("answers")
@@ -142,8 +311,15 @@ export const useSenso = () => {
       if (p) taken[posteKey(p)] = r.juror_name;
     });
     setTakenPostes(taken);
+    return cfg;
+  }, [loadSessionConfig]);
+
+  const handleSelectSession = useCallback(async (id: string) => {
+    const cfg = await loadSessionData(id);
+    if (!cfg) return;
+    setCurSessId(id);
     setScreen("jury");
-  };
+  }, [loadSessionData]);
 
   const isStepDone = (s: SessionStep, currentJa: JurorAnswers) => {
     if (s.type === "product") return !!currentJa[s.product.code] && s.questions.some(q => currentJa[s.product.code][q.id] != null);
@@ -184,9 +360,9 @@ export const useSenso = () => {
 
   const buildSteps = useCallback((cfg: SessionConfig, jurorName: string, jurorList?: string[], posteOverride?: Poste | null) => {
     if (!cfg) return [];
-    const jl = jurorList || jurors;
+    const jl = jurorList || stateRef.current.jurors;
     const mode = cfg.presMode || "fixed";
-    const effectivePoste = (posteOverride !== undefined) ? posteOverride : poste;
+    const effectivePoste = (posteOverride !== undefined) ? posteOverride : stateRef.current.poste;
     const posteIdx = posteToIndex(effectivePoste);
 
     const steps: SessionStep[] = [];
@@ -258,11 +434,13 @@ export const useSenso = () => {
 
     return steps;
     // getOrderedItems est une fonction pure des arguments — sa redéfinition à chaque
-    // render ne change pas le résultat de buildSteps.
+    // render ne change pas le résultat de buildSteps. La lecture des states courants
+    // (jurors, poste) passe par stateRef pour garder une référence stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jurors, poste]);
+  }, []);
 
-  const handleLoginJury = async (name: string) => {
+  const handleLoginJury = useCallback(async (name: string) => {
+    const { curSessId, curSess, jurors } = stateRef.current;
     if (!name || !curSessId || !curSess) return;
     setCj(name);
     const { data } = await supabase
@@ -296,9 +474,10 @@ export const useSenso = () => {
 
     setPoste(null);
     setScreen("poste");
-  };
+  }, [buildSteps]);
 
-  const handleSelectPoste = async (day: PosteDay, num: number) => {
+  const handleSelectPoste = useCallback(async (day: PosteDay, num: number) => {
+    const { curSess, curSessId, cj, ja, takenPostes } = stateRef.current;
     if (!curSess || !curSessId || !cj) return;
     const p: Poste = { day, num };
     const key = posteKey(p);
@@ -319,16 +498,16 @@ export const useSenso = () => {
     setCs(0);
     setValidatedSteps(new Set());
     setScreen("form");
-  };
+  }, []);
 
-  const validateStep = (idx: number) => {
+  const validateStep = useCallback((idx: number) => {
     setValidatedSteps(prev => {
       if (prev.has(idx)) return prev;
       const next = new Set(prev);
       next.add(idx);
       return next;
     });
-  };
+  }, []);
 
   // Upsert différé : on agrège les saisies rapides (sliders, drag) en une seule requête.
   const _saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -341,6 +520,7 @@ export const useSenso = () => {
     }
     const newJa = _pendingJaRef.current;
     _pendingJaRef.current = null;
+    const { cj, curSessId, jurors } = stateRef.current;
     if (!newJa || !cj || !curSessId) return;
     setSaveStatus("saving");
     const { error } = await supabase.from("answers").upsert({
@@ -370,18 +550,19 @@ export const useSenso = () => {
         s.id === curSessId ? { ...s, jurorCount: newJurors.length } : s
       ));
     }
-  }, [cj, curSessId, jurors]);
+  }, []);
 
-  const handleSetJa = (newJa: JurorAnswers) => {
+  const handleSetJa = useCallback((newJa: JurorAnswers) => {
     setJa(newJa);
+    const { cj, curSessId } = stateRef.current;
     if (!cj || !curSessId) return;
     _pendingJaRef.current = newJa;
     if (_saveTimerRef.current) clearTimeout(_saveTimerRef.current);
     _saveTimerRef.current = setTimeout(() => { void flushSave(); }, 400);
-  };
+  }, [flushSave]);
 
   // Flush de la file d'attente hors-ligne dès qu'on est en ligne (montage + bascule online).
-  const flushPending = async () => {
+  const flushPending = useCallback(async () => {
     const entries = listPending();
     if (entries.length === 0) { setPendingCount(0); return; }
     const results = await Promise.all(entries.map(e =>
@@ -397,8 +578,8 @@ export const useSenso = () => {
       if (!error) { clearPending(e.sessionId, e.jurorName); ok++; }
     }
     setPendingCount(countPending());
-    if (ok > 0 && saveStatus !== "saving") setSaveStatus("saved");
-  };
+    if (ok > 0 && stateRef.current.saveStatus !== "saving") setSaveStatus("saved");
+  }, []);
 
   useEffect(() => {
     setPendingCount(countPending());
@@ -471,10 +652,15 @@ export const useSenso = () => {
     [currentSteps, ja]
   );
 
-  // Indique si l'étape courante est complète (gate Suivant)
-  const isStepComplete = (stepIdx: number): boolean => completion[stepIdx] ?? true;
+  // Indique si l'étape courante est complète (gate Suivant). Référence stable :
+  // lit completion via une ref synchronisée pour ne pas se rebuilder à chaque render.
+  const completionRef = useRef<boolean[]>(completion);
+  completionRef.current = completion;
+  const isStepComplete = useCallback((stepIdx: number): boolean => {
+    return completionRef.current[stepIdx] ?? true;
+  }, []);
 
-  const handleAnSessChange = async (id: string) => {
+  const handleAnSessChange = useCallback(async (id: string) => {
     setAnSessId(id);
     const cfg = await loadSessionConfig(id);
     setAnCfg(cfg);
@@ -485,9 +671,9 @@ export const useSenso = () => {
     const ans: Record<string, JurorAnswers> = {};
     if (data) data.forEach((r: { juror_name: string; data: JurorAnswers | null }) => { ans[r.juror_name] = r.data || {}; });
     setAllAnswers(ans);
-  };
+  }, [loadSessionConfig]);
 
-  const saveSession = async (id: string, cfg: SessionConfig, meta: Partial<SessionListItem>) => {
+  const saveSession = useCallback(async (id: string, cfg: SessionConfig, meta: Partial<SessionListItem>) => {
     const { error } = await supabase.from("sessions").upsert({
       id,
       name: meta.name ?? cfg.name,
@@ -500,26 +686,26 @@ export const useSenso = () => {
       console.error("Erreur lors de l'enregistrement de la séance:", error);
       return { success: false, error };
     }
-    _configCache.set(id, cfg);
+    _configCache.set(id, { cfg, ts: Date.now() });
     return { success: true };
-  };
+  }, []);
 
-  const deleteSession = async (id: string) => {
+  const deleteSession = useCallback(async (id: string) => {
     const { error } = await supabase.from("sessions").delete().eq("id", id);
     if (error) console.error("Erreur lors de la suppression:", error);
     _configCache.delete(id);
-  };
+  }, []);
 
-  const listJurorsForSession = async (sessionId: string): Promise<string[]> => {
+  const listJurorsForSession = useCallback(async (sessionId: string): Promise<string[]> => {
     const { data, error } = await supabase
       .from("answers")
       .select("juror_name")
       .eq("session_id", sessionId);
     if (error || !data) return [];
     return data.map((r: { juror_name: string }) => r.juror_name);
-  };
+  }, []);
 
-  const deleteJury = async (sessionId: string, name: string) => {
+  const deleteJury = useCallback(async (sessionId: string, name: string) => {
     if (!sessionId) return { success: false };
     const { error } = await supabase
       .from("answers")
@@ -530,6 +716,7 @@ export const useSenso = () => {
       console.error("Erreur lors de la suppression du jury:", error);
       return { success: false };
     }
+    const { curSessId, jurors, cj } = stateRef.current;
     if (sessionId === curSessId) {
       const newJurors = jurors.filter(j => j !== name);
       setJurors(newJurors);
@@ -551,15 +738,16 @@ export const useSenso = () => {
       return next;
     });
     return { success: true };
-  };
+  }, [listJurorsForSession]);
 
-  const toggleActive = async (id: string) => {
+  const toggleActive = useCallback(async (id: string) => {
+    const { sessions } = stateRef.current;
     const s = sessions.find(x => x.id === id);
     if (!s) return;
     const newActive = !s.active;
     await supabase.from("sessions").update({ active: newActive }).eq("id", id);
-    setSessions(sessions.map(x => x.id === id ? { ...x, active: newActive } : x));
-  };
+    setSessions(prev => prev.map(x => x.id === id ? { ...x, active: newActive } : x));
+  }, []);
 
   const csvData = useMemo<CSVRow[]>(() => {
     if (!anCfg || !allAnswers) return [];
@@ -630,37 +818,59 @@ export const useSenso = () => {
     return rows;
   }, [anCfg, allAnswers]);
 
-  return {
-    mode, setMode,
-    screen, setScreen,
-    sessions, saveSessions,
-    loading, online,
-    loadSessionConfig,
+  // Groupe "actions" : toutes les références sont stables (useState setters ou
+  // useCallback à deps vides), donc ce useMemo ne se ré-évalue jamais après le
+  // premier render. Permet à AppProviders d'exposer un contexte d'actions séparé
+  // dont les consommateurs ne se ré-rendront pas sur les changements d'état.
+  const actions = useMemo(() => ({
+    setMode, setScreen, setAdminAuth, setCs,
+    setEditCfg, setEditSessId, setCurEditTab,
+    setAnSessId, setCurAnT, setAdminSection,
+    saveSessions,
+    loadSessionConfig, loadSessions,
+    handleSelectSession, handleLoginJury, handleSelectPoste,
+    handleSetJa, validateStep, handleAnSessChange,
+    saveSession, deleteSession, deleteJury,
+    listJurorsForSession, toggleActive,
+    buildSteps, isStepComplete,
+    flushPending, flushSave,
+    // Les useState setters sont stables par contrat React et n'ont pas besoin
+    // d'être listés en deps.
+  }), [
+    saveSessions, loadSessionConfig, loadSessions,
+    handleSelectSession, handleLoginJury, handleSelectPoste,
+    handleSetJa, validateStep, handleAnSessChange,
+    saveSession, deleteSession, deleteJury,
+    listJurorsForSession, toggleActive,
+    buildSteps, isStepComplete, flushPending, flushSave,
+  ]);
+
+  // Groupe "state" : valeurs réactives + dérivées. Bust à chaque changement d'état,
+  // ce qui est attendu — les consommateurs qui n'ont pas besoin de l'état peuvent
+  // s'abonner uniquement à `actions`.
+  const state = useMemo(() => ({
+    mode, screen, sessions, loading, restored, adminAuth, online,
     curSessId, curSess,
-    jurors, cj, ja, cs, setCs,
-    poste, takenPostes, handleSelectPoste,
-    validatedSteps, validateStep,
-    handleSelectSession, handleLoginJury, handleSetJa,
-    editCfg, setEditCfg,
-    editSessId, setEditSessId,
-    curEditTab, setCurEditTab,
-    anSessId, setAnSessId,
-    anCfg, csvData, curAnT, setCurAnT,
-    handleAnSessChange,
-    buildSteps,
-    saveSession,
-    deleteSession,
-    deleteJury,
-    listJurorsForSession,
-    toggleActive,
-    loadSessions,
-    allAnswers,
-    saveStatus,
-    pendingCount,
-    flushPending,
-    isStepComplete,
-    currentSteps,
-    completion,
-    flushSave,
-  };
+    jurors, cj, ja, cs,
+    poste, takenPostes, validatedSteps,
+    editCfg, editSessId, curEditTab,
+    anSessId, anCfg, allAnswers, curAnT,
+    adminSection, saveStatus, pendingCount,
+    csvData, currentSteps, completion,
+  }), [
+    mode, screen, sessions, loading, restored, adminAuth, online,
+    curSessId, curSess,
+    jurors, cj, ja, cs,
+    poste, takenPostes, validatedSteps,
+    editCfg, editSessId, curEditTab,
+    anSessId, anCfg, allAnswers, curAnT,
+    adminSection, saveStatus, pendingCount,
+    csvData, currentSteps, completion,
+  ]);
+
+  return { state, actions };
 };
+
+// Types publics pour les consommateurs et les contextes.
+export type SensoState = ReturnType<typeof useSenso>["state"];
+export type SensoActions = ReturnType<typeof useSenso>["actions"];

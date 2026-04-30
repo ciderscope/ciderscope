@@ -42,6 +42,7 @@ export default function CiderScope() {
     editSessId, setEditSessId,
     curEditTab, setCurEditTab,
     anSessId, anCfg, csvData, curAnT, setCurAnT,
+    adminSection, setAdminSection,
     handleAnSessChange,
     allAnswers,
     buildSteps,
@@ -59,7 +60,13 @@ export default function CiderScope() {
     completion,
     flushSave,
     adminAuth, setAdminAuth,
+    loading,
+    restored,
   } = useApp();
+
+  if (!restored) {
+    return <div style={{ padding: 32, textAlign: "center", color: "var(--mid)" }}>Initialisation de l&apos;application…</div>;
+  }
 
   if (mode === "participant") {
     return (
@@ -110,6 +117,8 @@ export default function CiderScope() {
       editCfg={editCfg}
       curEditTab={curEditTab}
       editSessId={editSessId}
+      adminSection={adminSection}
+      setAdminSection={setAdminSection}
       onNewSession={() => {
         setEditCfg({ name: "", date: new Date().toISOString().slice(0, 10), products: [], questions: [], presMode: "latin" });
         setEditSessId(null);

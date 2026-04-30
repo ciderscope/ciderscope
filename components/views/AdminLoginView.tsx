@@ -1,130 +1,97 @@
 "use client";
 import React, { useState } from "react";
 import { Button } from "../ui/Button";
+import { supabase } from "../../lib/supabase";
 
 interface AdminLoginViewProps {
   onSuccess: () => void;
 }
 
-// SHA-256("IFPC:ifpc") — empêche la divulgation triviale par lecture du bundle.
-// Pour une vraie sécurité, migrer vers Supabase Auth (auth serveur).
-const ADMIN_HASH = "c1c0bc5db72a4f46df22bf877e91df1d26578e097728f41bca4fec55058d18c0";
-
-async function sha256Hex(input: string): Promise<string> {
-  const buf = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
 export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
-  const [login, setLogin] = useState("");
-  const [mdp, setMdp] = useState("");
-  const [error, setError] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const hash = await sha256Hex(`${login.trim().toUpperCase()}:${mdp}`);
-    setBusy(false);
-    if (hash === ADMIN_HASH) {
-      sessionStorage.setItem("admin_auth", "1");
-      setError(false);
-      onSuccess();
-    } else {
-      setError(true);
+    setError(null);
+    
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (authError) {
+        setError(authError.message === "Invalid login credentials" 
+          ? "Identifiants incorrects (Email ou Mot de passe)." 
+          : authError.message
+        );
+      } else {
+        onSuccess();
+      }
+    } catch (err) {
+      setError("Une erreur inattendue est survenue.");
+      console.error(err);
+    } finally {
+      setBusy(false);
     }
   };
 
+  const inputCls = `px-3.5 py-2.5 rounded-lg bg-[var(--paper)] text-[var(--ink)] text-[15px] outline-none font-[inherit] border-[1.5px] ${error ? "border-[#e74c3c]" : "border-[var(--border)]"}`;
+  const labelCls = "text-xs font-semibold text-[var(--mid)] uppercase tracking-[0.05em]";
+
   return (
-    <div style={{
-      minHeight: "80vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    }}>
-      <div style={{
-        background: "#fff",
-        border: "1.5px solid var(--border)",
-        borderRadius: "16px",
-        padding: "40px 36px",
-        width: "100%",
-        maxWidth: "360px",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
-      }}>
-        <h2 style={{
-          fontWeight: 800,
-          fontSize: "clamp(18px, 2.5vw, 22px)",
-          marginBottom: "6px",
-          color: "var(--ink)",
-        }}>
+    <div className="min-h-[80vh] flex items-center justify-center">
+      <div className="bg-white border-[1.5px] border-[var(--border)] rounded-2xl px-9 py-10 w-full max-w-[360px] shadow-[0_4px_24px_rgba(0,0,0,0.08)]">
+        <h2 className="font-extrabold mb-1.5 text-[var(--ink)] text-[clamp(18px,2.5vw,22px)]">
           Accès administration
         </h2>
-        <p style={{ color: "var(--mid)", fontSize: "13px", marginBottom: "28px" }}>
-          Identifiez-vous pour accéder à la gestion des séances.
+        <p className="text-[var(--mid)] text-[13px] mb-7">
+          Utilisez vos identifiants Supabase pour accéder à la gestion des séances.
         </p>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--mid)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Identifiant
-            </label>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className={labelCls}>Email Professionnel</label>
             <input
-              type="text"
-              value={login}
-              onChange={e => { setLogin(e.target.value); setError(false); }}
-              autoComplete="username"
-              style={{
-                padding: "10px 14px",
-                borderRadius: "8px",
-                border: error ? "1.5px solid #e74c3c" : "1.5px solid var(--border)",
-                background: "var(--paper)",
-                color: "var(--ink)",
-                fontSize: "15px",
-                outline: "none",
-                fontFamily: "inherit",
-              }}
+              type="email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); setError(null); }}
+              autoComplete="email"
+              placeholder="admin@ifpc.eu"
+              required
+              className={inputCls}
             />
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--mid)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Mot de passe
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <label className={labelCls}>Mot de passe</label>
             <input
               type="password"
-              value={mdp}
-              onChange={e => { setMdp(e.target.value); setError(false); }}
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError(null); }}
               autoComplete="current-password"
-              style={{
-                padding: "10px 14px",
-                borderRadius: "8px",
-                border: error ? "1.5px solid #e74c3c" : "1.5px solid var(--border)",
-                background: "var(--paper)",
-                color: "var(--ink)",
-                fontSize: "15px",
-                outline: "none",
-                fontFamily: "inherit",
-              }}
+              required
+              className={inputCls}
             />
           </div>
 
           {error && (
-            <div style={{
-              background: "#fdecea",
-              color: "#c0392b",
-              borderRadius: "8px",
-              padding: "10px 14px",
-              fontSize: "13px",
-              fontWeight: 500,
-            }}>
-              Identifiants incorrects.
+            <div className="bg-[#fdecea] text-[#c0392b] rounded-lg px-3.5 py-2.5 text-[13px] font-medium">
+              {error}
             </div>
           )}
 
-          <Button type="submit" disabled={busy} style={{ marginTop: "4px", width: "100%", opacity: busy ? 0.6 : 1 }}>
+          <Button type="submit" disabled={busy} className={`mt-1 w-full ${busy ? "!opacity-60" : ""}`}>
             {busy ? "Vérification…" : "Se connecter"}
           </Button>
+          
+          <div className="mt-4 text-[11px] text-[var(--mid)] text-center italic">
+            Note : l&apos;accès est désormais protégé par Supabase Auth. Contactez l&apos;administrateur pour créer votre compte.
+          </div>
         </form>
       </div>
     </div>

@@ -2,6 +2,25 @@
 import { useMemo, useState } from "react";
 import { Card } from "../ui/Card";
 import { ScrollableTabs } from "../ui/ScrollableTabs";
+import {
+  ANALYSIS_CHART_BOX,
+  ANALYSIS_TOOLBAR,
+  AnalysisEmpty,
+  AnalysisPanel,
+  AnalysisStack,
+  DANGER_TEXT,
+  DIM_TEXT,
+  DetailTable,
+  MetricBlock,
+  MetricLayout,
+  OK_TEXT,
+  TableCaption,
+  ToolbarLabel,
+  answerStateClass,
+  confidenceClass,
+  rawResultClass,
+  significanceClass,
+} from "../ui/AnalysisPrimitives";
 import { Radar, Bar, Scatter } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -17,6 +36,20 @@ import {
   type TooltipItem,
 } from "chart.js";
 import type { SessionConfig, SessionListItem, Question, BetLevel, AllAnswers, CSVRow, Product, RadarAxis, RadarAnswer } from "../../types";
+import {
+  chiSquarePValue,
+  getNemenyiCD,
+  computeCLD,
+  kendallTau,
+  kendallW,
+  fPValue,
+  normalInvCDF,
+  pca2D,
+  binomCoeff,
+  binomialPValue,
+  anovaTwoWay,
+  rvCoefficient,
+} from "../../lib/stats";
 
 // Enregistrement Chart.js localisé : seul l'admin chargeant l'analyse paye le coût.
 ChartJS.register(
@@ -25,307 +58,7 @@ ChartJS.register(
 );
 
 const COLORS = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
-
 // ─── Stats helpers ───────────────────────────────────────────────────────────
-
-// ln Γ(x) — Lanczos (précision ~1e-14)
-function logGamma(x: number): number {
-  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
-  const g = 7;
-  const c = [
-    0.99999999999980993, 676.5203681218851, -1259.1392167224028,
-    771.32342877765313, -176.61502916214059, 12.507343278686905,
-    -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
-  ];
-  x -= 1;
-  let a = c[0];
-  const t = x + g + 0.5;
-  for (let i = 1; i < c.length; i++) a += c[i] / (x + i);
-  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
-}
-
-// P(a, x) régularisée — série (x < a+1)
-function gammaPSeries(a: number, x: number): number {
-  const maxIter = 400, eps = 1e-15;
-  let sum = 1 / a, term = sum;
-  for (let n = 1; n < maxIter; n++) {
-    term *= x / (a + n);
-    sum += term;
-    if (Math.abs(term) < Math.abs(sum) * eps) break;
-  }
-  return sum * Math.exp(-x + a * Math.log(x) - logGamma(a));
-}
-
-// Q(a, x) = 1 - P(a, x) — fraction continue Lentz (x ≥ a+1)
-function gammaQFrac(a: number, x: number): number {
-  const maxIter = 400, eps = 1e-15, fpmin = 1e-300;
-  let b = x + 1 - a;
-  let c = 1 / fpmin, d = 1 / b, h = d;
-  for (let i = 1; i <= maxIter; i++) {
-    const an = -i * (i - a);
-    b += 2;
-    d = an * d + b; if (Math.abs(d) < fpmin) d = fpmin;
-    c = b + an / c; if (Math.abs(c) < fpmin) c = fpmin;
-    d = 1 / d;
-    const del = d * c; h *= del;
-    if (Math.abs(del - 1) < eps) break;
-  }
-  return h * Math.exp(-x + a * Math.log(x) - logGamma(a));
-}
-
-function regularizedGammaP(a: number, x: number): number {
-  if (x <= 0 || a <= 0) return 0;
-  return x < a + 1 ? gammaPSeries(a, x) : 1 - gammaQFrac(a, x);
-}
-
-// p-value chi² exacte — via gamma incomplète régularisée.
-// Fiable à tout df (la précédente approximation Wilson-Hilferty était
-// imprécise aux petits df typiques de l'analyse sensorielle).
-// Note sur les ex-æquo : le test de Friedman nécessite en principe une
-// correction si le panel produit des rangs liés. Le drag-and-drop actuel
-// impose un ordre strict donc il n'y a pas de ties à corriger.
-function chiSquarePValue(chi2: number, df: number): number {
-  if (chi2 <= 0 || df <= 0) return 1;
-  return Math.max(0, Math.min(1, 1 - regularizedGammaP(df / 2, chi2 / 2)));
-}
-
-// Nemenyi — q de la distribution Studentized Range (α = 0.10, ν = ∞)
-// CD = (q / √2) · √(k(k+1)/(6n))  — le /√2 convertit le q range en CD
-// de différence de rangs moyens (cf. Conover 1999, Hollander & Wolfe 1999).
-function getNemenyiCD(k: number, n: number): number {
-  const qValues: Record<number, number> = {
-    2: 2.33, 3: 2.90, 4: 3.24, 5: 3.48, 6: 3.66, 7: 3.81, 8: 3.93, 9: 4.04, 10: 4.13,
-  };
-  const q = qValues[k] || (4.13 + (k - 10) * 0.08);
-  return (q / Math.sqrt(2)) * Math.sqrt((k * (k + 1)) / (6 * n));
-}
-
-// CLD — algorithme « insert-and-absorb » de Piepho (2004).
-// 1. Partir d'un unique groupe contenant tous les produits.
-// 2. Pour chaque paire (i, j) sig. différente : scinder tout groupe
-//    contenant i ET j en deux (l'un sans i, l'autre sans j).
-// 3. Absorption : supprimer les groupes strictement inclus dans un autre.
-// Cet algorithme garantit transitivité et couverture complète (contrairement
-// à l'heuristique précédente qui pouvait perdre des sous-groupes).
-function computeCLD(products: string[], rankMeans: Record<string, number>, cd: number): Record<string, string> {
-  const sorted = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
-  const k = sorted.length;
-  const out: Record<string, string> = {};
-  products.forEach(p => { out[p] = ""; });
-  if (k === 0) return out;
-
-  const sig: boolean[][] = Array.from({ length: k }, () => Array(k).fill(false));
-  for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
-    const d = Math.abs(rankMeans[sorted[i]] - rankMeans[sorted[j]]);
-    if (d > cd) { sig[i][j] = true; sig[j][i] = true; }
-  }
-
-  let groups: Set<number>[] = [new Set(sorted.map((_, i) => i))];
-
-  for (let i = 0; i < k; i++) {
-    for (let j = i + 1; j < k; j++) {
-      if (!sig[i][j]) continue;
-      const next: Set<number>[] = [];
-      for (const g of groups) {
-        if (g.has(i) && g.has(j)) {
-          const gi = new Set(g); gi.delete(j);
-          const gj = new Set(g); gj.delete(i);
-          if (gi.size > 0) next.push(gi);
-          if (gj.size > 0) next.push(gj);
-        } else next.push(g);
-      }
-      groups = next;
-    }
-  }
-
-  const keyOf = (g: Set<number>) => [...g].sort((a, b) => a - b).join(",");
-  const uniq = new Map<string, Set<number>>();
-  for (const g of groups) uniq.set(keyOf(g), g);
-  let arr = [...uniq.values()];
-  arr = arr.filter(g => !arr.some(o => o !== g && g.size < o.size && [...g].every(x => o.has(x))));
-  arr.sort((a, b) => Math.min(...a) - Math.min(...b));
-
-  const letters = "abcdefghijklmnopqrstuvwxyz";
-  arr.forEach((g, idx) => {
-    const l = letters[idx % 26];
-    g.forEach(i => { out[sorted[i]] += l; });
-  });
-  return out;
-}
-
-// Kendall τ-a — concordance d'un classement avec un ordre de référence.
-// τ ∈ [-1,1] : 1 = identique, -1 = inverse, 0 = indépendant.
-// Plus robuste que Spearman ρ pour petits n et interprétation en paires.
-function kendallTau(rank1: Record<string, number>, rank2: Record<string, number>, products: string[]): number {
-  const n = products.length;
-  if (n <= 1) return 1;
-  let c = 0, d = 0;
-  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
-    const a = Math.sign((rank1[products[i]] ?? 0) - (rank1[products[j]] ?? 0));
-    const b = Math.sign((rank2[products[i]] ?? 0) - (rank2[products[j]] ?? 0));
-    if (a * b > 0) c++;
-    else if (a * b < 0) d++;
-  }
-  return (c - d) / (n * (n - 1) / 2);
-}
-
-// Kendall W — coefficient de concordance inter-jurys (cohérence du panel).
-// W ∈ [0,1] : 0 = désaccord total, 1 = accord parfait. Relié à Friedman :
-// χ² = m·(n-1)·W. Indicateur direct de l'entraînement du panel.
-function kendallW(matrices: Record<string, number>[], products: string[]): number {
-  const m = matrices.length, n = products.length;
-  if (m < 2 || n < 2) return 1;
-  const rankSums: Record<string, number> = {};
-  products.forEach(p => {
-    rankSums[p] = matrices.reduce((s, mat) => s + (mat[p] ?? (n + 1) / 2), 0);
-  });
-  const meanSum = products.reduce((s, p) => s + rankSums[p], 0) / n;
-  const S = products.reduce((s, p) => s + (rankSums[p] - meanSum) ** 2, 0);
-  return (12 * S) / (m * m * (n * n * n - n));
-}
-
-// ─── Distributions F et inverse normale ──────────────────────────────────────
-
-// Beta incomplète régularisée I_x(a, b) — fraction continue (Numerical Recipes)
-function betaCF(x: number, a: number, b: number): number {
-  const maxIter = 400, eps = 1e-15, fpmin = 1e-300;
-  const qab = a + b, qap = a + 1, qam = a - 1;
-  let c = 1, d = 1 - qab * x / qap;
-  if (Math.abs(d) < fpmin) d = fpmin;
-  d = 1 / d;
-  let h = d;
-  for (let m = 1; m <= maxIter; m++) {
-    const m2 = 2 * m;
-    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
-    d = 1 + aa * d; if (Math.abs(d) < fpmin) d = fpmin;
-    c = 1 + aa / c; if (Math.abs(c) < fpmin) c = fpmin;
-    d = 1 / d; h *= d * c;
-    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
-    d = 1 + aa * d; if (Math.abs(d) < fpmin) d = fpmin;
-    c = 1 + aa / c; if (Math.abs(c) < fpmin) c = fpmin;
-    d = 1 / d;
-    const del = d * c; h *= del;
-    if (Math.abs(del - 1) < eps) break;
-  }
-  return h;
-}
-
-function regularizedBetaI(x: number, a: number, b: number): number {
-  if (x <= 0) return 0;
-  if (x >= 1) return 1;
-  const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
-  return x < (a + 1) / (a + b + 2)
-    ? bt * betaCF(x, a, b) / a
-    : 1 - bt * betaCF(1 - x, b, a) / b;
-}
-
-// p-value F unilatérale (F, df1, df2)
-function fPValue(F: number, df1: number, df2: number): number {
-  if (F <= 0 || df1 <= 0 || df2 <= 0) return 1;
-  return regularizedBetaI(df2 / (df2 + df1 * F), df2 / 2, df1 / 2);
-}
-
-// Inverse N(0,1) — algorithme AS241 (Wichura 1988), précision ~1e-16
-function normalInvCDF(p: number): number {
-  if (p <= 0) return -Infinity;
-  if (p >= 1) return Infinity;
-  const q = p - 0.5;
-  if (Math.abs(q) <= 0.425) {
-    const r = q * q;
-    return q * (((((((2509.0809287301226727 * r + 33430.575583588128105) * r + 67265.770927008700853) * r + 45921.953931549871457) * r + 13731.693765509461125) * r + 1971.5909503065514427) * r + 133.14166789178437745) * r + 3.387132872796366608)
-      / (((((((5226.495278852854561 * r + 28729.085735721942674) * r + 39307.89580009271061) * r + 21213.794301586595867) * r + 5394.1960214247511077) * r + 687.1870074920579083) * r + 42.313330701600911252) * r + 1);
-  }
-  let r = q < 0 ? p : 1 - p;
-  r = Math.sqrt(-Math.log(r));
-  let x: number;
-  if (r <= 5) {
-    r -= 1.6;
-    x = (((((((7.74545014278341407640e-4 * r + 0.0227238449892691845833) * r + 0.24178072517745061177) * r + 1.27045825245236838258) * r + 3.64784832476320460504) * r + 5.7694972214606914055) * r + 4.6303378461565452959) * r + 1.42343711074968357734)
-      / (((((((1.05075007164441684324e-9 * r + 5.475938084995344946e-4) * r + 0.0151986665636164571966) * r + 0.14810397642748007459) * r + 0.68976733498510000455) * r + 1.6763848301838038494) * r + 2.05319162663775882187) * r + 1);
-  } else {
-    r -= 5;
-    x = (((((((2.01033439929228813265e-7 * r + 2.71155556874348757815e-5) * r + 0.0012426609473880784386) * r + 0.026532189526576123093) * r + 0.29656057182850489123) * r + 1.7848265399172913358) * r + 5.4637849111641143699) * r + 6.6579046435011037772)
-      / (((((((2.04426310338993978564e-15 * r + 1.4215117583164458887e-7) * r + 1.8463183175100546818e-5) * r + 7.868691311456132591e-4) * r + 0.0148753612908506148525) * r + 0.13692988092273580531) * r + 0.59983220655588793769) * r + 1);
-  }
-  return q < 0 ? -x : x;
-}
-
-// ─── ACP via Jacobi (décomposition symétrique) ───────────────────────────────
-
-// Diagonalise une matrice symétrique A (n × n).
-// Retourne { values: λ trié décroissant, vectors: V[i][k] = i-ème composante du k-ème vecteur propre }
-function jacobiEigen(A: number[][]): { values: number[]; vectors: number[][] } {
-  const n = A.length;
-  const D = A.map(r => [...r]);
-  const V: number[][] = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
-  const maxSweeps = 100, eps = 1e-14;
-  for (let sweep = 0; sweep < maxSweeps; sweep++) {
-    let off = 0;
-    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) off += Math.abs(D[p][q]);
-    if (off < eps) break;
-    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
-      if (Math.abs(D[p][q]) < eps) continue;
-      const theta = (D[q][q] - D[p][p]) / (2 * D[p][q]);
-      const t = (theta >= 0 ? 1 : -1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
-      const c = 1 / Math.sqrt(t * t + 1);
-      const s = t * c;
-      const dpp = D[p][p], dqq = D[q][q], dpq = D[p][q];
-      D[p][p] = dpp - t * dpq;
-      D[q][q] = dqq + t * dpq;
-      D[p][q] = D[q][p] = 0;
-      for (let i = 0; i < n; i++) {
-        if (i !== p && i !== q) {
-          const dip = D[i][p], diq = D[i][q];
-          D[i][p] = D[p][i] = c * dip - s * diq;
-          D[i][q] = D[q][i] = s * dip + c * diq;
-        }
-        const vip = V[i][p], viq = V[i][q];
-        V[i][p] = c * vip - s * viq;
-        V[i][q] = s * vip + c * viq;
-      }
-    }
-  }
-  const values = D.map((_, i) => D[i][i]);
-  const order = values.map((v, i) => [v, i] as [number, number]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
-  return {
-    values: order.map(i => values[i]),
-    vectors: V.map(row => order.map(i => row[i])),
-  };
-}
-
-// ACP sur matrice p × m (lignes = individus, colonnes = variables).
-// Centrage-réduction par colonne → ACP sur matrice de corrélation.
-// Retourne scores p × 2 (CP1, CP2) + variance expliquée.
-function pca2D(X: number[][]): { scores: number[][]; explained: number[]; loadings: number[][] } {
-  const p = X.length, m = X[0]?.length ?? 0;
-  if (p < 2 || m < 2) return { scores: X.map(() => [0, 0]), explained: [0, 0], loadings: [] };
-  // Centrer-réduire
-  const means = Array(m).fill(0).map((_, j) => X.reduce((s, r) => s + r[j], 0) / p);
-  const sds = Array(m).fill(0).map((_, j) => {
-    const v = X.reduce((s, r) => s + (r[j] - means[j]) ** 2, 0) / (p - 1);
-    return Math.sqrt(v) || 1;
-  });
-  const Z: number[][] = X.map(r => r.map((v, j) => (v - means[j]) / sds[j]));
-  // Corrélation = Z^T Z / (p - 1)
-  const C: number[][] = Array.from({ length: m }, () => Array(m).fill(0));
-  for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) {
-    let s = 0;
-    for (let k = 0; k < p; k++) s += Z[k][i] * Z[k][j];
-    C[i][j] = s / (p - 1);
-  }
-  const { values, vectors } = jacobiEigen(C);
-  const totalVar = values.reduce((a, b) => a + Math.max(0, b), 0) || 1;
-  const explained = [Math.max(0, values[0]) / totalVar, Math.max(0, values[1] ?? 0) / totalVar];
-  // Scores = Z · V (2 premières colonnes)
-  const scores: number[][] = Z.map(row => {
-    const s1 = row.reduce((s, v, i) => s + v * vectors[i][0], 0);
-    const s2 = row.reduce((s, v, i) => s + v * (vectors[i][1] ?? 0), 0);
-    return [s1, s2];
-  });
-  // Loadings = vecteurs propres (variables)
-  const loadings = vectors.map(row => [row[0], row[1] ?? 0]);
-  return { scores, explained, loadings };
-}
 
 // Conformité = corrélation de Pearson entre notes du jury et moyennes du panel
 const pearson = (xs: number[], ys: number[]): number => {
@@ -415,21 +148,21 @@ export const AnalyseView = ({
   return (
     <div className="analyse-shell">
       {/* Session selector */}
-      <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "20px", flexWrap: "wrap" }}>
-        <h2 style={{ fontWeight: 800, fontSize: "clamp(17px,2.5vw,22px)" }}>Analyse</h2>
-        <div style={{ flex: 1 }} />
-        <label style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: "11px", color: "var(--mid)" }}>Séance :</label>
+      <div className="flex items-center gap-3.5 mb-5 flex-wrap">
+        <h2 className="font-extrabold text-[clamp(17px,2.5vw,22px)]">Analyse</h2>
+        <div className="flex-1" />
+        <label className="font-mono text-[11px] text-[var(--mid)]">Séance :</label>
         <select
           value={anSessId || ""}
           onChange={(e) => onAnSessChange(e.target.value)}
-          style={{ border: "1px solid var(--border)", borderRadius: "6px", padding: "5px 8px", fontSize: "12px" }}
+          className="border border-[var(--border)] rounded-md py-[5px] px-2 text-xs"
         >
           {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         {anCfg && (
           <button
             onClick={() => downloadCSV(csvData, anCfg.name)}
-            style={{ fontSize: "12px", padding: "5px 10px", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", background: "var(--paper)", color: "var(--ink)" }}
+            className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
           >
             ↓ CSV
           </button>
@@ -437,7 +170,7 @@ export const AnalyseView = ({
       </div>
 
       {!anCfg && (
-        <div style={{ color: "var(--text-muted)", fontSize: "14px", padding: "32px 0" }}>
+        <div className="text-[var(--text-muted)] text-sm py-8">
           Sélectionnez une séance pour afficher l&apos;analyse.
         </div>
       )}
@@ -495,7 +228,7 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
   // (les axes de la toile sont exclus : ils ont type="scale" dans le CSV mais proviennent de questions "radar").
   const scaleQuestions = (config.questions || []).filter(q => q.type === "scale");
   if (scaleQuestions.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune question d&apos;échelle dans cette séance.</div>;
+    return <AnalysisEmpty>Aucune question d&apos;échelle dans cette séance.</AnalysisEmpty>;
   }
 
   const scaleLabels = new Set(scaleQuestions.map(q => q.label));
@@ -504,7 +237,7 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
   );
 
   if (scaleData.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune réponse d&apos;échelle disponible.</div>;
+    return <AnalysisEmpty>Aucune réponse d&apos;échelle disponible.</AnalysisEmpty>;
   }
 
   const stats = (vals: number[]) => {
@@ -519,13 +252,13 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
   const fmt = (n: number | null, d = 2) => n == null ? "—" : n.toFixed(d);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+    <AnalysisStack>
       {scaleQuestions.map(q => {
         const rows = scaleData.filter(r => r.question === q.label);
         if (rows.length === 0) {
           return (
             <Card key={q.id} title={q.label}>
-              <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>Aucune réponse enregistrée.</div>
+              <div className="text-[var(--text-muted)] text-[13px]">Aucune réponse enregistrée.</div>
             </Card>
           );
         }
@@ -534,7 +267,7 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
           const products = [...new Set(rows.map(r => r.produit))];
           return (
             <Card key={q.id} title={q.label}>
-              <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
+              <div className="text-[11px] text-[var(--mid)] mb-2 font-mono">
                 Moyenne par échantillon
               </div>
               <table className="data-table">
@@ -554,7 +287,7 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
                       <tr key={p}>
                         <td>{p}</td>
                         <td className="num">{s.n}</td>
-                        <td className="num" style={{ fontWeight: 600 }}>{fmt(s.mean)}</td>
+                        <td className="num font-semibold">{fmt(s.mean)}</td>
                         <td className="num">{s.sd == null ? "—" : `±${s.sd.toFixed(2)}`}</td>
                       </tr>
                     );
@@ -570,30 +303,29 @@ function AnalyseProfil({ config, data }: { config: SessionConfig; data: CSVRow[]
         const s = stats(vals);
         return (
           <Card key={q.id} title={q.label}>
-            <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
+            <div className="text-[11px] text-[var(--mid)] mb-2 font-mono">
               Moyenne sur l&apos;ensemble du questionnaire
             </div>
-            <div style={{ display: "flex", gap: "28px", alignItems: "baseline", flexWrap: "wrap" }}>
+            <div className="flex gap-7 items-baseline flex-wrap">
               <div>
-                <div style={{ fontSize: "11px", color: "var(--mid)" }}>Moyenne</div>
-                <div style={{ fontSize: "28px", fontWeight: 700 }}>{fmt(s.mean)}</div>
+                <div className="text-[11px] text-[var(--mid)]">Moyenne</div>
+                <div className="text-[28px] font-bold">{fmt(s.mean)}</div>
               </div>
               <div>
-                <div style={{ fontSize: "11px", color: "var(--mid)" }}>Écart-type</div>
-                <div style={{ fontSize: "18px" }}>{s.sd == null ? "—" : `±${s.sd.toFixed(2)}`}</div>
+                <div className="text-[11px] text-[var(--mid)]">Écart-type</div>
+                <div className="text-lg">{s.sd == null ? "—" : `±${s.sd.toFixed(2)}`}</div>
               </div>
               <div>
-                <div style={{ fontSize: "11px", color: "var(--mid)" }}>n réponses</div>
-                <div style={{ fontSize: "18px" }}>{s.n}</div>
+                <div className="text-[11px] text-[var(--mid)]">n réponses</div>
+                <div className="text-lg">{s.n}</div>
               </div>
             </div>
           </Card>
         );
       })}
-    </div>
+    </AnalysisStack>
   );
 }
-
 // ─── Classement & Seuil → Friedman + Nemenyi ──────────────────────────────────
 
 function AnalyseFriedman({ config, data, type, questionLabel }: { config: SessionConfig; data: CSVRow[]; type: "classement" | "seuil"; questionLabel: string }) {
@@ -601,11 +333,11 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
   const title = type === "seuil" ? "Seuil" : "Classement";
 
   if (rankRows.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée de {type} disponible.</div>;
+    return <AnalysisEmpty>Aucune donnée de {type} disponible.</AnalysisEmpty>;
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+    <AnalysisStack>
       {[questionLabel].map(q => {
         const qRows = rankRows.filter(r => r.question === q && r.valeur);
         // Parse "A>B>C" → {A:1, B:2, C:3}
@@ -625,7 +357,7 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
         if (n < 2 || k < 2) {
           return (
             <Card key={q} title={`${title} — ${q}`}>
-              <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+              <p className="text-[var(--text-muted)] text-[13px]">
                 Pas assez de réponses ({n} jury{n > 1 ? "s" : ""}) pour calculer le test de Friedman.
               </p>
             </Card>
@@ -647,7 +379,6 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
         const pValue = chiSquarePValue(chi2, df);
 
         const sig = pValue < 0.001 ? "***" : pValue < 0.01 ? "**" : pValue < 0.05 ? "*" : "ns";
-        const sigColor = pValue < 0.05 ? "#1a6b3a" : "#888";
 
         // Correct order comparison — Kendall τ vs ordre attendu
         const correctStr = qRows[0]?.correct || "";
@@ -702,8 +433,8 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
 
         return (
           <Card key={q} title={`${title} — ${q}`}>
-            <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-start" }}>
-              <div style={{ flex: "1 1 260px", maxWidth: "360px" }}>
+            <div className="flex gap-6 flex-wrap items-start">
+              <div className="flex-[1_1_260px] max-w-[360px]">
                 <Bar
                   data={barData}
                   options={{
@@ -713,7 +444,7 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
                   }}
                 />
               </div>
-              <div style={{ flex: "1 1 200px" }}>
+              <div className="flex-[1_1_200px]">
                 <table className="data-table">
                   <thead>
                     <tr><th>Produit</th><th>Rang moyen</th>{pValue < 0.05 && <th>Gr.</th>}</tr>
@@ -721,37 +452,37 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
                   <tbody>
                     {sortedByMean.map(p => (
                       <tr key={p}>
-                        <td style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{p}</td>
+                        <td className="font-mono">{p}</td>
                         <td className="num">{rankMeans[p].toFixed(2)}</td>
-                        {pValue < 0.05 && <td style={{ textAlign: "center", fontWeight: 700, color: "var(--accent)" }}>{cld[p]}</td>}
+                        {pValue < 0.05 && <td className="text-center font-bold text-[var(--accent)]">{cld[p]}</td>}
                       </tr>
                     ))}
                   </tbody>
                 </table>
 
-                <div style={{ marginTop: "16px", padding: "12px 14px", background: "var(--bg)", borderRadius: "8px", fontSize: "13px", lineHeight: 1.8 }}>
+                <div className="mt-4 px-3.5 py-3 bg-[var(--bg)] rounded-lg text-[13px] leading-[1.8]">
                   <div><strong>Test de Friedman</strong> (α=0,05)</div>
                   <div>n = {n} jurys · k = {k} produits</div>
-                  <div>χ² = {chi2.toFixed(3)} · p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)} <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span></div>
+                  <div>χ² = {chi2.toFixed(3)} · p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)} <span className={significanceClass(pValue < 0.05)}>{sig}</span></div>
                   <div title="Coefficient de concordance de Kendall — cohérence inter-jurys du panel. 1 = accord parfait, 0 = désaccord total.">
-                    <span style={{ color: "var(--text-muted)" }}>W de Kendall (concordance panel) = </span>
-                    <span style={{ fontWeight: 600, color: panelW >= 0.7 ? "#1a6b3a" : panelW >= 0.4 ? "#8a6d00" : "var(--danger)" }}>
+                    <span className="text-[var(--text-muted)]">W de Kendall (concordance panel) = </span>
+                    <span className={`font-semibold ${panelW >= 0.7 ? OK_TEXT : panelW >= 0.4 ? "text-[#8a6d00]" : "text-[var(--danger)]"}`}>
                       {panelW.toFixed(2)}
                     </span>
                   </div>
 
                   {pValue < 0.05 && (
-                    <div style={{ marginTop: "12px" }}>
+                    <div className="mt-3">
                       <strong>Post-hoc de Nemenyi</strong> (α=0,10)
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Différence Critique (CD) = {nemenyiCD.toFixed(2)}</div>
-                      <div style={{ fontSize: "11px", color: "#1a6b3a", fontStyle: "italic", marginBottom: "8px" }}>
+                      <div className="text-[11px] text-[var(--text-muted)]">Différence Critique (CD) = {nemenyiCD.toFixed(2)}</div>
+                      <div className="text-[11px] text-[#1a6b3a] italic mb-2">
                         Les produits partageant une même lettre ne sont pas significativement différents.
                       </div>
-                      
+
                       {/* Pairwise comparisons table */}
                       <details>
-                        <summary style={{ cursor: "pointer", fontSize: "12px", color: "var(--mid)" }}>Afficher les comparaisons par paires</summary>
-                        <table className="data-table" style={{ marginTop: "8px", fontSize: "11px" }}>
+                        <summary className="cursor-pointer text-xs text-[var(--mid)]">Afficher les comparaisons par paires</summary>
+                        <table className="data-table mt-2 text-[11px]">
                           <thead>
                             <tr><th>Paire</th><th>Diff. Σ Rangs</th><th>Signif.</th></tr>
                           </thead>
@@ -764,7 +495,7 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
                                   <tr key={`${p1}-${p2}`}>
                                     <td>{p1} vs {p2}</td>
                                     <td className="num">{diff.toFixed(1)}</td>
-                                    <td style={{ color: isSig ? "var(--danger)" : "var(--mid)", fontWeight: isSig ? 700 : 400 }}>
+                                    <td className={isSig ? "font-bold text-[var(--danger)]" : "font-normal text-[var(--mid)]"}>
                                       {isSig ? "Oui" : "Non"}
                                     </td>
                                   </tr>
@@ -778,11 +509,11 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
                   )}
 
                   {thresholdProduct && (
-                    <div style={{ marginTop: "12px", padding: "10px", background: "var(--paper2)", borderLeft: "4px solid var(--accent)", borderRadius: "4px" }}>
+                    <div className="mt-3 p-2.5 bg-[var(--paper2)] border-l-4 border-[var(--accent)] rounded">
                       <strong>Conclusion Seuil</strong>
                       <div>L&apos;échantillon marquant le seuil est : <strong>{thresholdProduct}</strong></div>
                       {config?.products?.find((p: Product) => p.code === thresholdProduct)?.label && (
-                        <div style={{ fontSize: "12px", color: "var(--mid)", fontStyle: "italic", marginTop: "4px" }}>
+                        <div className="text-xs text-[var(--mid)] italic mt-1">
                           Descripteurs : {config.products.find((p: Product) => p.code === thresholdProduct)?.label}
                         </div>
                       )}
@@ -790,23 +521,23 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
                   )}
 
                   {correctProducts.length > 0 && (
-                    <div style={{ marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
+                    <div className="mt-3 border-t border-[var(--border)] pt-2">
                       <strong>Conformité à l&apos;ordre attendu</strong>
                       <div>{matchCount} / {n} jurys exacts ({(matchCount / n * 100).toFixed(0)}%)</div>
                       <div title="τ de Kendall — concordance en paires avec l'ordre attendu. 1 = identique, 0 = aléatoire, -1 = inverse.">
-                        τ de Kendall moyen = <span style={{ fontWeight: 600 }}>{avgTau.toFixed(2)}</span>
+                        τ de Kendall moyen = <span className="font-semibold">{avgTau.toFixed(2)}</span>
                       </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Attendu : {correctProducts.join(" > ")}</div>
+                      <div className="text-[11px] text-[var(--text-muted)]">Attendu : {correctProducts.join(" > ")}</div>
                     </div>
                   )}
                 </div>
               </div>
             </div>
             {type === "seuil" && (
-               <details style={{ marginTop: "16px" }}>
-                 <summary style={{ cursor: "pointer", fontSize: "12px", color: "var(--mid)" }}>Afficher la distribution des rangs</summary>
-                 <div style={{ marginTop: "10px", display: "flex", gap: "20px", flexWrap: "wrap" }}>
-                    <table className="data-table" style={{ flex: 1 }}>
+               <details className="mt-4">
+                 <summary className="cursor-pointer text-xs text-[var(--mid)]">Afficher la distribution des rangs</summary>
+                 <div className="mt-2.5 flex gap-5 flex-wrap">
+                    <table className="data-table flex-1">
                       <thead><tr><th>Produit</th>{products.map((_, i) => <th key={i}>R{i + 1}</th>)}</tr></thead>
                       <tbody>
                         {products.map((p: string) => (
@@ -826,10 +557,9 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
           </Card>
         );
       })}
-    </div>
+    </AnalysisStack>
   );
 }
-
 
 // ─── Tests discriminatifs (un type à la fois) ─────────────────────────────────
 
@@ -837,7 +567,7 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
   const dd = data.filter(r => r.type === type && r.question === questionLabel);
 
   if (dd.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée disponible.</div>;
+    return <AnalysisEmpty>Aucune donnée disponible.</AnalysisEmpty>;
   }
 
   // Binomial test p-value (exact, one-sided)
@@ -874,7 +604,7 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
 
   if (type === "a-non-a") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div className="flex flex-col gap-5">
         {[questionLabel].map(q => {
           const qd = dd.filter(r => r.question === q);
           // Agrégation en table 2×2 : lignes = stimulus (A / non-A), colonnes = réponse (A / non-A)
@@ -925,24 +655,24 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
           }
           const pVal = total > 0 ? chiSquarePValue(chi2, 1) : 1;
           const sig = pVal < 0.001 ? "***" : pVal < 0.01 ? "**" : pVal < 0.05 ? "*" : "ns";
-          const sigColor = pVal < 0.05 ? "#1a6b3a" : "#888";
 
           // Interprétation pédagogique de d' (Green & Swets, Macmillan & Creelman)
           const dInterp = Math.abs(dPrime) < 0.5 ? "très faible" : Math.abs(dPrime) < 1 ? "faible" : Math.abs(dPrime) < 1.5 ? "modérée" : Math.abs(dPrime) < 2.5 ? "forte" : "très forte";
 
           return (
             <Card key={q} title={`${label} — ${q}`}>
-              <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-start" }}>
-                <div style={{ textAlign: "center", minWidth: "140px" }}>
-                  <div style={{ fontSize: "clamp(36px,5vw,52px)", fontWeight: 800, color: sigColor }}>
-                    d&apos; = {dPrime.toFixed(2)}
-                  </div>
-                  <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>indice de discrimination</div>
-                  <div style={{ fontSize: "13px", color: sigColor, marginTop: "4px", fontStyle: "italic" }}>{dInterp}</div>
-                </div>
+              <MetricLayout compact>
+                <MetricBlock
+                  minClass="min-w-[140px]"
+                  value={<>d&apos; = {dPrime.toFixed(2)}</>}
+                  label="indice de discrimination"
+                  note={dInterp}
+                  valueClassName={`text-[clamp(36px,5vw,52px)] font-extrabold ${pVal < 0.05 ? OK_TEXT : DIM_TEXT}`}
+                  noteClassName={`mt-1 text-[13px] italic ${pVal < 0.05 ? OK_TEXT : DIM_TEXT}`}
+                />
 
-                <div style={{ flex: 1, minWidth: "260px" }}>
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Table 2×2 agrégée</div>
+                <div className="min-w-[260px] flex-1">
+                  <TableCaption>Table 2×2 agrégée</TableCaption>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -955,32 +685,30 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
                     <tbody>
                       <tr>
                         <td><strong>Stimulus A</strong></td>
-                        <td className="num" style={{ color: "#1a6b3a", fontWeight: 600 }}>{hits} <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>(hit)</span></td>
-                        <td className="num" style={{ color: "#c0392b" }}>{misses} <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>(miss)</span></td>
+                        <td className={`num font-semibold ${OK_TEXT}`}>{hits} <span className="text-[10px] text-[var(--text-muted)]">(hit)</span></td>
+                        <td className={`num ${DANGER_TEXT}`}>{misses} <span className="text-[10px] text-[var(--text-muted)]">(miss)</span></td>
                         <td className="num">{nA}</td>
                       </tr>
                       <tr>
                         <td><strong>Stimulus non-A</strong></td>
-                        <td className="num" style={{ color: "#c0392b" }}>{fa} <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>(FA)</span></td>
-                        <td className="num" style={{ color: "#1a6b3a", fontWeight: 600 }}>{cr} <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>(CR)</span></td>
+                        <td className={`num ${DANGER_TEXT}`}>{fa} <span className="text-[10px] text-[var(--text-muted)]">(FA)</span></td>
+                        <td className={`num font-semibold ${OK_TEXT}`}>{cr} <span className="text-[10px] text-[var(--text-muted)]">(CR)</span></td>
                         <td className="num">{nNonA}</td>
                       </tr>
                     </tbody>
                   </table>
-                  <div style={{ padding: "12px 14px", background: "var(--bg)", borderRadius: "8px", fontSize: "13px", lineHeight: 1.8, marginTop: "10px" }}>
+                  <AnalysisPanel className="mt-2.5">
                     <div>Taux de détection (hit rate) : <strong>{(H * 100).toFixed(1)}%</strong></div>
                     <div>Taux de fausse alarme : <strong>{(F * 100).toFixed(1)}%</strong></div>
-                    <div>χ² (Yates, ddl=1) = {chi2.toFixed(2)} &middot; p = {pVal < 0.001 ? "< 0,001" : pVal.toFixed(3)} <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span></div>
+                    <div>χ² (Yates, ddl=1) = {chi2.toFixed(2)} &middot; p = {pVal < 0.001 ? "< 0,001" : pVal.toFixed(3)} <span className={significanceClass(pVal < 0.05)}>{sig}</span></div>
                     {pVal < 0.05
-                      ? <div style={{ color: "#1a6b3a", fontWeight: 600, marginTop: "4px" }}>Discrimination significative entre A et non-A (α=0,05)</div>
-                      : <div style={{ color: "#c0392b", marginTop: "4px" }}>Pas de différence détectée (α=0,05)</div>}
-                  </div>
+                      ? <div className={`mt-1 font-semibold ${OK_TEXT}`}>Discrimination significative entre A et non-A (α=0,05)</div>
+                      : <div className={`mt-1 ${DANGER_TEXT}`}>Pas de différence détectée (α=0,05)</div>}
+                  </AnalysisPanel>
                 </div>
-              </div>
+              </MetricLayout>
 
-              <details style={{ marginTop: "14px" }}>
-                <summary style={{ cursor: "pointer", fontSize: "12px", color: "var(--mid)" }}>Détail par jury</summary>
-                <table className="data-table" style={{ marginTop: "8px" }}>
+              <DetailTable summary="Détail par jury">
                   <thead>
                     <tr><th>Jury</th><th>Hits</th><th>Miss</th><th>FA</th><th>CR</th><th>% correct</th></tr>
                   </thead>
@@ -1000,8 +728,7 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
                       );
                     })}
                   </tbody>
-                </table>
-              </details>
+              </DetailTable>
             </Card>
           );
         })}
@@ -1010,7 +737,7 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+    <AnalysisStack>
       {[questionLabel].map(q => {
         const qd = dd.filter(r => r.question === q);
         const n = qd.length;
@@ -1018,44 +745,41 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
 
         const pVal = binomialPValue(n, nc, pChance);
         const sig = pVal < 0.001 ? "***" : pVal < 0.01 ? "**" : pVal < 0.05 ? "*" : "ns";
-        const sigColor = pVal < 0.05 ? "#1a6b3a" : "#888";
         const minC = minCorrect(n, pChance);
         const pct = n ? (nc / n * 100).toFixed(0) : 0;
 
         return (
           <Card key={q} title={`${label} — ${q}`}>
-            <div style={{ display: "flex", gap: "32px", flexWrap: "wrap", alignItems: "flex-start" }}>
-              <div style={{ textAlign: "center", minWidth: "120px" }}>
-                <div style={{ fontSize: "clamp(36px,5vw,52px)", fontWeight: 800, color: nc >= minC ? "#1a6b3a" : "#888" }}>
-                  {nc}
-                </div>
-                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>réponses correctes</div>
-                <div style={{ fontSize: "22px", fontWeight: 700, color: sigColor, marginTop: "6px" }}>{pct}%</div>
-              </div>
+            <MetricLayout>
+              <MetricBlock
+                value={nc}
+                label="réponses correctes"
+                note={`${pct}%`}
+                valueClassName={`text-[clamp(36px,5vw,52px)] font-extrabold ${nc >= minC ? OK_TEXT : DIM_TEXT}`}
+                noteClassName={`mt-1.5 text-[22px] font-bold not-italic ${pVal < 0.05 ? OK_TEXT : DIM_TEXT}`}
+              />
 
-              <div style={{ flex: 1, minWidth: "200px" }}>
-                <div style={{ padding: "12px 14px", background: "var(--bg)", borderRadius: "8px", fontSize: "13px", lineHeight: 1.9 }}>
+              <div className="min-w-[200px] flex-1">
+                <AnalysisPanel loose>
                   <div><strong>Test binomial</strong> (unilatéral)</div>
                   <div>Probabilité chance : {(pChance * 100).toFixed(0)}%</div>
                   <div>Seuil de signification (p&lt;0,05) : ≥ {minC} bonnes réponses</div>
                   <div>
                     p = {pVal < 0.001 ? "< 0,001" : pVal.toFixed(3)}
                     {" "}
-                    <span style={{ fontWeight: 700, color: sigColor }}>{sig}</span>
+                    <span className={significanceClass(pVal < 0.05)}>{sig}</span>
                   </div>
                   {pVal < 0.05
-                    ? <div style={{ color: "#1a6b3a", fontWeight: 600, marginTop: "4px" }}>
+                    ? <div className={`mt-1 font-semibold ${OK_TEXT}`}>
                         Le panel discrimine significativement les produits (α=0,05)
                       </div>
-                    : <div style={{ color: "#c0392b", marginTop: "4px" }}>
+                    : <div className={`mt-1 ${DANGER_TEXT}`}>
                         Pas de différence détectée (α=0,05)
                       </div>
                   }
-                </div>
+                </AnalysisPanel>
 
-                <div style={{ marginTop: "12px", fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>
-                  Détail par jury
-                </div>
+                <TableCaption className="mt-3">Détail par jury</TableCaption>
                 <table className="data-table">
                   <thead>
                     <tr><th>Jury</th><th>Réponse</th><th>Résultat</th></tr>
@@ -1066,12 +790,12 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
                       return (
                         <tr key={i}>
                           <td>{r.jury}</td>
-                          <td style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: "11px" }}>
+                          <td className="font-mono text-[11px]">
                             {typeof r.valeur === "string" && r.valeur.length > 30
                               ? r.valeur.slice(0, 30) + "…"
                               : r.valeur}
                           </td>
-                          <td style={{ color: correct ? "#1a6b3a" : "#c0392b", fontWeight: 600 }}>
+                          <td className={correct ? `font-semibold ${OK_TEXT}` : `font-semibold ${DANGER_TEXT}`}>
                             {correct ? "✓" : "✗"}
                           </td>
                         </tr>
@@ -1080,11 +804,11 @@ function AnalyseDiscrimType({ data, type, label, questionLabel }: { data: CSVRow
                   </tbody>
                 </table>
               </div>
-            </div>
+            </MetricLayout>
           </Card>
         );
       })}
-    </div>
+    </AnalysisStack>
   );
 }
 
@@ -1095,7 +819,7 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: SessionCo
   const jurors = Object.keys(allAnswers || {});
 
   if (questions.length === 0 || jurors.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée disponible.</div>;
+    return <AnalysisEmpty>Aucune donnée disponible.</AnalysisEmpty>;
   }
 
   const computeBET = (levels: BetLevel[], answers: Record<string, string>): { bet: number | null; censored: "low" | "high" | null; trace: ("+" | "-" | "?")[] } => {
@@ -1126,13 +850,13 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: SessionCo
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+    <AnalysisStack>
       {questions.map((q: Question) => {
         const levels: BetLevel[] = q.betLevels || [];
         if (levels.length === 0) {
           return (
             <Card key={q.id} title={`Seuil 3-AFC — ${q.label}`}>
-              <div style={{ color: "var(--text-muted)" }}>Aucun niveau défini.</div>
+              <div className="text-[var(--text-muted)]">Aucun niveau défini.</div>
             </Card>
           );
         }
@@ -1156,19 +880,17 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: SessionCo
 
         return (
           <Card key={q.id} title={`Seuil 3-AFC (BET) — ${q.label}`}>
-            <div style={{ display: "flex", gap: "32px", flexWrap: "wrap", alignItems: "flex-start" }}>
-              <div style={{ textAlign: "center", minWidth: "160px" }}>
-                <div style={{ fontSize: "clamp(30px,4vw,44px)", fontWeight: 800, color: "#1a6b3a" }}>
-                  {groupBET != null ? groupBET.toPrecision(3) : "—"}
-                </div>
-                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>seuil de groupe (BET)</div>
-                <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "4px", fontStyle: "italic" }}>
-                  moyenne géométrique sur {valid.length} / {perJury.length} jurys
-                </div>
-              </div>
+            <MetricLayout>
+              <MetricBlock
+                minClass="min-w-40"
+                value={groupBET != null ? groupBET.toPrecision(3) : "—"}
+                label="seuil de groupe (BET)"
+                note={<>moyenne géométrique sur {valid.length} / {perJury.length} jurys</>}
+                valueClassName={`text-[clamp(30px,4vw,44px)] font-extrabold ${OK_TEXT}`}
+              />
 
-              <div style={{ flex: 1, minWidth: "260px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Réponses correctes par niveau</div>
+              <div className="min-w-[260px] flex-1">
+                <TableCaption>Réponses correctes par niveau</TableCaption>
                 <table className="data-table">
                   <thead>
                     <tr><th>Niveau</th><th>Concentration</th><th>Correctes / N</th><th>%</th></tr>
@@ -1185,11 +907,12 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: SessionCo
                   </tbody>
                 </table>
               </div>
-            </div>
+            </MetricLayout>
 
-            <details style={{ marginTop: "14px" }}>
-              <summary style={{ cursor: "pointer", fontSize: "12px", color: "var(--mid)" }}>Détail par jury (ASTM E679)</summary>
-              <table className="data-table" style={{ marginTop: "8px" }}>
+            <DetailTable
+              summary="Détail par jury (ASTM E679)"
+              note={<>BET = moyenne géométrique des concentrations encadrant la dernière inversion (ASTM E679). (≤) : toutes réponses correctes, seuil censuré sous la plus faible concentration. (≥) : aucune réponse correcte, seuil censuré au-dessus de la plus forte concentration.</>}
+            >
                 <thead>
                   <tr>
                     <th>Jury</th>
@@ -1202,29 +925,23 @@ function AnalyseSeuilBET({ config, allAnswers, questionId }: { config: SessionCo
                     <tr key={r.jury}>
                       <td>{r.jury}</td>
                       {r.trace.map((t, i) => (
-                        <td key={i} className="num" style={{ color: t === "+" ? "#1a6b3a" : t === "-" ? "#c0392b" : "#888", fontWeight: 600 }}>
+                        <td key={i} className={`num font-semibold ${t === "+" ? OK_TEXT : t === "-" ? DANGER_TEXT : DIM_TEXT}`}>
                           {t === "+" ? "✓" : t === "-" ? "✗" : "—"}
                         </td>
                       ))}
                       <td className="num">
                         {r.bet != null ? r.bet.toPrecision(3) : "—"}
-                        {r.censored === "low" && <span style={{ fontSize: "10px", color: "var(--mid)" }}> (≤)</span>}
-                        {r.censored === "high" && <span style={{ fontSize: "10px", color: "var(--mid)" }}> (≥)</span>}
+                        {r.censored === "low" && <span className="text-[10px] text-[var(--mid)]"> (≤)</span>}
+                        {r.censored === "high" && <span className="text-[10px] text-[var(--mid)]"> (≥)</span>}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-              <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "8px", fontStyle: "italic" }}>
-                BET = moyenne géométrique des concentrations encadrant la dernière inversion (ASTM E679).
-                (≤) : toutes réponses correctes, seuil censuré sous la plus faible concentration.
-                (≥) : aucune réponse correcte, seuil censuré au-dessus de la plus forte concentration.
-              </div>
-            </details>
+            </DetailTable>
           </Card>
         );
       })}
-    </div>
+    </AnalysisStack>
   );
 }
 
@@ -1250,15 +967,15 @@ function AnalyseRadar({ config, allAnswers }: { config: SessionConfig; allAnswer
   const jurors = Object.keys(allAnswers);
 
   if (radarQs.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée radar disponible.</div>;
+    return <AnalysisEmpty>Aucune donnée radar disponible.</AnalysisEmpty>;
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
+    <AnalysisStack deep>
       {radarQs.map(q => (
         <RadarQuestionAnalysis key={q.id} question={q} products={products} jurors={jurors} allAnswers={allAnswers} />
       ))}
-    </div>
+    </AnalysisStack>
   );
 }
 
@@ -1349,6 +1066,17 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
   const juryPerf = jurors.map(j => {
     const paired: Array<{ self: number; panel: number }> = [];
     const selfAll: number[] = [];
+    
+    // Pour le coefficient RV, on prépare les matrices [Produits x Critères]
+    const judgeMat: number[][] = products.map(p => 
+      criteria.map(c => getNote(j, p.code, c) ?? avg(p.code, c)) // Imputation par la moyenne si manque
+    );
+    const panelMat: number[][] = products.map(p => 
+      criteria.map(c => avg(p.code, c))
+    );
+    
+    const rv = products.length >= 2 && criteria.length >= 2 ? rvCoefficient(judgeMat, panelMat) : null;
+
     products.forEach(p => {
       criteria.forEach(c => {
         const v = getNote(j, p.code, c);
@@ -1360,7 +1088,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     });
     const conf = paired.length >= 2 ? pearson(paired.map(x => x.self), paired.map(x => x.panel)) : 0;
     const range = selfAll.length ? Math.max(...selfAll) - Math.min(...selfAll) : 0;
-    return { jury: j, conf, range, n: selfAll.length };
+    return { jury: j, conf, rv, range, n: selfAll.length };
   }).sort((a, b) => b.conf - a.conf);
 
   // ANOVA par critère, restreint au niveau d'affichage choisi.
@@ -1374,33 +1102,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
   });
   const anovaRows = anovaCriteria.map(crit => {
     const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p.code, crit)));
-    const flat = mat.flat().filter((v): v is number => v !== null);
-    const pN = products.length;
-    const jN = jurors.length;
-    if (flat.length < pN * jN || pN < 2 || jN < 2) return { crit, ok: false as const };
-    
-    const grand = flat.reduce((a, b) => a + b, 0) / flat.length;
-    const prodMeans = mat.map(row => {
-      const v = row.filter((x): x is number => x !== null);
-      return v.reduce((a, b) => a + b, 0) / v.length;
-    });
-    const juryMeans = jurors.map((_, jIdx) => {
-      const col = mat.map(row => row[jIdx]).filter((x): x is number => x !== null);
-      return col.reduce((a, b) => a + b, 0) / col.length;
-    });
-    let ssProd = 0, ssJury = 0, ssTot = 0;
-    for (let i = 0; i < pN; i++) ssProd += jN * (prodMeans[i] - grand) ** 2;
-    for (let j = 0; j < jN; j++) ssJury += pN * (juryMeans[j] - grand) ** 2;
-    for (let i = 0; i < pN; i++) for (let j = 0; j < jN; j++) {
-      const v = mat[i][j];
-      if (v !== null) ssTot += (v - grand) ** 2;
-    }
-    const ssErr = Math.max(0, ssTot - ssProd - ssJury);
-    const dfProd = pN - 1, dfJury = jN - 1, dfErr = (pN - 1) * (jN - 1);
-    const msProd = ssProd / dfProd, msJury = ssJury / dfJury, msErr = ssErr / dfErr;
-    const fProd = msErr > 0 ? msProd / msErr : 0;
-    const pProd = msErr > 0 ? fPValue(fProd, dfProd, dfErr) : 1;
-    return { crit, ok: true as const, fProd, pProd };
+    const res = anovaTwoWay(mat);
+    return { crit, ...res };
   });
 
   // ACP — groupe (toile des arômes / profil gustatif / …)
@@ -1423,13 +1126,11 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     : 1;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>{question.label}</h3>
+    <AnalysisStack>
+      <h3 className="m-0 text-lg font-bold">{question.label}</h3>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-        <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'JetBrains Mono', ui-monospace, monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
-          Niveau d&apos;affichage
-        </span>
+      <div className={ANALYSIS_TOOLBAR}>
+        <ToolbarLabel>Niveau d&apos;affichage</ToolbarLabel>
         <div className="pca-level-switch">
           {(["famille", "classe", "descripteur"] as const).map(lv => (
             <button
@@ -1480,8 +1181,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
               <div className="analyse-radar-wrap">
                 <Radar data={radarData} options={{ responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 10 } } }} />
               </div>
-              <div style={{ marginTop: "20px" }}>
-                <table className="data-table" style={{ fontSize: "11px" }}>
+              <div className="mt-5">
+                <table className="data-table text-[11px]">
                   <thead>
                     <tr>
                       <th>Critère</th>
@@ -1491,13 +1192,16 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
                   <tbody>
                     {displayCriteria.map(c => (
                       <tr key={c}>
-                        <td style={{ paddingLeft: `${(c.split(" > ").length - 1) * 12}px`, color: c.includes(">") ? "var(--mid)" : "inherit", fontWeight: c.includes(">") ? 400 : 700 }}>
+                        <td
+                          className={c.includes(">") ? "font-normal text-[var(--mid)]" : "font-bold"}
+                          style={{ paddingLeft: `${(c.split(" > ").length - 1) * 12}px` }}
+                        >
                           {c.split(" > ").pop()}
                         </td>
                         {products.map(p => {
                           const m = avg(p.code, c);
                           const s = sd(p.code, c);
-                          return <td key={p.code} className="num" style={{ opacity: m > 0 ? 1 : 0.3 }}>
+                          return <td key={p.code} className={`num ${m > 0 ? "opacity-100" : "opacity-30"}`}>
                             {m > 0 ? `${m.toFixed(1)} ±${s.toFixed(1)}` : "—"}
                           </td>;
                         })}
@@ -1512,7 +1216,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
       </div>
 
       <Card title="Significativité des descripteurs (ANOVA)">
-        <table className="data-table" style={{ fontSize: "12px" }}>
+        <table className="data-table text-xs">
           <thead>
             <tr><th>Descripteur</th><th>F-produit</th><th>p-value</th></tr>
           </thead>
@@ -1521,7 +1225,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
               <tr key={r.crit}>
                 <td>{r.crit}</td>
                 <td className="num">{r.fProd.toFixed(2)}</td>
-                <td className="num" style={{ fontWeight: r.pProd < 0.05 ? 700 : 400, color: r.pProd < 0.05 ? "#1a6b3a" : "inherit" }}>
+                <td className={`num ${r.pProd < 0.05 ? `font-bold ${OK_TEXT}` : "font-normal"}`}>
                   {r.pProd < 0.001 ? "< 0,001" : r.pProd.toFixed(3)} {r.pProd < 0.05 ? "*" : ""}
                 </td>
               </tr>
@@ -1530,12 +1234,10 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
         </table>
       </Card>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+      <div className={ANALYSIS_TOOLBAR}>
         {groups.length > 1 && (
           <>
-            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'JetBrains Mono', ui-monospace, monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
-              Toile ACP
-            </span>
+            <ToolbarLabel>Toile ACP</ToolbarLabel>
             <select
               value={pcaGroupId}
               onChange={(e) => setPcaGroupId(e.target.value)}
@@ -1549,9 +1251,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
         )}
         {!isFlatGroup && (
           <>
-            <span style={{ fontSize: "11px", color: "var(--mid)", fontFamily: "'JetBrains Mono', ui-monospace, monospace", textTransform: "uppercase", letterSpacing: ".4px" }}>
-              Niveau ACP
-            </span>
+            <ToolbarLabel>Niveau ACP</ToolbarLabel>
             <div className="pca-level-switch">
               {(["famille", "classe", "descripteur"] as const).map(lv => (
                 <button
@@ -1566,13 +1266,13 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
             </div>
           </>
         )}
-        <span style={{ fontSize: "11px", color: "var(--mid)" }}>
+        <span className="text-[11px] text-[var(--mid)]">
           {pcaCriteria.length} {levelLabel[effectiveLevel].toLowerCase()}{pcaCriteria.length > 1 ? "s" : ""}
         </span>
       </div>
 
       {!pcaRes && (
-        <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+        <div className="text-[13px] text-[var(--text-muted)]">
           Pas assez de données au niveau « {levelLabel[effectiveLevel].toLowerCase()} » pour calculer l&apos;ACP (il faut au moins 3 produits et 2 critères renseignés).
         </div>
       )}
@@ -1580,7 +1280,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
       {pcaRes && (
         <div className="grid2">
           <Card title={`ACP — Carte des produits · ${activeGroup?.title || ""} (${levelLabel[effectiveLevel].toLowerCase()})`}>
-            <div style={{ height: "320px" }}>
+            <div className={ANALYSIS_CHART_BOX}>
               <Scatter
                 data={{
                   datasets: products.map((p, i) => ({
@@ -1608,13 +1308,13 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
                 }}
               />
             </div>
-            <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "10px" }}>
+            <div className="mt-2.5 text-[11px] text-[var(--mid)]">
               CP1+CP2 : {((pcaRes.explained[0] + (pcaRes.explained[1]||0))*100).toFixed(1)}% de variance expliquée.
             </div>
           </Card>
 
           <Card title={`ACP — ${levelLabel[effectiveLevel]}s · ${activeGroup?.title || ""} (cercle des corrélations)`}>
-            <div style={{ height: "320px" }}>
+            <div className={ANALYSIS_CHART_BOX}>
               <Scatter
                 data={{
                   datasets: [
@@ -1685,7 +1385,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
                 }}
               />
             </div>
-            <div style={{ fontSize: "11px", color: "var(--mid)", marginTop: "10px" }}>
+            <div className="mt-2.5 text-[11px] text-[var(--mid)]">
               Longueur de la flèche ≈ importance du critère sur le plan CP1-CP2 ; direction ≈ corrélation entre critères.
             </div>
           </Card>
@@ -1693,16 +1393,25 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
       )}
 
       <Card title="Performance du jury">
-        <table className="data-table" style={{ fontSize: "12px" }}>
+        <table className="data-table text-xs">
           <thead>
-            <tr><th>Jury</th><th>Conformité (r)</th><th>Amplitude</th><th>Statut</th></tr>
+            <tr>
+              <th>Jury</th>
+              <th title="Corrélation de Pearson entre le juge et la moyenne du panel">R-Pearson</th>
+              <th title="Coefficient RV : corrélation multidimensionnelle entre le juge et le panel (plus robuste)">Coeff. RV</th>
+              <th>Amplitude</th>
+              <th>Statut</th>
+            </tr>
           </thead>
           <tbody>
             {juryPerf.map(p => (
               <tr key={p.jury}>
                 <td>{p.jury}</td>
-                <td className="num" style={{ fontWeight: 700, color: p.conf > 0.6 ? "#1a6b3a" : p.conf > 0.3 ? "#c8820a" : "#c0392b" }}>
+                <td className={`num font-bold ${confidenceClass(p.conf)}`}>
                   {p.conf.toFixed(2)}
+                </td>
+                <td className={`num ${p.rv !== null && p.rv > 0.6 ? OK_TEXT : ""}`}>
+                  {p.rv !== null ? p.rv.toFixed(2) : "—"}
                 </td>
                 <td className="num">{p.range.toFixed(1)}</td>
                 <td>{p.conf > 0.6 ? "Conforme" : p.conf > 0.3 ? "Modéré" : "Discordant"}</td>
@@ -1711,7 +1420,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
           </tbody>
         </table>
       </Card>
-    </div>
+    </AnalysisStack>
   );
 }
 
@@ -1738,36 +1447,32 @@ function WordCloudDisplay({ rows, title }: { rows: CSVRow[]; title: string }) {
   if (sorted.length === 0) return null;
   return (
     <Card title={title}>
-      <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
+      <div className="mb-3 text-xs text-[var(--text-muted)]">
         {rows.length} réponse{rows.length > 1 ? "s" : ""} · {sorted.length} mots distincts
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 12px", padding: "16px", justifyContent: "center", alignItems: "center", lineHeight: 1.4 }}>
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 p-4 leading-[1.4]">
         {sorted.map(([word, freq]) => (
           <span
             key={word}
             title={`${freq} occurrence${freq > 1 ? "s" : ""}`}
+            className="cursor-default transition-opacity"
             style={{
               fontSize: `${Math.round(11 + (freq / maxFreq) * 28)}px`,
               fontWeight: freq >= maxFreq * 0.6 ? 700 : freq >= maxFreq * 0.3 ? 600 : 400,
               color: wordColor(word),
               opacity: 0.55 + (freq / maxFreq) * 0.45,
-              cursor: "default",
-              transition: "opacity 0.15s",
             }}
           >
             {word}
           </span>
         ))}
       </div>
-      <details style={{ marginTop: "12px" }}>
-        <summary style={{ fontSize: "12px", color: "var(--text-muted)", cursor: "pointer" }}>Tableau des fréquences</summary>
-        <table className="data-table" style={{ marginTop: "8px" }}>
+      <DetailTable summary="Tableau des fréquences">
           <thead><tr><th>Mot</th><th>Occurrences</th></tr></thead>
           <tbody>
             {sorted.slice(0, 20).map(([w, f]) => <tr key={w}><td>{w}</td><td className="num">{f}</td></tr>)}
           </tbody>
-        </table>
-      </details>
+      </DetailTable>
     </Card>
   );
 }
@@ -1777,14 +1482,14 @@ function AnalyseWordCloud({ data, config }: { data: CSVRow[]; config?: SessionCo
   const questionLabels = [...new Set(textRows.map(r => r.question))] as string[];
 
   if (textRows.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune réponse textuelle disponible.</div>;
+    return <AnalysisEmpty>Aucune réponse textuelle disponible.</AnalysisEmpty>;
   }
 
   const qs: Question[] = config?.questions || [];
   const products: Product[] = config?.products || [];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <AnalysisStack>
       {questionLabels.map(qLabel => {
         const qConfig = qs.find((qq: Question) => qq.label === qLabel);
         const isPerProduct = qConfig?.scope === "per-product" && products.length > 0;
@@ -1793,8 +1498,8 @@ function AnalyseWordCloud({ data, config }: { data: CSVRow[]; config?: SessionCo
         if (isPerProduct) {
           return (
             <div key={qLabel}>
-              <div className="builder-section-label" style={{ marginBottom: "14px" }}>{qLabel}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "16px" }}>
+              <div className="builder-section-label !mb-3.5">{qLabel}</div>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
                 {products.map((p: Product) => {
                   const pRows = qRows.filter(r => r.produit === p.code);
                   if (pRows.length === 0) return null;
@@ -1809,21 +1514,86 @@ function AnalyseWordCloud({ data, config }: { data: CSVRow[]; config?: SessionCo
 
         return <WordCloudDisplay key={qLabel} rows={qRows} title={`Texte — ${qLabel}`} />;
       })}
-    </div>
+    </AnalysisStack>
   );
 }
 
 // ─── Par jury ─────────────────────────────────────────────────────────────────
 
+const checkStepDone = (s: any, jaState: any): boolean => {
+  if (!s) return true;
+  if (s.type === "product") {
+    const pa = jaState[s.product.code] || {};
+    return s.questions.every((q: any) => q.type === "scale" || (pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null));
+  }
+  if (s.type === "ranking") return Array.isArray(jaState["_rank"]?.[s.question.id]);
+  if (s.type === "discrim") {
+    const v = jaState["_discrim"]?.[s.question.id];
+    if (s.question.type === "a-non-a") {
+      const codes: string[] = s.question.codes || [];
+      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+      const rec = v as unknown as Record<string, string>;
+      return codes.length > 0 && codes.every(c => rec[c] != null);
+    }
+    if (s.question.type === "seuil-bet") {
+      const levels = s.question.betLevels || [];
+      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+      const rec = v as unknown as Record<string, string>;
+      return levels.length > 0 && levels.every((_: any, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
+    }
+    return v != null && v !== "";
+  }
+  if (s.type === "global") {
+    const ga = jaState["_global"] || {};
+    return s.questions.every((q: any) => q.type === "scale" || (ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null));
+  }
+  return true;
+};
+
+// Version simplifiée de buildSteps pour l'analyse (sans randomisation/Williams car on veut juste la liste)
+function getSteps(cfg: SessionConfig): any[] {
+  const steps: any[] = [];
+  const ppQuestions = cfg.questions.filter(q => q.scope === "per-product");
+  const productMap = new Map<string, Question[]>();
+  ppQuestions.forEach(q => {
+    const targetCodes = q.codes?.length ? q.codes : cfg.products.map(p => p.code);
+    targetCodes.forEach(code => {
+      if (!productMap.has(code)) productMap.set(code, []);
+      productMap.get(code)!.push(q);
+    });
+  });
+  if (productMap.size > 0) {
+    const activeCodes = Array.from(productMap.keys());
+    activeCodes.forEach(code => {
+      const product = cfg.products.find(p => p.code === code) || { code };
+      const questions = productMap.get(code) || [];
+      steps.push({ type: "product", product, questions });
+    });
+  }
+  const standaloneQuestions = cfg.questions.filter(q => q.scope !== "per-product");
+  const seriesQuestions = standaloneQuestions.filter(q => q.type !== "text" && q.type !== "qcm" && q.scope !== "global");
+  const globalQuestions = standaloneQuestions.filter(q => q.type === "text" || q.type === "qcm" || q.scope === "global");
+
+  seriesQuestions.forEach(q => {
+    const type = (q.type === "classement" || q.type === "seuil") ? "ranking" : "discrim";
+    steps.push({ type, question: q });
+  });
+  if (globalQuestions.length > 0) {
+    steps.push({ type: "global", questions: globalQuestions });
+  }
+  return steps;
+}
+
 function AnalyseJury({ config, allAnswers }: { config: SessionConfig; allAnswers: AllAnswers }) {
   const jurors = Object.keys(allAnswers || {});
   if (jurors.length === 0) {
-    return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucun jury enregistré.</div>;
+    return <AnalysisEmpty>Aucun jury enregistré.</AnalysisEmpty>;
   }
 
   const qs: Question[] = config.questions || [];
   const products: Product[] = config.products || [];
   const ppQ = qs.filter(q => q.scope === "per-product");
+  const allSteps = getSteps(config);
 
   return (
     <Card title="Avancement par jury">
@@ -1833,7 +1603,7 @@ function AnalyseJury({ config, allAnswers }: { config: SessionConfig; allAnswers
             <th>Jury</th>
             {products.map(p => <th key={p.code}>{p.code}</th>)}
             {qs.filter(q => ["classement","seuil","seuil-bet","triangulaire","duo-trio","a-non-a"].includes(q.type)).map(q => (
-              <th key={q.id} style={{ maxWidth: "80px", overflow: "hidden", textOverflow: "ellipsis" }} title={q.label}>
+              <th key={q.id} className="max-w-20 overflow-hidden text-ellipsis" title={q.label}>
                 {q.label.length > 12 ? q.label.slice(0, 10) + "…" : q.label}
               </th>
             ))}
@@ -1843,14 +1613,16 @@ function AnalyseJury({ config, allAnswers }: { config: SessionConfig; allAnswers
         <tbody>
           {jurors.map(j => {
             const ja = allAnswers[j] || {};
+            const done = allSteps.length > 0 && allSteps.every(s => checkStepDone(s, ja));
+
             return (
               <tr key={j}>
-                <td style={{ fontWeight: 600 }}>{j}</td>
+                <td className="font-semibold">{j}</td>
                 {products.map(p => {
                   const pa = ja[p.code] || {};
                   const answered = ppQ.some(q => pa[q.id] != null);
                   return (
-                    <td key={p.code} style={{ textAlign: "center", color: answered ? "#1a6b3a" : "#c0392b", fontWeight: 600 }}>
+                    <td key={p.code} className={answerStateClass(answered)}>
                       {answered ? "✓" : "✗"}
                     </td>
                   );
@@ -1859,13 +1631,13 @@ function AnalyseJury({ config, allAnswers }: { config: SessionConfig; allAnswers
                   const section = q.type === "classement" || q.type === "seuil" ? "_rank" : "_discrim";
                   const answered = ja[section]?.[q.id] != null;
                   return (
-                    <td key={q.id} style={{ textAlign: "center", color: answered ? "#1a6b3a" : "#c0392b", fontWeight: 600 }}>
+                    <td key={q.id} className={answerStateClass(answered)}>
                       {answered ? "✓" : "✗"}
                     </td>
                   );
                 })}
-                <td style={{ textAlign: "center", color: ja["_global"] && Object.keys(ja["_global"]).length > 0 ? "#1a6b3a" : "#c0392b", fontWeight: 600 }}>
-                  {ja["_global"] && Object.keys(ja["_global"]).length > 0 ? "✓" : "✗"}
+                <td className={answerStateClass(done)}>
+                  {done ? "✓" : "✗"}
                 </td>
               </tr>
             );
@@ -1900,14 +1672,14 @@ function computeResultat(r: CSVRow): string {
 }
 
 function AnalyseDonnees({ data }: { data: CSVRow[] }) {
-  if (data.length === 0) return <div style={{ color: "var(--text-muted)", padding: "24px 0" }}>Aucune donnée.</div>;
+  if (data.length === 0) return <AnalysisEmpty>Aucune donnée.</AnalysisEmpty>;
 
   const enriched: Record<string, string | undefined>[] = data.map(r => ({ ...r, résultat: computeResultat(r) }));
   const headers = Object.keys(enriched[0]);
 
   return (
     <Card title="Données brutes">
-      <div style={{ overflowX: "auto", maxHeight: "500px", overflowY: "auto" }}>
+      <div className="max-h-[500px] overflow-auto">
         <table className="data-table">
           <thead>
             <tr>{headers.map(h => <th key={h}>{h}</th>)}</tr>
@@ -1915,11 +1687,7 @@ function AnalyseDonnees({ data }: { data: CSVRow[] }) {
           <tbody>
             {enriched.slice(0, 200).map((r, i) => (
               <tr key={i}>{headers.map(h => (
-                <td key={h} style={h === "résultat" ? {
-                  textAlign: "center",
-                  fontWeight: 700,
-                  color: r[h] === "✓" ? "var(--ok)" : r[h] === "✗" ? "var(--danger)" : r[h] === "~" ? "var(--warn)" : undefined
-                } : undefined}>
+                <td key={h} className={h === "résultat" ? rawResultClass(r[h]) : undefined}>
                   {r[h]}
                 </td>
               ))}</tr>
@@ -1927,7 +1695,7 @@ function AnalyseDonnees({ data }: { data: CSVRow[] }) {
           </tbody>
         </table>
         {data.length > 200 && (
-          <div style={{ padding: "8px", fontSize: "12px", color: "var(--text-muted)" }}>
+          <div className="p-2 text-xs text-[var(--text-muted)]">
             Affichage des 200 premières lignes sur {data.length}. Exportez le CSV pour tout voir.
           </div>
         )}
@@ -1935,3 +1703,4 @@ function AnalyseDonnees({ data }: { data: CSVRow[] }) {
     </Card>
   );
 }
+

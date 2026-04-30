@@ -178,23 +178,23 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
     onChange(next);
   };
 
-  const monoStyle: React.CSSProperties = { fontSize: "11px", color: "var(--mid)", fontFamily: "'JetBrains Mono', ui-monospace, monospace" };
+  const monoCls = "text-[11px] text-[var(--mid)] font-mono";
 
   return (
     <div className="q-block">
       <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">échelle</Badge></span>
       <div className="scale-wrap">
         <div className="scale-track">
-          <span style={monoStyle}>{q.labelMin || mn}</span>
+          <span className={monoCls}>{q.labelMin || mn}</span>
           <input
             type="range"
             min={mn}
             max={mx}
             value={mainValue}
             onChange={(e) => updateMain(parseInt(e.target.value))}
-            style={{ cursor: "pointer" }}
+            className="cursor-pointer"
           />
-          <span style={monoStyle}>{q.labelMax || mx}</span>
+          <span className={monoCls}>{q.labelMax || mx}</span>
           <span className="scale-value">{mainValue}</span>
         </div>
 
@@ -207,16 +207,16 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
                 <div key={label} className="scale-subcriterion">
                   <span className="scale-sub-label">{label}</span>
                   <div className="scale-track scale-track-sub">
-                    <span style={{ ...monoStyle, minWidth: "20px" }}>{mn}</span>
+                    <span className={`${monoCls} min-w-5`}>{mn}</span>
                     <input
                       type="range"
                       min={mn}
                       max={mx}
                       value={subVal}
                       onChange={(e) => updateSub(label, parseInt(e.target.value))}
-                      style={{ cursor: "pointer" }}
+                      className="cursor-pointer"
                     />
-                    <span style={{ ...monoStyle, minWidth: "20px" }}>{mx}</span>
+                    <span className={`${monoCls} min-w-5`}>{mx}</span>
                     <span className="scale-value scale-value-sub">{subVal}</span>
                   </div>
                   <button className="scale-sub-remove" onClick={() => removeSub(label)} type="button" title="Retirer">×</button>
@@ -985,7 +985,7 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
         {codes.length > 0 ? (
           <HorizontalRank items={codes} value={value} onChange={onChange} />
         ) : (
-          <p style={{ fontSize: "13px", color: "var(--mid)" }}>Aucun échantillon défini.</p>
+          <p className="text-[13px] text-[var(--mid)]">Aucun échantillon défini.</p>
         )}
       </div>
     );
@@ -1041,10 +1041,10 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
         <p className="discrim-ref">
           Pour chaque niveau, identifiez <strong>le verre différent des deux autres</strong>. Les niveaux sont présentés dans l&apos;ordre.
         </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div className="flex flex-col gap-3">
           {levels.map((lv, idx) => (
-            <div key={idx} style={{ padding: "12px", background: "var(--paper2)", borderRadius: "8px" }}>
-              <div style={{ fontSize: "11px", color: "var(--mid)", marginBottom: "8px" }}>
+            <div key={idx} className="p-3 bg-[var(--paper2)] rounded-lg">
+              <div className="text-[11px] text-[var(--mid)] mb-2">
                 Niveau {idx + 1} · {lv.label}
               </div>
               <div className="triangle-grid">
@@ -1088,14 +1088,14 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
                   onClick={() => onChange({ ...currentVal, [code]: "A" })}
                   title="Identique à la référence"
                 >
-                  <span style={{ fontSize: "18px", lineHeight: 1 }}>=</span>
+                  <span className="text-lg leading-none">=</span>
                 </button>
                 <button
                   className={`anona-btn ${currentVal[code] === "non-A" ? "selected diff" : ""}`}
                   onClick={() => onChange({ ...currentVal, [code]: "non-A" })}
                   title="Différent de la référence"
                 >
-                  <span style={{ fontSize: "18px", lineHeight: 1 }}>≠</span>
+                  <span className="text-lg leading-none">≠</span>
                 </button>
               </div>
             </div>
