@@ -135,6 +135,39 @@ interface AnalyseViewProps {
   downloadCSV: (rows: CSVRow[], name: string) => void;
 }
 
+const downloadSensoMinerCSV = (data: CSVRow[], name: string) => {
+  const quantData = data.filter(r => r.type === "scale" && r.produit !== "_global" && r.produit !== "_classement" && r.produit !== "_test");
+  if (quantData.length === 0) {
+    alert("Aucune donnée quantitative (échelle/radar) à exporter.");
+    return;
+  }
+  
+  const pivotMap = new Map<string, Record<string, string>>();
+  const descriptors = new Set<string>();
+  
+  quantData.forEach(r => {
+    const key = `${r.jury}__${r.produit}`;
+    if (!pivotMap.has(key)) {
+      pivotMap.set(key, { Juge: r.jury, Produit: r.produit });
+    }
+    pivotMap.get(key)![r.question] = String(r.valeur);
+    descriptors.add(r.question);
+  });
+  
+  const descArray = Array.from(descriptors).sort();
+  const headers = ["Juge", "Produit", ...descArray];
+  
+  const rows = Array.from(pivotMap.values()).map(row => {
+    return headers.map(h => row[h] ?? "").join(";");
+  });
+  
+  const csv = "\uFEFF" + [headers.join(";"), ...rows].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = name + "_SensoMineR.csv";
+  a.click();
+};
+
 export const AnalyseView = ({
   sessions, anSessId, anCfg, csvData, allAnswers, curAnT,
   onAnSessChange, onAnTabChange, downloadCSV
@@ -160,12 +193,22 @@ export const AnalyseView = ({
           {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         {anCfg && (
-          <button
-            onClick={() => downloadCSV(csvData, anCfg.name)}
-            className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
-          >
-            ↓ CSV
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => downloadCSV(csvData, anCfg.name)}
+              title="Toutes les réponses (Format Long)"
+              className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
+            >
+              ↓ CSV Standard
+            </button>
+            <button
+              onClick={() => downloadSensoMinerCSV(csvData, anCfg.name)}
+              title="Données quantitatives (Format Large Juge x Produit)"
+              className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
+            >
+              ↓ CSV FactoMineR/R
+            </button>
+          </div>
         )}
       </div>
 
