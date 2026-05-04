@@ -266,7 +266,7 @@ const FormScreen = ({
           <Button variant="ghost" size="sm" onClick={onGoBack}><FiArrowLeft /> Changer</Button>
         </div>
 
-        <div className="form-progress-wrap px-4 mt-1">
+        <div className="form-progress-wrap px-4 mt-1 mb-4">
           <div className="flex justify-between text-[12.5px] text-[var(--mid)] mb-1.5">
             <span><strong className="text-[var(--ink)] font-bold">Étape {cs + 1}</strong> / {total}</span>
             <span>{doneCount} / {total} complétées · {pct}%</span>

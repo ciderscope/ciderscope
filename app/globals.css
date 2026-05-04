@@ -429,9 +429,10 @@ canvas { max-width: 100%; }
 
 .product-label {
   display: inline-flex; align-items: center; gap: 6px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; font-size: 12px;
-  background: var(--ink); color: #fff; padding: 5px 14px; border-radius: 4px;
-  margin-bottom: 20px; letter-spacing: 1.4px; text-transform: uppercase;
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 700; font-size: 13px;
+  background: var(--ink); color: #fff; padding: 7px 16px; border-radius: 6px;
+  margin-bottom: 22px; letter-spacing: 1.6px; text-transform: uppercase;
+  line-height: 1.1;
 }
 
 .product-nav {
