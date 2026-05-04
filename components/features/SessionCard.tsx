@@ -14,9 +14,18 @@ export const SessionCard = ({ name, date, jurorCount, onClick, productCount = 0,
     <h3>{name}</h3>
     <div className="meta">{date}</div>
     <div className="counts">
-      <div className="count-badge"><strong>{productCount}</strong> éch.</div>
-      <div className="count-badge"><strong>{questionCount}</strong> Q</div>
-      <div className="count-badge"><strong>{jurorCount}</strong> jurys</div>
+      <div className="count-badge">
+        <strong>{productCount}</strong>
+        <span>{productCount > 1 ? "échantillons" : "échantillon"}</span>
+      </div>
+      <div className="count-badge">
+        <strong>{questionCount}</strong>
+        <span>{questionCount > 1 ? "questions" : "question"}</span>
+      </div>
+      <div className="count-badge count-badge--live" title="Participants ayant répondu">
+        <strong>{jurorCount}</strong>
+        <span>{jurorCount > 1 ? "participants" : "participant"}</span>
+      </div>
     </div>
   </div>
 );

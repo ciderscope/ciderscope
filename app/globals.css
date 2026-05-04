@@ -281,8 +281,8 @@ canvas { max-width: 100%; }
   background: var(--paper); border-radius: var(--radius-lg);
   border: 1px solid var(--border); box-shadow: var(--shadow);
 }
-.poste-screen h2 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
-.poste-screen .hint { font-size: 13px; color: var(--mid); margin: 0; }
+.poste-screen h2 { font-size: 24px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.3px; }
+.poste-screen .hint { font-size: 14px; color: var(--mid); margin: 0; }
 .poste-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
   margin-top: 18px;
@@ -292,8 +292,8 @@ canvas { max-width: 100%; }
   border-radius: var(--radius); padding: 14px;
 }
 .poste-col-title {
-  font-size: 13px; font-weight: 700; color: var(--primary);
-  margin: 0 0 12px; text-transform: uppercase; letter-spacing: .04em;
+  font-size: 14px; font-weight: 700; color: var(--primary);
+  margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em;
   text-align: center;
 }
 .poste-list {
@@ -313,10 +313,10 @@ canvas { max-width: 100%; }
   transform: translateY(-1px);
 }
 .poste-btn .poste-num {
-  font-size: 20px; font-weight: 800; line-height: 1;
+  font-size: 22px; font-weight: 800; line-height: 1;
 }
 .poste-btn .poste-owner {
-  font-size: 10px; color: var(--mid); margin-top: 4px;
+  font-size: 11px; color: var(--mid); margin-top: 5px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -354,28 +354,34 @@ canvas { max-width: 100%; }
   transition: border-color .15s, box-shadow .15s, transform .15s;
 }
 .session-card:hover { border-color: rgba(30,46,46,.25); transform: translateY(-2px); box-shadow: 0 6px 24px rgba(30,46,46,.09); }
-.session-card h3 { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
-.session-card .meta { color: var(--mid); font-size: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
-.session-card .counts { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.session-card h3 { font-weight: 700; font-size: 18px; line-height: 1.25; margin-bottom: 4px; }
+.session-card .meta { color: var(--mid); font-size: 13px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.session-card .counts { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 
 .count-badge {
-  background: var(--paper2); border-radius: 6px; padding: 7px 12px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--mid);
+  display: inline-flex; align-items: baseline; gap: 6px;
+  background: var(--paper2); border-radius: 8px; padding: 8px 12px;
+  font-size: 13px; color: var(--mid); line-height: 1.1;
 }
-.count-badge strong { font-size: 18px; color: var(--ink); font-family: inherit; font-weight: 700; margin-right: 3px; }
+.count-badge strong { font-size: 20px; color: var(--ink); font-weight: 700; letter-spacing: -.01em; }
+.count-badge--live {
+  background: color-mix(in srgb, var(--accent) 12%, var(--paper2));
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
+}
+.count-badge--live strong { color: var(--accent); }
 
 .no-session {
   background: var(--paper2); border: 2px dashed var(--border); border-radius: var(--radius);
   padding: 42px; text-align: center;
-  color: var(--mid); font-size: 14px;
+  color: var(--mid); font-size: 15px;
 }
 
 .jury-login {
   max-width: 480px; margin: 0 auto;
   padding: 48px 28px; text-align: center;
 }
-.jury-login h2 { font-weight: 700; font-size: 24px; margin-bottom: 8px; }
-.jury-login .hint { color: var(--mid); font-size: 14px; margin-bottom: 24px; }
+.jury-login h2 { font-weight: 700; font-size: 26px; margin-bottom: 6px; }
+.jury-login .hint { color: var(--mid); font-size: 15px; margin-bottom: 24px; }
 
 .jury-input-wrap input {
   width: 100%; border: 1.5px solid var(--border); border-radius: var(--radius);
@@ -385,14 +391,14 @@ canvas { max-width: 100%; }
 }
 .jury-input-wrap input:focus { border-color: var(--accent); }
 
-.jury-existing { margin-top: 22px; text-align: left; }
-.jury-existing-title { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--mid); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+.jury-existing { margin-top: 24px; text-align: left; }
+.jury-existing-title { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--mid); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .5px; }
 .jury-existing-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .jury-existing-btn {
-  background: #fff; border: 1px solid var(--border); border-radius: 6px;
-  padding: 10px 17px;
-  font-family: inherit; font-weight: 600; font-size: 14px;
-  cursor: pointer; transition: border-color .15s, background .15s; min-height: 44px;
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 11px 18px;
+  font-family: inherit; font-weight: 600; font-size: 15px;
+  cursor: pointer; transition: border-color .15s, background .15s, color .15s; min-height: 44px;
 }
 .jury-existing-btn:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -406,8 +412,8 @@ canvas { max-width: 100%; }
   padding: 15px 19px;
   margin-bottom: 20px; box-shadow: var(--shadow);
 }
-.form-header .jury-name { font-weight: 700; font-size: 16px; }
-.form-header .session-name { color: var(--mid); font-size: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.form-header .jury-name { font-weight: 700; font-size: 17px; line-height: 1.2; }
+.form-header .session-name { color: var(--mid); font-size: 12.5px; font-family: 'JetBrains Mono', ui-monospace, monospace; margin-top: 2px; }
 .form-header-sep { flex: 1; }
 
 .progress-bar { background: var(--paper2); border-radius: 20px; height: 5px; margin-bottom: 20px; overflow: hidden; }
@@ -435,12 +441,12 @@ canvas { max-width: 100%; }
   padding: 13px 20px;
   display: flex; align-items: center; gap: 10px; z-index: 50;
 }
-.product-nav-info { flex: 1; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--mid); }
+.product-nav-info { flex: 1; font-size: 12.5px; color: var(--mid); }
 
 .done-screen { max-width: 520px; margin: 70px auto; padding: 28px; text-align: center; }
 .done-icon { font-size: 58px; margin-bottom: 18px; }
-.done-screen h2 { font-weight: 800; font-size: 26px; margin-bottom: 8px; }
-.done-screen p  { color: var(--mid); font-size: 15px; margin-bottom: 24px; }
+.done-screen h2 { font-weight: 800; font-size: 28px; margin-bottom: 8px; letter-spacing: -.5px; }
+.done-screen p  { color: var(--mid); font-size: 16px; margin-bottom: 24px; }
 
 /* ══════════════════════════════════════════
    QUESTIONS — types d'input participant
@@ -1322,8 +1328,10 @@ textarea.q-text:focus { border-color: var(--accent); }
   .sess-list-card .spacer { display: none; }
   .sess-list-card .actions { width: 100%; justify-content: flex-end; }
   .session-card { padding: 16px 14px; }
+  .session-card h3 { font-size: 16.5px; }
   .session-card .counts { gap: 6px; }
-  .count-badge { padding: 6px 10px; }
+  .count-badge { padding: 7px 11px; font-size: 12px; }
+  .count-badge strong { font-size: 18px; }
 
   .save-indicator { bottom: 74px !important; right: 10px !important; left: 10px !important; justify-content: center; }
   .form-progress-wrap { padding: 0 4px !important; }

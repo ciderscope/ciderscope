@@ -424,6 +424,23 @@ function ParticipantsTab({ sessionId, listJurorsForSession, deleteJury }: {
   useEffect(() => { void reload(); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
+  // Rafraîchit la liste pendant que l'animateur regarde l'onglet, pour voir
+  // les arrivées en direct sans devoir réouvrir la séance.
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void reload();
+    };
+    const id = setInterval(tick, 8_000);
+    const onVisible = () => { if (!document.hidden) tick(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
   return (
     <Card title="Participants ayant répondu">
       {jurors === null ? (

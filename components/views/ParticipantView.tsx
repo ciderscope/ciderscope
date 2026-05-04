@@ -61,8 +61,8 @@ const SaveIndicator = ({ status, pendingCount }: { status: SaveStatus; pendingCo
     <div
       role="status"
       aria-live="polite"
-      className="save-indicator fixed z-50 flex items-center gap-1.5 py-1.5 px-2.5 bg-[var(--paper)] rounded-full text-xs shadow-sm"
-      style={{ border: `1px solid ${m.color}22`, color: m.color }}
+      className="save-indicator fixed z-50 flex items-center gap-1.5 py-1.5 px-3 bg-[var(--paper)] rounded-full text-[12.5px] font-medium shadow-sm"
+      style={{ border: `1px solid ${m.color}33`, color: m.color }}
     >
       {m.icon}<span>{m.text}</span>
     </div>
@@ -267,17 +267,17 @@ const FormScreen = ({
         </div>
 
         <div className="form-progress-wrap px-4 mt-1">
-          <div className="flex justify-between text-[11px] text-[var(--mid)] mb-1">
-            <span>Étape {cs + 1} / {total}</span>
-            <span>{doneCount} / {total} complétées ({pct}%)</span>
+          <div className="flex justify-between text-[12.5px] text-[var(--mid)] mb-1.5">
+            <span><strong className="text-[var(--ink)] font-bold">Étape {cs + 1}</strong> / {total}</span>
+            <span>{doneCount} / {total} complétées · {pct}%</span>
           </div>
-          <div className="h-1.5 bg-[var(--paper2)] rounded-full overflow-hidden">
+          <div className="h-2 bg-[var(--paper2)] rounded-full overflow-hidden">
             <div
               className="h-full bg-[var(--accent)] transition-[width] duration-200 ease-in-out"
               style={{ width: `${pct}%` }}
             />
           </div>
-          <div className="step-list flex gap-1 mt-2 overflow-x-auto pb-1">
+          <div className="step-list flex gap-1.5 mt-2.5 overflow-x-auto pb-1">
             {steps.map((s, i) => {
               const complete = completion[i] ?? false;
               const active = i === cs;
@@ -287,7 +287,7 @@ const FormScreen = ({
                 <div
                   key={i}
                   title={`Étape ${i + 1}${complete ? " — complète" : ""}`}
-                  className={`step-item flex-none px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap ${active ? "active font-bold" : "font-medium"} ${complete ? "complete" : ""}`}
+                  className={`step-item flex-none px-2.5 py-1 rounded-full text-[11.5px] whitespace-nowrap ${active ? "active font-bold" : "font-semibold"} ${complete ? "complete" : ""}`}
                   style={{ background: bg, color: col }}
                 >
                   {stepShortLabel(s)}{complete && !active ? " ✓" : ""}

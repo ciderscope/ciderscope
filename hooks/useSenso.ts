@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, Product, SessionStep, CSVRow, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
+import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, Product, SessionStep, CSVRow, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay, RadarAnswer } from "../types";
 import { hsh, wlm, formatVal } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
@@ -224,7 +224,7 @@ export const useSenso = () => {
         juror_count: number;
         config: SessionConfig | null;
       };
-      setSessions((data as SessionRow[]).map(r => {
+      const next: SessionListItem[] = (data as SessionRow[]).map(r => {
         const cfg = r.config;
         return {
           id: r.id,
@@ -235,7 +235,25 @@ export const useSenso = () => {
           productCount: cfg?.products?.length || 0,
           questionCount: cfg?.questions?.length || 0,
         };
-      }));
+      });
+      // En polling, évite de remplacer la liste (et de re-render tout l'arbre)
+      // quand rien n'a changé. Comparaison structurelle peu profonde sur les
+      // champs affichés.
+      setSessions(prev => {
+        if (prev.length === next.length) {
+          let same = true;
+          for (let i = 0; i < prev.length; i++) {
+            const a = prev[i], b = next[i];
+            if (a.id !== b.id || a.name !== b.name || a.date !== b.date ||
+                a.active !== b.active || a.jurorCount !== b.jurorCount ||
+                a.productCount !== b.productCount || a.questionCount !== b.questionCount) {
+              same = false; break;
+            }
+          }
+          if (same) return prev;
+        }
+        return next;
+      });
     }
     if (!keepLoading) setLoading(false);
   }, []);
@@ -583,6 +601,30 @@ export const useSenso = () => {
     if (online) void flushPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
+
+  // Rafraîchissement périodique de la liste des séances tant qu'on regarde
+  // le tableau (landing participant ou liste admin). Sans cela, le compteur
+  // de jurys reste figé à la valeur lue au montage ; les arrivées d'autres
+  // postes ne remontent jamais à l'écran. On évite de tourner si l'onglet
+  // est masqué (visibilitychange) pour ne pas générer de trafic inutile.
+  useEffect(() => {
+    if (!restored) return;
+    if (screen !== "landing") return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      if (typeof document !== "undefined" && document.hidden) return;
+      void loadSessions(true);
+    };
+    const id = setInterval(tick, 10_000);
+    const onVisible = () => { if (!document.hidden) tick(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [restored, screen, loadSessions]);
 
   // Flush la sauvegarde différée à chaque changement d'étape (sécurité supplémentaire).
   useEffect(() => {
