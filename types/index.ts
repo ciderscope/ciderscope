@@ -110,12 +110,14 @@ export type AnswerValue =
   | null
   | undefined;
 
-// Les clés "_rank", "_discrim", "_global", "_timing" sont réservées ; les autres sont des codes échantillon.
+// Les clés "_rank", "_discrim", "_global", "_timing", "_finished", "_poste" sont réservées ; les autres sont des codes échantillon.
 // Par produit : Record<questionId, AnswerValue>.
 // Pour "_global" : Record<questionId, AnswerValue>.
-// Pour "_rank"/"_discrim"/"_timing" : structures ad hoc typées plus souplement.
+// Pour les autres : structures ad hoc typées plus souplement.
 export type JurorAnswers = {
-  [key: string]: Record<string, AnswerValue>;
+  _finished?: boolean;
+  _poste?: Record<string, string | number>;
+  [key: string]: any;
 };
 
 // Map globale : nom du jury → ses réponses.
