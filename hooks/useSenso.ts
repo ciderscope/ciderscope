@@ -213,6 +213,7 @@ export const useSenso = () => {
       .order("created_at", { ascending: false });
     if (error) {
       console.error("Erreur lors du chargement des séances:", error);
+      console.error("Détails sérialisés:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
       setOnline(false);
     } else if (data) {
       setOnline(true);
@@ -283,9 +284,14 @@ export const useSenso = () => {
       .from("sessions")
       .select("config")
       .eq("id", id)
-      .single();
-    if (error || !data) {
+      .maybeSingle();
+    if (error) {
       console.error("Erreur lors du chargement de la config:", error);
+      console.error("Détails sérialisés config:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      return null;
+    }
+    if (!data) {
+      console.warn(`Configuration introuvable pour la séance (id: ${id}). Ceci est normal si la séance a été supprimée.`);
       return null;
     }
     const cfg = data.config as SessionConfig;
@@ -317,7 +323,10 @@ export const useSenso = () => {
       .from("answers")
       .select("juror_name, data")
       .eq("session_id", id);
-    if (error) console.error("Erreur lors du chargement des jurys:", error);
+    if (error) {
+      console.error("Erreur lors du chargement des jurys:", error);
+      if (error && typeof error === "object") console.table(error);
+    }
     const rows = (data || []) as Array<{ juror_name: string; data: JurorAnswers | null }>;
     setJurors(rows.map(r => r.juror_name));
     const taken: Record<string, string> = {};
@@ -503,12 +512,16 @@ export const useSenso = () => {
     const next: JurorAnswers = { ...ja, _poste: { day, num } as Record<string, string | number> };
     setJa(next);
     if (curSessId && cj) {
-      await supabase.from("answers").upsert({
+      const { error } = await supabase.from("answers").upsert({
         session_id: curSessId,
         juror_name: cj,
         data: next,
         updated_at: new Date().toISOString(),
       }, { onConflict: "session_id,juror_name" });
+      if (error) {
+        console.error("Erreur lors de l'enregistrement du poste:", error);
+        if (error && typeof error === "object") console.table(error);
+      }
     }
     setCs(0);
     setValidatedSteps(new Set());
@@ -546,7 +559,8 @@ export const useSenso = () => {
       updated_at: new Date().toISOString(),
     }, { onConflict: "session_id,juror_name" });
     if (error) {
-      console.warn("Upsert échoué, mise en file d'attente locale:", error.message);
+      console.warn("Upsert échoué, mise en file d'attente locale:", error);
+      if (error && typeof error === "object") console.table(error);
       queuePending(curSessId, cj, newJa);
       setPendingCount(countPending());
       setSaveStatus("pending");
@@ -558,10 +572,14 @@ export const useSenso = () => {
     if (!jurors.includes(cj)) {
       const newJurors = [...jurors, cj];
       setJurors(newJurors);
-      await supabase
+      const { error: upError } = await supabase
         .from("sessions")
         .update({ juror_count: newJurors.length })
         .eq("id", curSessId);
+      if (upError) {
+        console.error("Erreur lors de la mise à jour du compteur de jurys:", upError);
+        if (upError && typeof upError === "object") console.table(upError);
+      }
       setSessions(prev => prev.map(s =>
         s.id === curSessId ? { ...s, jurorCount: newJurors.length } : s
       ));
@@ -724,12 +742,8 @@ export const useSenso = () => {
       results_visible: meta.resultsVisible ?? false,
     });
     if (error) {
-      // L'objet PostgrestError peut sérialiser vide via JSON.stringify ; on logge
-      // explicitement chaque champ pour diagnostiquer (notamment les blocages RLS).
-      console.error(
-        "Erreur lors de l'enregistrement de la séance:",
-        { message: error.message, code: error.code, details: error.details, hint: error.hint }
-      );
+      console.error("Erreur lors de l'enregistrement de la séance:", error);
+      if (error && typeof error === "object") console.table(error);
       return { success: false, error };
     }
     _configCache.set(id, { cfg, ts: Date.now() });
@@ -738,7 +752,10 @@ export const useSenso = () => {
 
   const deleteSession = useCallback(async (id: string) => {
     const { error } = await supabase.from("sessions").delete().eq("id", id);
-    if (error) console.error("Erreur lors de la suppression:", error);
+    if (error) {
+      console.error("Erreur lors de la suppression de la séance:", error);
+      if (error && typeof error === "object") console.table(error);
+    }
     _configCache.delete(id);
   }, []);
 
@@ -747,7 +764,11 @@ export const useSenso = () => {
       .from("answers")
       .select("juror_name")
       .eq("session_id", sessionId);
-    if (error || !data) return [];
+    if (error) {
+      console.error("Erreur lors du listage des jurys:", error);
+      if (error && typeof error === "object") console.table(error);
+    }
+    if (!data) return [];
     return data.map((r: { juror_name: string }) => r.juror_name);
   }, []);
 
@@ -760,6 +781,7 @@ export const useSenso = () => {
       .eq("juror_name", name);
     if (error) {
       console.error("Erreur lors de la suppression du jury:", error);
+      if (error && typeof error === "object") console.table(error);
       return { success: false };
     }
     const { curSessId, jurors, cj } = stateRef.current;
@@ -769,10 +791,14 @@ export const useSenso = () => {
       if (cj === name) { setCj(""); setJa({}); }
     }
     const remaining = await listJurorsForSession(sessionId);
-    await supabase
+    const { error: upError } = await supabase
       .from("sessions")
       .update({ juror_count: remaining.length })
       .eq("id", sessionId);
+    if (upError) {
+      console.error("Erreur lors de la mise à jour du compteur de jurys:", upError);
+      if (upError && typeof upError === "object") console.table(upError);
+    }
     setSessions(prev => prev.map(s =>
       s.id === sessionId ? { ...s, jurorCount: remaining.length } : s
     ));
@@ -791,7 +817,11 @@ export const useSenso = () => {
     const s = sessions.find(x => x.id === id);
     if (!s) return;
     const newActive = !s.active;
-    await supabase.from("sessions").update({ active: newActive }).eq("id", id);
+    const { error } = await supabase.from("sessions").update({ active: newActive }).eq("id", id);
+    if (error) {
+      console.error("Erreur lors de la modification de l'état actif:", error);
+      if (error && typeof error === "object") console.table(error);
+    }
     setSessions(prev => prev.map(x => x.id === id ? { ...x, active: newActive } : x));
   }, []);
 
@@ -804,7 +834,11 @@ export const useSenso = () => {
     const s = sessions.find(x => x.id === id);
     if (!s) return;
     const next = !s.resultsVisible;
-    await supabase.from("sessions").update({ results_visible: next }).eq("id", id);
+    const { error } = await supabase.from("sessions").update({ results_visible: next }).eq("id", id);
+    if (error) {
+      console.error("Erreur lors de la modification de la visibilité des résultats:", error);
+      if (error && typeof error === "object") console.table(error);
+    }
     setSessions(prev => prev.map(x => x.id === id ? { ...x, resultsVisible: next } : x));
   }, []);
 

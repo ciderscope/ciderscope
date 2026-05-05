@@ -1168,7 +1168,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
     return depthOf(c) === levelDepth[lvl];
   });
   const anovaRows = anovaCriteria.map(crit => {
-    const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p.code, crit)));
+    const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p.code, crit) ?? avg(p.code, crit)));
     const res = anovaTwoWay(mat);
     return { crit, ...res };
   });
@@ -1680,15 +1680,15 @@ function AnalyseJury({ config, allAnswers, currentJuror }: { config: SessionConf
         <tbody>
           {jurors.map(j => {
             const ja = allAnswers[j] || {};
-            const done = allSteps.length > 0 && allSteps.every(s => checkStepDone(s, ja));
+            const done = ja["_finished"] === true;
 
             const isSelf = !!currentJuror && j === currentJuror;
             return (
               <tr key={j} className={isSelf ? "self" : ""}>
                 <td className="font-semibold">{j}{isSelf && <span className="ml-1 text-[var(--accent)]" aria-label="vous">★</span>}</td>
                 {products.map(p => {
-                  const pa = ja[p.code] || {};
-                  const answered = ppQ.some(q => pa[q.id] != null);
+                  const step = allSteps.find(s => s.type === "product" && s.product.code === p.code);
+                  const answered = step ? checkStepDone(step, ja) : false;
                   return (
                     <td key={p.code} className={answerStateClass(answered)}>
                       {answered ? "✓" : "✗"}

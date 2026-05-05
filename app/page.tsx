@@ -120,10 +120,14 @@ export default function CiderScope() {
         onPrevStep={() => setCs(Math.max(0, cs - 1))}
         onNextStep={() => {
           if (!isStepComplete(cs)) return;
-          // Force la persistance immédiate avant la validation finale.
-          void flushSave();
-          if (cs >= currentSteps.length - 1) setScreen("done");
-          else setCs(cs + 1);
+          if (cs >= currentSteps.length - 1) {
+            handleSetJa({ ...ja, _finished: true });
+            void flushSave();
+            setScreen("done");
+          } else {
+            void flushSave();
+            setCs(cs + 1);
+          }
         }}
         onGoBack={() => setScreen("jury")}
         onHome={() => setScreen("landing")}

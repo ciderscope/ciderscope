@@ -670,6 +670,7 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
           onTap={isFamily ? onTouchFamily : undefined}
           touched={isFamily ? familyTouched : false}
           ariaLabel={axis.label}
+          thumbOnly
         />
         <span className="radar-tree-val">{v}</span>
         {hasDisplayChildren ? (
@@ -778,7 +779,7 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched,
   markFamilyTouched: (label: string) => void;
   showSVG?: boolean;
 }) {
-  const familyDefault = Math.round((min + max) / 2);
+  const familyDefault = min;
   const values = group.axes.map(a => answer[a.label]?._ ?? familyDefault);
 
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
@@ -991,9 +992,9 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
 
   const [mode, setMode] = useState<"radar" | "sliders">("sliders");
 
-  // Familles = valeur médiane (5 pour 0-10) → toujours visibles au départ.
+  // Familles = valeur minimale (0) → toujours visibles au départ.
   // Classes / mots = 0 → visibles dès que la famille parente est dépliée.
-  const defaults = useMemo(() => ({ family: Math.round((mn + mx) / 2), child: mn }), [mn, mx]);
+  const defaults = useMemo(() => ({ family: mn, child: mn }), [mn, mx]);
 
   const answer: RadarAnswer = useMemo(
     () => normalizeRadarValue(value, allAxes, defaults),

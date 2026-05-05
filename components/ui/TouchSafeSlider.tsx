@@ -23,6 +23,9 @@ export interface TouchSafeSliderProps {
   // Tap simple sur le pouce (souris ou tactile court sans déplacement).
   // Permet à l'utilisateur de valider la valeur par défaut sans la modifier.
   onTap?: () => void;
+  // Si true, ignore les clics sur la barre : seul un clic/touch direct sur le
+  // pouce peut modifier la valeur (évite les modifications accidentelles au scroll).
+  thumbOnly?: boolean;
 }
 
 /**
@@ -35,7 +38,7 @@ export interface TouchSafeSliderProps {
  * natif sans casser aussi le drag.
  */
 export function TouchSafeSlider({
-  min, max, step = 1, value, onChange, ariaLabel, className, touched = false, onTap,
+  min, max, step = 1, value, onChange, ariaLabel, className, touched = false, onTap, thumbOnly = false,
 }: TouchSafeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -72,6 +75,25 @@ export function TouchSafeSlider({
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // bouton souris non-principal : on ignore
     if (e.button !== 0 && e.button !== undefined) return;
+    
+    // Si mode thumbOnly, on s'assure que le pointer down a eu lieu sur ou très près du pouce.
+    // Le pouce ayant "pointer-events: none" en CSS, e.target est la piste entière.
+    if (thumbOnly && trackRef.current) {
+      const thumbEl = trackRef.current.querySelector(".ts-slider-thumb");
+      if (thumbEl) {
+        const rect = thumbEl.getBoundingClientRect();
+        const pad = 12; // Tolérance pour les doigts (agrandit la zone de hit)
+        if (
+          e.clientX < rect.left - pad ||
+          e.clientX > rect.right + pad ||
+          e.clientY < rect.top - pad ||
+          e.clientY > rect.bottom + pad
+        ) {
+          return; // Clic trop loin du pouce : on ignore
+        }
+      }
+    }
+
     e.currentTarget.setPointerCapture(e.pointerId);
     const isTouch = e.pointerType === "touch" || e.pointerType === "pen";
     const press = {
