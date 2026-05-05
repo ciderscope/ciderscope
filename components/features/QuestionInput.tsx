@@ -240,6 +240,7 @@ interface RadarDefaults { family: number; child: number }
 function normalizeRadarNode(raw: unknown, axis: RadarAxis, defaults: RadarDefaults, depth: number = 0): RadarNodeAnswer {
   const defaultValue = depth === 0 ? defaults.family : defaults.child;
   let value = defaultValue;
+  let touched = false;
   let childrenRaw: Record<string, unknown> = {};
 
   if (typeof raw === "number") {
@@ -247,18 +248,20 @@ function normalizeRadarNode(raw: unknown, axis: RadarAxis, defaults: RadarDefaul
   } else if (typeof raw === "object" && raw !== null) {
     const obj = raw as Record<string, unknown>;
     if (typeof obj._ === "number") value = obj._;
+    if (typeof obj._touched === "boolean") touched = obj._touched;
     if (typeof obj.children === "object" && obj.children !== null) {
       childrenRaw = obj.children as Record<string, unknown>;
     } else {
       // Legacy ScaleAnswer : { _, _subs, [sub]: number }
       Object.keys(obj).forEach(k => {
-        if (k === "_" || k === "_subs") return;
+        if (k === "_" || k === "_subs" || k === "_touched") return;
         if (typeof obj[k] === "number") childrenRaw[k] = { _: obj[k] };
       });
     }
   }
 
   const out: RadarNodeAnswer = { _: value };
+  if (depth === 0 && touched) out._touched = true;
   const childAxes = axis.children && axis.children.length > 0
     ? axis.children
     : (axis.subCriteria || []).map(l => ({ label: l } as RadarAxis));
@@ -300,6 +303,7 @@ function normalizeRadarValue(value: AnswerValue, axes: RadarAxis[], defaults: Ra
 function clampNodeTree(node: RadarNodeAnswer, maxAllowed: number): RadarNodeAnswer {
   const v = Math.min(node._, maxAllowed);
   const next: RadarNodeAnswer = { _: v };
+  if (node._touched) next._touched = true;
   if (node.children) {
     const c: Record<string, RadarNodeAnswer> = {};
     Object.entries(node.children).forEach(([k, child]) => {
@@ -342,6 +346,52 @@ function setNodeAtPath(
 
   const updatedRoot = updateNode(rootNode, tail);
   return { ...answer, [head]: updatedRoot };
+}
+
+// Marque une famille (axe racine) comme touchée. N'altère ni la valeur ni
+// les enfants — sert uniquement à indiquer "le jury a délibérément validé".
+function setFamilyTouched(answer: RadarAnswer, axisLabel: string): RadarAnswer {
+  const node = answer[axisLabel];
+  if (!node || node._touched) return answer;
+  return { ...answer, [axisLabel]: { ...node, _touched: true } };
+}
+
+// Validation appelée au passage à l'étape suivante (radar uniquement).
+// Renvoie deux listes pour le modal :
+//   - untouched : familles qui n'ont jamais été interagies (ni drag, ni tap).
+//   - emptyChildren : familles dont la valeur est > min mais dont aucune
+//     classe directe (depth 1) n'a été levée au-dessus de min.
+// Les sous-sous-catégories ne sont pas inspectées.
+export interface RadarValidationIssues {
+  untouched: string[];
+  emptyChildren: string[];
+}
+export function validateRadarAnswer(
+  answer: RadarAnswer,
+  axes: RadarAxis[],
+  min: number
+): RadarValidationIssues {
+  const out: RadarValidationIssues = { untouched: [], emptyChildren: [] };
+  for (const ax of axes) {
+    const node = answer[ax.label];
+    if (!node || !node._touched) {
+      out.untouched.push(ax.label);
+      continue;
+    }
+    if (node._ > min) {
+      const childAxes = ax.children && ax.children.length > 0
+        ? ax.children
+        : (ax.subCriteria || []).map(l => ({ label: l } as RadarAxis));
+      if (childAxes.length > 0) {
+        const anyChildAboveMin = childAxes.some(c => {
+          const cn = node.children?.[c.label];
+          return (cn?._ ?? min) > min;
+        });
+        if (!anyChildAboveMin) out.emptyChildren.push(ax.label);
+      }
+    }
+  }
+  return out;
 }
 
 // Récolte tous les nœuds descendants (pour la recherche).
@@ -560,7 +610,7 @@ const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
 // `pathPrefix` permet d'insérer des segments de chemin cachés (aplatissement famille→classe unique).
 const RadarTreeNode = React.memo(function RadarTreeNode({
   axis, nodeAnswer, min, max, path, expandedPaths, togglePath, setPathValue, highlightKey,
-  customChildren, onAddCustomChild,
+  customChildren, onAddCustomChild, familyTouched, onTouchFamily,
 }: {
   axis: RadarAxis;
   nodeAnswer: RadarNodeAnswer;
@@ -573,6 +623,9 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
   highlightKey: string | null;
   customChildren: Record<string, string[]>;
   onAddCustomChild: (pathKey: string, label: string) => void;
+  // Renseignés uniquement à la profondeur 0 (famille). Ailleurs : undefined.
+  familyTouched?: boolean;
+  onTouchFamily?: () => void;
 }) {
   const pathKey = path.join("/");
 
@@ -599,8 +652,14 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
   const childrenAreLeaves = hasDisplayChildren && displayChildren.every(d => !d.child.children || d.child.children.length === 0);
   const customForHere = customChildren[pathKey] || [];
 
+  const isFamily = path.length === 1;
+  const untouchedFlag = isFamily && familyTouched === false;
+
   return (
-    <div className={`radar-tree-node depth-${path.length - 1}${isHighlight ? " highlight" : ""}`} data-path={pathKey}>
+    <div
+      className={`radar-tree-node depth-${path.length - 1}${isHighlight ? " highlight" : ""}${untouchedFlag ? " radar-tree-node--untouched" : ""}`}
+      data-path={pathKey}
+    >
       <div className="radar-tree-row">
         <span className="radar-tree-label">{axis.label}</span>
         <TouchSafeSlider
@@ -608,6 +667,8 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
           max={max}
           value={v}
           onChange={(nv) => setPathValue(path, nv)}
+          onTap={isFamily ? onTouchFamily : undefined}
+          touched={isFamily ? familyTouched : false}
           ariaLabel={axis.label}
         />
         <span className="radar-tree-val">{v}</span>
@@ -779,14 +840,21 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched,
     });
   };
 
+  // Combine "marquer la famille comme touchée" + "appliquer la nouvelle valeur"
+  // en un seul onChange : sinon le second appel partirait du même snapshot que
+  // le premier et écraserait le `_touched` que celui-ci venait de poser.
   const setPathValue = (path: string[], v: number) => {
-    if (path[0]) markFamilyTouched(path[0]);
-    onChange(setNodeAtPath(answer, path, v));
+    let next = answer;
+    if (path[0]) next = setFamilyTouched(next, path[0]);
+    next = setNodeAtPath(next, path, v);
+    onChange(next);
   };
 
   const setAxis = (i: number, v: number) => {
-    markFamilyTouched(group.axes[i].label);
-    onChange(setNodeAtPath(answer, [group.axes[i].label], v));
+    const label = group.axes[i].label;
+    let next = setFamilyTouched(answer, label);
+    next = setNodeAtPath(next, [label], v);
+    onChange(next);
   };
 
   // ── Recherche ────────────────────────────────────────────────────────────
@@ -888,6 +956,7 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched,
           ) : (
             visibleAxes.map(ax => {
               const nodeAnswer = answer[ax.label] ?? { _: familyDefault };
+              const touched = !!nodeAnswer._touched;
               return (
                 <RadarTreeNode
                   key={ax.label}
@@ -902,6 +971,8 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched,
                   highlightKey={highlightKey}
                   customChildren={customChildren}
                   onAddCustomChild={addCustomChild}
+                  familyTouched={touched}
+                  onTouchFamily={() => markFamilyTouched(ax.label)}
                 />
               );
             })
@@ -919,15 +990,6 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
   const allAxes = useMemo(() => groups.flatMap(g => g.axes), [groups]);
 
   const [mode, setMode] = useState<"radar" | "sliders">("sliders");
-  const [touchedFamilies, setTouchedFamilies] = useState<Set<string>>(new Set());
-  const markFamilyTouched = (label: string) => {
-    setTouchedFamilies(prev => {
-      if (prev.has(label)) return prev;
-      const next = new Set(prev);
-      next.add(label);
-      return next;
-    });
-  };
 
   // Familles = valeur médiane (5 pour 0-10) → toujours visibles au départ.
   // Classes / mots = 0 → visibles dès que la famille parente est dépliée.
@@ -937,6 +999,14 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
     () => normalizeRadarValue(value, allAxes, defaults),
     [value, allAxes, defaults]
   );
+
+  // L'état "touché" est persisté dans la réponse elle-même (`_touched` posé sur
+  // chaque axe racine). Une famille est touchée dès qu'on lui pose un drag ou un
+  // tap. Sans Set local, le flag survit aux remounts (changement d'étape, retour
+  // au formulaire) et est validable côté FormScreen.
+  const markFamilyTouched = (label: string) => {
+    onChange(setFamilyTouched(answer, label));
+  };
 
   // init/seed at mount if no value
   useEffect(() => {
@@ -948,7 +1018,7 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
 
   // Familles non touchées = curseurs jamais bougés par le jury (la valeur par défaut
   // peut ne pas refléter son ressenti réel, notamment si l'intensité est en fait nulle).
-  const untouchedFamilies = allAxes.map(a => a.label).filter(l => !touchedFamilies.has(l));
+  const untouchedFamilies = allAxes.filter(a => !answer[a.label]?._touched).map(a => a.label);
 
   return (
     <div className="q-block">

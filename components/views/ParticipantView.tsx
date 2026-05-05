@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud, FiAlertCircle, FiLoader, FiX } from "react-icons/fi";
+import { FiArrowLeft, FiArrowRight, FiCheck, FiClipboard, FiCheckCircle, FiCloud, FiAlertCircle, FiLoader, FiX, FiPieChart, FiLock } from "react-icons/fi";
 import { Button } from "../ui/Button";
 import { SessionCard } from "../features/SessionCard";
 import { Questionnaire } from "../features/Questionnaire";
-import { Product, SessionListItem, SessionConfig, JurorAnswers, SessionStep, AppScreen, SaveStatus, PosteDay } from "../../types";
+import { validateRadarAnswer } from "../features/QuestionInput";
+import { Product, SessionListItem, SessionConfig, JurorAnswers, SessionStep, AppScreen, SaveStatus, PosteDay, RadarAnswer, RadarAxis, Question } from "../../types";
 
 interface ParticipantViewProps {
   screen: AppScreen;
   sessions: SessionListItem[];
   curSess: SessionConfig | null;
+  curSessId: string | null;
   jurors: string[];
   cj: string;
   ja: JurorAnswers;
@@ -27,6 +29,9 @@ interface ParticipantViewProps {
   onGoBack: () => void;
   onHome: () => void;
   onReviewAnswers: () => void;
+  onShowSummary: () => void;
+  onStartFromOrder: () => void;
+  summaryView: React.ReactNode | null;
   steps: SessionStep[];
   completion: boolean[];
   buildSteps: (cfg: SessionConfig, name: string) => SessionStep[];
@@ -211,6 +216,114 @@ const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome }: { curSess: Se
   );
 };
 
+// Écran "Ordre de service" — affiché une fois après la sélection du poste,
+// avant le questionnaire. Liste l'ordre des codes échantillons personnel au
+// jury : un ordre global pour les évaluations multi-produits (radar/scale
+// par produit, classement, seuil) puis, séparément, l'ordre spécifique de
+// chaque test discriminatif (triangulaire, duo-trio) qui a ses propres codes.
+const OrderScreen = ({
+  curSess, cj, steps, onStart, onGoBack,
+}: {
+  curSess: SessionConfig;
+  cj: string;
+  steps: SessionStep[];
+  onStart: () => void;
+  onGoBack: () => void;
+}) => {
+  // Ordre global : codes des "product" steps dans l'ordre, sans doublons.
+  const globalOrder: string[] = [];
+  for (const s of steps) {
+    if (s.type === "product" && !globalOrder.includes(s.product.code)) {
+      globalOrder.push(s.product.code);
+    }
+  }
+  // Si aucun "product" step (séance 100 % discrim/global), repli sur l'ordre
+  // brut des produits déclarés en config.
+  if (globalOrder.length === 0) {
+    for (const p of curSess.products || []) globalOrder.push(p.code);
+  }
+
+  type SerieOrder = { kind: string; label: string; codes: string[] };
+  const serieOrders: SerieOrder[] = [];
+  const kindLabel: Record<string, string> = {
+    triangulaire: "Triangulaire",
+    "duo-trio": "Duo-trio",
+    classement: "Classement",
+    seuil: "Seuil de perception",
+  };
+  for (const s of steps) {
+    if (s.type === "discrim" || s.type === "ranking") {
+      const q = s.question;
+      const codes = q.codes || [];
+      if (codes.length === 0) continue;
+      // Pour classement/seuil dont les codes sont déjà l'ordre global → on saute.
+      if ((q.type === "classement" || q.type === "seuil") &&
+          codes.length === globalOrder.length &&
+          codes.every((c, i) => c === globalOrder[i])) {
+        continue;
+      }
+      serieOrders.push({
+        kind: q.type,
+        label: `${kindLabel[q.type] || q.type} — ${q.label}`,
+        codes,
+      });
+    }
+  }
+
+  const hasMulti = globalOrder.length > 1 || serieOrders.length > 0;
+
+  return (
+    <div className="order-screen">
+      <h2>Ordre de service</h2>
+      <p className="hint">{curSess.name} — {cj}</p>
+      <p className="text-[13.5px] text-[var(--mid)] mt-1 mb-5">
+        Disposez vos échantillons devant vous dans l&apos;ordre indiqué ci-dessous,
+        de gauche à droite.
+      </p>
+
+      {!hasMulti ? (
+        <div className="order-empty">
+          Aucun échantillon multiple à classer dans cette séance.
+        </div>
+      ) : (
+        <>
+          {globalOrder.length > 1 && (
+            <div className="order-block">
+              <div className="order-block-title">Ordre principal</div>
+              <ol className="order-list">
+                {globalOrder.map((c, i) => (
+                  <li key={c} className="order-item">
+                    <span className="order-pos">{i + 1}</span>
+                    <span className="order-code">{c}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {serieOrders.map((s, idx) => (
+            <div key={idx} className="order-block">
+              <div className="order-block-title">{s.label}</div>
+              <ol className="order-list">
+                {s.codes.map((c, i) => (
+                  <li key={c + i} className="order-item">
+                    <span className="order-pos">{i + 1}</span>
+                    <span className="order-code">{c}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))}
+        </>
+      )}
+
+      <div className="flex gap-3 justify-between flex-wrap mt-5">
+        <Button variant="ghost" size="sm" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
+        <Button onClick={onStart}>J&apos;ai mes échantillons <FiArrowRight /></Button>
+      </div>
+    </div>
+  );
+};
+
 const FormScreen = ({
   curSess, cj, steps, completion, cs, ja, onSetJa, onGoBack, onPrevStep, onNextStep, saveStatus, pendingCount,
   validatedSteps, onValidateStep,
@@ -231,9 +344,30 @@ const FormScreen = ({
 
   const [confirmNext, setConfirmNext] = useState(false);
   const [confirmPrev, setConfirmPrev] = useState(false);
+  const [radarIssues, setRadarIssues] = useState<{ untouched: string[]; emptyChildren: string[] } | null>(null);
+
+  // Pour l'étape courante : si elle contient une toile d'araignée, on calcule
+  // les familles non touchées / non précisées avant de laisser passer.
+  const currentStep = steps[cs];
+  const radarValidation = (() => {
+    if (!currentStep || currentStep.type !== "product") return null;
+    const radarQ: Question | undefined = currentStep.questions.find(q => q.type === "radar");
+    if (!radarQ || !radarQ.radarGroups) return null;
+    const axes: RadarAxis[] = radarQ.radarGroups.flatMap(g => g.axes);
+    const ans = (ja[currentStep.product.code]?.[radarQ.id]) as RadarAnswer | undefined;
+    const min = radarQ.min ?? 0;
+    return { axes, ans: ans || {}, min };
+  })();
 
   const handleNextClick = () => {
     if (!canAdvance) return;
+    if (radarValidation) {
+      const issues = validateRadarAnswer(radarValidation.ans, radarValidation.axes, radarValidation.min);
+      if (issues.untouched.length > 0 || issues.emptyChildren.length > 0) {
+        setRadarIssues(issues);
+        return;
+      }
+    }
     setConfirmNext(true);
   };
   const handleConfirmNext = () => {
@@ -266,7 +400,7 @@ const FormScreen = ({
           <Button variant="ghost" size="sm" onClick={onGoBack}><FiArrowLeft /> Changer</Button>
         </div>
 
-        <div className="form-progress-wrap px-4 mt-1 mb-4">
+        <div className="form-progress-wrap px-4 mt-1">
           <div className="flex justify-between text-[12.5px] text-[var(--mid)] mb-1.5">
             <span><strong className="text-[var(--ink)] font-bold">Étape {cs + 1}</strong> / {total}</span>
             <span>{doneCount} / {total} complétées · {pct}%</span>
@@ -355,18 +489,79 @@ const FormScreen = ({
           onCancel={() => setConfirmPrev(false)}
         />
       )}
+
+      {radarIssues && (
+        <ConfirmModal
+          tone="warn"
+          title="Toile d'araignée — vérification"
+          message={
+            <div className="flex flex-col gap-2.5">
+              {radarIssues.untouched.length > 0 && (
+                <div>
+                  <strong>Curseurs jamais validés :</strong>
+                  <ul className="mt-1 ml-4 list-disc">
+                    {radarIssues.untouched.map(f => <li key={f}><em>{f}</em></li>)}
+                  </ul>
+                  <p className="text-[12.5px] text-[var(--mid)] mt-1">
+                    Touchez le pouce de chaque curseur (au moins une fois) pour confirmer votre évaluation, y compris si l&apos;intensité est nulle.
+                  </p>
+                </div>
+              )}
+              {radarIssues.emptyChildren.length > 0 && (
+                <div>
+                  <strong>Familles évaluées sans aucune classe précisée :</strong>
+                  <ul className="mt-1 ml-4 list-disc">
+                    {radarIssues.emptyChildren.map(f => <li key={f}><em>{f}</em></li>)}
+                  </ul>
+                  <p className="text-[12.5px] text-[var(--mid)] mt-1">
+                    Si une famille a une intensité &gt; 0, dépliez-la (bouton +) et notez au moins une de ses classes.
+                  </p>
+                </div>
+              )}
+            </div>
+          }
+          confirmLabel="Compris, je corrige"
+          onConfirm={() => setRadarIssues(null)}
+          onCancel={() => setRadarIssues(null)}
+        />
+      )}
     </>
   );
 };
 
-const DoneScreen = ({ onReviewAnswers, onHome }: { onReviewAnswers: () => void, onHome: () => void }) => {
+const DoneScreen = ({
+  onReviewAnswers, onHome, onShowSummary, resultsVisible,
+}: {
+  onReviewAnswers: () => void;
+  onHome: () => void;
+  onShowSummary: () => void;
+  resultsVisible: boolean;
+}) => {
   const [confirmReview, setConfirmReview] = useState(false);
   return (
     <div className="done-screen">
       <div className="done-icon"><FiCheckCircle size={48} color="var(--ok)" /></div>
       <h2>Merci !</h2>
       <p>Réponses enregistrées.</p>
-      <div className="flex gap-3 justify-center flex-wrap">
+
+      <div className="done-summary-row">
+        <button
+          type="button"
+          className={`done-summary-btn ${resultsVisible ? "done-summary-btn--ready" : "done-summary-btn--locked"}`}
+          onClick={() => resultsVisible && onShowSummary()}
+          disabled={!resultsVisible}
+          aria-disabled={!resultsVisible}
+          title={resultsVisible ? "Voir le résumé du panel" : "L'animateur n'a pas encore débloqué le résumé"}
+        >
+          {resultsVisible ? <FiPieChart size={16} /> : <FiLock size={16} />}
+          <span>{resultsVisible ? "Voir le résumé du panel" : "Résumé en attente de l'animateur…"}</span>
+        </button>
+        {!resultsVisible && (
+          <p className="done-summary-hint">Le bouton deviendra cliquable dès que l&apos;animateur l&apos;aura autorisé.</p>
+        )}
+      </div>
+
+      <div className="flex gap-3 justify-center flex-wrap mt-4">
         <Button variant="ghost" size="sm" onClick={() => setConfirmReview(true)}>Revoir mes réponses</Button>
         <Button variant="secondary" onClick={onHome}><FiArrowLeft /> Retour</Button>
       </div>
@@ -389,13 +584,27 @@ const DoneScreen = ({ onReviewAnswers, onHome }: { onReviewAnswers: () => void, 
   );
 };
 
+const SummaryScreen = ({ children, onBack }: { children: React.ReactNode; onBack: () => void }) => (
+  <div className="summary-shell">
+    <div className="flex items-center gap-2 mb-3">
+      <Button variant="ghost" size="sm" onClick={onBack}><FiArrowLeft /> Retour</Button>
+    </div>
+    {children}
+  </div>
+);
+
 export const ParticipantView = ({
-  screen, sessions, curSess, jurors, cj, ja, cs, saveStatus, pendingCount,
+  screen, sessions, curSess, curSessId, jurors, cj, ja, cs, saveStatus, pendingCount,
   takenPostes, validatedSteps, onSelectPoste, onValidateStep,
   onSelectSession, onLoginJury, onPrevStep, onNextStep, onSetJa, onGoBack, onHome, onReviewAnswers,
+  onShowSummary, onStartFromOrder, summaryView,
   steps, completion,
 }: ParticipantViewProps) => {
   const activeSessions = sessions.filter(s => s.active);
+
+  // resultsVisible vient de la liste des séances ; on l'extrait ici pour le DoneScreen.
+  const currentSession = curSessId ? sessions.find(s => s.id === curSessId) : null;
+  const resultsVisible = !!currentSession?.resultsVisible;
 
   switch (screen) {
     case "landing":
@@ -412,6 +621,17 @@ export const ParticipantView = ({
           onGoBack={onGoBack}
         />
       );
+    case "order":
+      if (!curSess) return null;
+      return (
+        <OrderScreen
+          curSess={curSess}
+          cj={cj}
+          steps={steps}
+          onStart={onStartFromOrder}
+          onGoBack={onGoBack}
+        />
+      );
     case "form":
       if (!curSess) return null;
       return (
@@ -423,7 +643,16 @@ export const ParticipantView = ({
         />
       );
     case "done":
-      return <DoneScreen onReviewAnswers={onReviewAnswers} onHome={onHome} />;
+      return (
+        <DoneScreen
+          onReviewAnswers={onReviewAnswers}
+          onHome={onHome}
+          onShowSummary={onShowSummary}
+          resultsVisible={resultsVisible}
+        />
+      );
+    case "summary":
+      return <SummaryScreen onBack={() => onHome()}>{summaryView}</SummaryScreen>;
     default:
       return null;
   }

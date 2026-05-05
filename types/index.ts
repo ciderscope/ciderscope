@@ -69,6 +69,7 @@ export interface SessionListItem {
   jurorCount: number;
   productCount?: number;
   questionCount?: number;
+  resultsVisible?: boolean; // l'animateur a autorisé l'affichage du résumé aux jurys
 }
 
 // ── Answer value shapes ─────────────────────────────────────────────────────
@@ -80,8 +81,12 @@ export interface ScaleAnswer {
 }
 
 // Nœud de réponse radar récursif : { _: note, children?: { [label]: RadarNodeAnswer } }
+// `_touched` est posé sur les noeuds racine (familles) dès qu'ils ont été
+// délibérément interagis par le jury (drag du slider OU tap sur le pouce).
+// Sert à la validation au passage à l'étape suivante.
 export interface RadarNodeAnswer {
   _: number;
+  _touched?: boolean;
   children?: Record<string, RadarNodeAnswer>;
 }
 
@@ -118,7 +123,7 @@ export type AllAnswers = Record<string, JurorAnswers>;
 
 // ── UI / app state ─────────────────────────────────────────────────────────
 export type AppMode = "participant" | "admin";
-export type AppScreen = "landing" | "jury" | "poste" | "form" | "done" | "edit";
+export type AppScreen = "landing" | "jury" | "poste" | "order" | "form" | "done" | "summary" | "edit";
 
 export type PosteDay = "mardi" | "jeudi";
 export interface Poste {

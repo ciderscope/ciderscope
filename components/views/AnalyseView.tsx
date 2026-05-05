@@ -133,6 +133,11 @@ interface AnalyseViewProps {
   onAnSessChange: (id: string) => void;
   onAnTabChange: (tab: string) => void;
   downloadCSV: (rows: CSVRow[], name: string) => void;
+  // Mode résumé participant : masque le sélecteur de séance, les exports CSV
+  // et l'onglet "Données" (table brute). currentJuror permet de surligner les
+  // lignes du jury dans les tableaux par-jury (highlightSelf=true).
+  participantMode?: boolean;
+  currentJuror?: string;
 }
 
 const downloadSensoMinerCSV = (data: CSVRow[], name: string) => {
@@ -170,47 +175,66 @@ const downloadSensoMinerCSV = (data: CSVRow[], name: string) => {
 
 export const AnalyseView = ({
   sessions, anSessId, anCfg, csvData, allAnswers, curAnT,
-  onAnSessChange, onAnTabChange, downloadCSV
+  onAnSessChange, onAnTabChange, downloadCSV,
+  participantMode = false, currentJuror,
 }: AnalyseViewProps) => {
-  const tabs = useMemo(() => computeTabs(anCfg), [anCfg]);
+  const tabs = useMemo(() => {
+    const all = computeTabs(anCfg);
+    // Vue participant : on retire l'onglet "Données" (table brute) — l'utilisateur
+    // n'a pas vocation à voir / exporter le détail des autres jurys.
+    return participantMode ? all.filter(t => t.id !== "données") : all;
+  }, [anCfg, participantMode]);
 
   // Auto-select first valid tab when config changes
   const validIds = tabs.map(t => t.id);
-  const activeTab = validIds.includes(curAnT) ? curAnT : (validIds[0] ?? "données");
+  const activeTab = validIds.includes(curAnT) ? curAnT : (validIds[0] ?? "profil");
 
   return (
-    <div className="analyse-shell">
-      {/* Session selector */}
-      <div className="flex items-center gap-3.5 mb-5 flex-wrap">
-        <h2 className="font-extrabold text-[clamp(17px,2.5vw,22px)]">Analyse</h2>
-        <div className="flex-1" />
-        <label className="font-mono text-[11px] text-[var(--mid)]">Séance :</label>
-        <select
-          value={anSessId || ""}
-          onChange={(e) => onAnSessChange(e.target.value)}
-          className="border border-[var(--border)] rounded-md py-[5px] px-2 text-xs"
-        >
-          {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        {anCfg && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => downloadCSV(csvData, anCfg.name)}
-              title="Toutes les réponses (Format Long)"
-              className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
-            >
-              ↓ CSV Standard
-            </button>
-            <button
-              onClick={() => downloadSensoMinerCSV(csvData, anCfg.name)}
-              title="Données quantitatives (Format Large Juge x Produit)"
-              className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
-            >
-              ↓ CSV FactoMineR/R
-            </button>
-          </div>
-        )}
-      </div>
+    <div
+      className={`analyse-shell ${participantMode ? "analyse-shell--participant" : ""}`}
+      data-current-juror={currentJuror || undefined}
+    >
+      {!participantMode && (
+        <div className="flex items-center gap-3.5 mb-5 flex-wrap">
+          <h2 className="font-extrabold text-[clamp(17px,2.5vw,22px)]">Analyse</h2>
+          <div className="flex-1" />
+          <label className="font-mono text-[11px] text-[var(--mid)]">Séance :</label>
+          <select
+            value={anSessId || ""}
+            onChange={(e) => onAnSessChange(e.target.value)}
+            className="border border-[var(--border)] rounded-md py-[5px] px-2 text-xs"
+          >
+            {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          {anCfg && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => downloadCSV(csvData, anCfg.name)}
+                title="Toutes les réponses (Format Long)"
+                className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
+              >
+                ↓ CSV Standard
+              </button>
+              <button
+                onClick={() => downloadSensoMinerCSV(csvData, anCfg.name)}
+                title="Données quantitatives (Format Large Juge x Produit)"
+                className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
+              >
+                ↓ CSV FactoMineR/R
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {participantMode && anCfg && (
+        <div className="mb-5">
+          <h2 className="font-extrabold text-[clamp(17px,2.5vw,22px)]">Résumé de la séance</h2>
+          <p className="text-[var(--mid)] text-[13px] mt-1">
+            Vue d&apos;ensemble du panel — <strong className="text-[var(--accent)]">{currentJuror || "vous"}</strong> est mis en évidence dans les tableaux par jury.
+          </p>
+        </div>
+      )}
 
       {!anCfg && (
         <div className="text-[var(--text-muted)] text-sm py-8">
@@ -239,7 +263,7 @@ export const AnalyseView = ({
             {activeTab === "profil"  && <AnalyseProfil    config={anCfg} data={csvData} />}
             {activeTab === "radar"   && <AnalyseRadar     config={anCfg} allAnswers={allAnswers} />}
             {activeTab === "texte"   && <AnalyseWordCloud data={csvData} config={anCfg} />}
-            {activeTab === "jury"    && <AnalyseJury      config={anCfg} allAnswers={allAnswers} />}
+            {activeTab === "jury"    && <AnalyseJury      config={anCfg} allAnswers={allAnswers} currentJuror={currentJuror} />}
             {activeTab === "données" && <AnalyseDonnees   data={csvData} />}
             {activeTab.startsWith("q:") && (() => {
               const tab = tabs.find(t => t.id === activeTab);
@@ -1627,7 +1651,7 @@ function getSteps(cfg: SessionConfig): any[] {
   return steps;
 }
 
-function AnalyseJury({ config, allAnswers }: { config: SessionConfig; allAnswers: AllAnswers }) {
+function AnalyseJury({ config, allAnswers, currentJuror }: { config: SessionConfig; allAnswers: AllAnswers; currentJuror?: string }) {
   const jurors = Object.keys(allAnswers || {});
   if (jurors.length === 0) {
     return <AnalysisEmpty>Aucun jury enregistré.</AnalysisEmpty>;
@@ -1658,9 +1682,10 @@ function AnalyseJury({ config, allAnswers }: { config: SessionConfig; allAnswers
             const ja = allAnswers[j] || {};
             const done = allSteps.length > 0 && allSteps.every(s => checkStepDone(s, ja));
 
+            const isSelf = !!currentJuror && j === currentJuror;
             return (
-              <tr key={j}>
-                <td className="font-semibold">{j}</td>
+              <tr key={j} className={isSelf ? "self" : ""}>
+                <td className="font-semibold">{j}{isSelf && <span className="ml-1 text-[var(--accent)]" aria-label="vous">★</span>}</td>
                 {products.map(p => {
                   const pa = ja[p.code] || {};
                   const answered = ppQ.some(q => pa[q.id] != null);

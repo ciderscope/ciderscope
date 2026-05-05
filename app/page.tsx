@@ -16,6 +16,13 @@ const AdminView = dynamic(() => import("../components/views/AdminView").then(m =
   loading: () => <div style={{ padding: 32, color: "var(--mid)" }}>Chargement…</div>,
 });
 
+// AnalyseView (Chart.js) chargée à la demande aussi côté participant pour
+// le résumé de fin de séance — ne pèse pas sur le bundle initial.
+const AnalyseView = dynamic(() => import("../components/views/AnalyseView").then(m => m.AnalyseView), {
+  ssr: false,
+  loading: () => <div className="p-8 text-[var(--mid)]">Chargement du résumé…</div>,
+});
+
 const downloadCSV = (rows: CSVRow[], name: string) => {
   if (rows.length === 0) return;
   const hd = Object.keys(rows[0]);
@@ -34,7 +41,7 @@ export default function CiderScope() {
   const {
     mode, screen, setScreen,
     sessions,
-    curSess,
+    curSess, curSessId,
     jurors, cj, ja, cs, setCs,
     takenPostes, validatedSteps, handleSelectPoste, validateStep,
     handleSelectSession, handleLoginJury, handleSetJa,
@@ -51,6 +58,7 @@ export default function CiderScope() {
     deleteJury,
     listJurorsForSession,
     toggleActive,
+    toggleResultsVisible,
     loadSessions,
     loadSessionConfig,
     saveStatus,
@@ -69,11 +77,33 @@ export default function CiderScope() {
   }
 
   if (mode === "participant") {
+    // Le résumé du panel n'est monté que quand le participant entre l'écran "summary",
+    // et seulement si la séance courante a son `resultsVisible` à true. anCfg/allAnswers
+    // sont préchargés via handleAnSessChange au clic sur "Voir le résumé".
+    const summaryView = (screen === "summary" && anCfg && anSessId === curSessId)
+      ? (
+        <AnalyseView
+          sessions={sessions}
+          anSessId={anSessId}
+          anCfg={anCfg}
+          csvData={csvData}
+          allAnswers={allAnswers}
+          curAnT={curAnT}
+          onAnSessChange={() => { /* non interactif côté participant */ }}
+          onAnTabChange={setCurAnT}
+          downloadCSV={downloadCSV}
+          participantMode
+          currentJuror={cj}
+        />
+      )
+      : null;
+
     return (
       <ParticipantView
         screen={screen}
         sessions={sessions}
         curSess={curSess}
+        curSessId={curSessId}
         jurors={jurors}
         cj={cj}
         ja={ja}
@@ -98,6 +128,13 @@ export default function CiderScope() {
         onGoBack={() => setScreen("jury")}
         onHome={() => setScreen("landing")}
         onReviewAnswers={() => handleLoginJury(cj)}
+        onShowSummary={async () => {
+          if (!curSessId) return;
+          await handleAnSessChange(curSessId);
+          setScreen("summary");
+        }}
+        onStartFromOrder={() => setScreen("form")}
+        summaryView={summaryView}
         steps={currentSteps}
         completion={completion}
         buildSteps={buildSteps}
@@ -135,6 +172,7 @@ export default function CiderScope() {
         setScreen("edit");
       }}
       onToggleActive={toggleActive}
+      onToggleResultsVisible={toggleResultsVisible}
       onDuplicateSession={async (id) => {
         const c = await loadSessionConfig(id);
         if (!c) return;
@@ -171,6 +209,7 @@ export default function CiderScope() {
         const res = await saveSession(id, editCfg, {
           active: existing ? existing.active : true,
           jurorCount: existing?.jurorCount ?? 0,
+          resultsVisible: existing?.resultsVisible ?? false,
         });
         if (res.success) {
           editFingerprintRef.current = fingerprint(editCfg);
@@ -181,7 +220,6 @@ export default function CiderScope() {
         }
       }}
       downloadCSV={downloadCSV}
-      loadSessionConfig={loadSessionConfig}
       listJurorsForSession={listJurorsForSession}
       deleteJury={deleteJury}
       allAnswers={allAnswers}

@@ -7,14 +7,15 @@ datasource db {
 }
 
 model Session {
-  id         String    @id
-  name       String
-  date       String?
-  active     Boolean?  @default(false)
-  jurorCount Int?      @default(0) @map("juror_count")
-  config     Json
-  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  answers    Answer[]
+  id              String    @id
+  name            String
+  date            String?
+  active          Boolean?  @default(false)
+  jurorCount      Int?      @default(0) @map("juror_count")
+  config          Json
+  resultsVisible  Boolean?  @default(false) @map("results_visible")
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  answers         Answer[]
 
   @@map("sessions")
 }

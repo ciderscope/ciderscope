@@ -59,7 +59,7 @@ const axes: RadarAxis[] = [
     label: "Sous-bois",
     children: [
       { label: "Animal", children: leaves(["Cheval", "Cuir", "Sueur"]) },
-      { label: "Terreux", children: leaves(["Champignon", "Moisi", "Sous-bois"]) },
+      { label: "Terreux", children: leaves(["Champignon", "Moisi"]) },
       { label: "Bois", children: leaves(["Chêne", "Liège", "Pin"]) },
     ],
   },
@@ -76,8 +76,6 @@ const qualityAxes: RadarAxis[] = [
   { label: "Amertume" },
   { label: "Sucrosité" },
   { label: "Astringence" },
-  { label: "Intensité" },
-  { label: "Complexité" },
 ];
 
 export const AROMA_PRESET: RadarGroup[] = [

@@ -1,14 +1,13 @@
 "use client";
 import React, { useState, useRef, useEffect, Dispatch, SetStateAction } from "react";
 import dynamic from "next/dynamic";
-import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPrinter } from "react-icons/fi";
+import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart } from "react-icons/fi";
 import { QuestionInput } from "../features/QuestionInput";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { ConfirmDialog, DangerGhostButton, MutedText } from "../ui/ViewPrimitives";
 import { Question, QuestionType, Product, BetLevel, RadarGroup, RadarAxis, SessionConfig, SessionListItem, AllAnswers, CSVRow, AnswerValue, AppScreen } from "../../types";
-import { wlm } from "../../lib/utils";
 import { AROMA_PRESET } from "../../lib/aromaPreset";
 
 // AnalyseView (Chart.js, calculs lourds) chargée à la demande.
@@ -25,150 +24,6 @@ const nextId = (prefix: string): string => {
   return `${prefix}_${rnd}`;
 };
 
-// ─── Fiche de service ─────────────────────────────────────────────────────────
-function printServiceSheet(sessionName: string, cfg: SessionConfig) {
-  const products: Product[] = cfg.products || [];
-  const allQs: Question[] = cfg.questions || [];
-  const n = products.length;
-  if (n === 0) { alert("Aucun échantillon dans cette séance."); return; }
-
-  type Section = { title: string; subtitle?: string; note?: string; rows: { jury: number; order: string[] }[] };
-  const sections: Section[] = [];
-
-  const JURY_COUNT = 10;
-  const buildRows = (codes: string[]): { jury: number; order: string[] }[] => {
-    if (codes.length === 0) return [];
-    const sq = wlm(codes.length);
-    return Array.from({ length: JURY_COUNT }, (_, i) => ({
-      jury: i + 1,
-      order: sq[i % sq.length].map((pi: number) => codes[pi] || "?"),
-    }));
-  };
-
-  // 1. Section produits (questions scope=per-product)
-  const ppQs = allQs.filter(q => q.scope === "per-product");
-  if (ppQs.length > 0) {
-    sections.push({
-      title: "Présentation des échantillons",
-      subtitle: `Questions évaluées par produit : ${ppQs.map(q => q.label).join(" · ")}`,
-      rows: buildRows(products.map(p => p.code)),
-    });
-  }
-
-  // 2. Séries standalone (classement, seuil, triangulaire, duo-trio, a-non-a)
-  const typeLabel: Record<string, string> = {
-    classement: "Classement",
-    seuil: "Seuil (rang)",
-    triangulaire: "Triangulaire (3-AFC)",
-    "duo-trio": "Duo-trio",
-    "a-non-a": "A / non-A",
-  };
-
-  allQs.forEach(q => {
-    if (["classement", "seuil", "triangulaire", "duo-trio"].includes(q.type) && Array.isArray(q.codes) && q.codes.length > 0) {
-      sections.push({
-        title: `Q · ${q.label}`,
-        subtitle: typeLabel[q.type],
-        rows: buildRows(q.codes),
-      });
-    } else if (q.type === "a-non-a" && Array.isArray(q.codes) && q.codes.length > 0) {
-      sections.push({
-        title: `Q · ${q.label}`,
-        subtitle: typeLabel[q.type],
-        note: q.refCode ? `Référence A présentée en premier : <strong>${q.refCode}</strong>` : undefined,
-        rows: buildRows(q.codes),
-      });
-    }
-  });
-
-  // 3. Seuil-BET : une sous-section par niveau
-  allQs.filter(q => q.type === "seuil-bet").forEach(q => {
-    (q.betLevels || []).forEach((lv: BetLevel, i: number) => {
-      const codes: string[] = (lv.codes || []).filter(Boolean);
-      if (codes.length === 0) return;
-      sections.push({
-        title: `Q · ${q.label} — niveau ${i + 1}${lv.label ? ` (${lv.label})` : ""}`,
-        subtitle: "Seuil 3-AFC (BET)",
-        rows: buildRows(codes),
-      });
-    });
-  });
-
-  // Fallback si aucune question n'est définie
-  if (sections.length === 0) {
-    sections.push({
-      title: "Présentation des échantillons",
-      rows: buildRows(products.map(p => p.code)),
-    });
-  }
-
-  const presLabel = cfg.presMode === "latin" ? "Carré latin" : cfg.presMode === "random" ? "Aléatoire" : "Fixe";
-
-  const renderSection = (s: Section) => {
-    if (s.rows.length === 0) return "";
-    const positions = s.rows[0].order.length;
-    return `
-<section class="serie">
-  <h2>${s.title}</h2>
-  ${s.subtitle ? `<div class="sub">${s.subtitle}</div>` : ""}
-  ${s.note ? `<div class="note">${s.note}</div>` : ""}
-  <table>
-    <thead>
-      <tr>
-        <th>Jury n°</th>
-        ${Array.from({ length: positions }, (_, i) => `<th>Position ${i + 1}</th>`).join("")}
-      </tr>
-    </thead>
-    <tbody>
-      ${s.rows.map(r => `
-      <tr>
-        <td class="jury">${r.jury}</td>
-        ${r.order.map((c: string) => `<td class="code">${c}</td>`).join("")}
-      </tr>`).join("")}
-    </tbody>
-  </table>
-</section>`;
-  };
-
-  const html = `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>Fiche de service — ${sessionName}</title>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 20px; }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  h2 { font-size: 15px; margin: 22px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
-  .meta { color: #666; font-size: 12px; margin-bottom: 12px; }
-  .sub { color: #666; font-size: 12px; margin-bottom: 4px; font-style: italic; }
-  .note { font-size: 12px; margin: 4px 0 6px; padding: 6px 10px; background: #fafae0; border-left: 3px solid #c8820a; }
-  section.serie { page-break-inside: avoid; margin-bottom: 18px; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; }
-  th { background: #f4f4f4; font-weight: 700; }
-  td.jury { font-weight: 700; background: #fafafa; }
-  .code { font-family: "Courier New", monospace; font-size: 15px; font-weight: 700; }
-  @media print {
-    body { padding: 0; }
-    button { display: none; }
-    section.serie + section.serie { page-break-before: auto; }
-  }
-</style>
-</head>
-<body>
-<h1>Fiche de service — ${sessionName}</h1>
-<div class="meta">
-  ${cfg.date || ""} · Présentation : ${presLabel} · ${n} échantillon${n > 1 ? "s" : ""} · ${sections.length} série${sections.length > 1 ? "s" : ""}
-</div>
-${sections.map(renderSection).join("")}
-<br>
-<button onclick="window.print()">🖨 Imprimer</button>
-</body>
-</html>`;
-
-  const w = window.open("", "_blank");
-  if (w) { w.document.write(html); w.document.close(); }
-}
 
 interface AdminViewProps {
   screen: AppScreen;
@@ -181,6 +36,7 @@ interface AdminViewProps {
   onNewSession: () => void;
   onEditSession: (id: string) => void;
   onToggleActive: (id: string) => void;
+  onToggleResultsVisible: (id: string) => void;
   onDuplicateSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
   onSetEditCfg: Dispatch<SetStateAction<SessionConfig | null>>;
@@ -188,7 +44,6 @@ interface AdminViewProps {
   onSaveEdit: () => void;
   onHome: () => void;
   downloadCSV: (rows: CSVRow[], filename: string) => void;
-  loadSessionConfig: (id: string) => Promise<SessionConfig | null>;
   listJurorsForSession: (id: string) => Promise<string[]>;
   deleteJury: (sessionId: string, name: string) => Promise<{ success: boolean } | undefined>;
   // Analyse props
@@ -204,8 +59,8 @@ interface AdminViewProps {
 export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
   adminSection, setAdminSection,
-  onNewSession, onEditSession, onToggleActive, onDuplicateSession, onDeleteSession,
-  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, downloadCSV, loadSessionConfig,
+  onNewSession, onEditSession, onToggleActive, onToggleResultsVisible, onDuplicateSession, onDeleteSession,
+  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, downloadCSV,
   listJurorsForSession, deleteJury,
   allAnswers, anSessId, anCfg, csvData, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
@@ -269,11 +124,15 @@ export const AdminView = ({
                   {s.active
                     ? <Button variant="ghost" size="sm" onClick={() => onToggleActive(s.id)}>Désactiver</Button>
                     : <Button variant="ok" size="sm" onClick={() => onToggleActive(s.id)}>Activer</Button>}
+                  <Button
+                    variant={s.resultsVisible ? "ok" : "ghost"}
+                    size="sm"
+                    onClick={() => onToggleResultsVisible(s.id)}
+                    title={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
+                  >
+                    <FiPieChart /> {s.resultsVisible ? "Résumé visible" : "Partager résumé"}
+                  </Button>
                   <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier"><FiEdit2 /></Button>
-                  <Button variant="ghost" size="sm" title="Fiche de service" onClick={async () => {
-                    const cfg = await loadSessionConfig(s.id);
-                    if (cfg) printServiceSheet(s.name, cfg);
-                  }}><FiPrinter /></Button>
                   <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer"><FiCopy /></Button>
                   {confirmingId === s.id ? (
                     <div className="flex gap-1">

@@ -17,6 +17,12 @@ export interface TouchSafeSliderProps {
   onChange: (v: number) => void;
   ariaLabel?: string;
   className?: string;
+  // Si true, affiche une coche verte au centre du pouce. Sert au radar pour
+  // distinguer les familles sur lesquelles le jury a réellement statué.
+  touched?: boolean;
+  // Tap simple sur le pouce (souris ou tactile court sans déplacement).
+  // Permet à l'utilisateur de valider la valeur par défaut sans la modifier.
+  onTap?: () => void;
 }
 
 /**
@@ -29,7 +35,7 @@ export interface TouchSafeSliderProps {
  * natif sans casser aussi le drag.
  */
 export function TouchSafeSlider({
-  min, max, step = 1, value, onChange, ariaLabel, className,
+  min, max, step = 1, value, onChange, ariaLabel, className, touched = false, onTap,
 }: TouchSafeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -90,9 +96,13 @@ export function TouchSafeSlider({
         onChange(valueFromClientX(press.startX));
       }, TOUCH_HOLD_MS);
     } else {
-      // Souris : drag immédiat ET positionnement sur le clic.
+      // Souris : drag immédiat ET positionnement sur le clic. Si la valeur
+      // ne change pas (clic exactement sur la position courante), c'est un
+      // tap pur — on le signale via onTap.
       setDragging(true);
-      onChange(valueFromClientX(e.clientX));
+      const newV = valueFromClientX(e.clientX);
+      if (newV === value) onTap?.();
+      onChange(newV);
     }
   };
 
@@ -111,6 +121,10 @@ export function TouchSafeSlider({
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    // Tactile : relâché avant l'armement = tap court sans déplacement notable
+    // → valide la coche sans modifier la valeur.
+    const p = pressRef.current;
+    if (p && p.isTouch && !p.armed) onTap?.();
     cancelPress();
   };
 
@@ -130,7 +144,7 @@ export function TouchSafeSlider({
   return (
     <div
       ref={trackRef}
-      className={`ts-slider${dragging ? " dragging" : ""}${arming ? " arming" : ""}${className ? ` ${className}` : ""}`}
+      className={`ts-slider${dragging ? " dragging" : ""}${arming ? " arming" : ""}${touched ? " touched" : ""}${className ? ` ${className}` : ""}`}
       role="slider"
       aria-valuemin={min}
       aria-valuemax={max}
@@ -149,7 +163,13 @@ export function TouchSafeSlider({
     >
       <div className="ts-slider-track" />
       <div className="ts-slider-fill" style={{ width: `${ratio * 100}%` }} />
-      <div className="ts-slider-thumb" style={{ left: `${ratio * 100}%` }} />
+      <div className="ts-slider-thumb" style={{ left: `${ratio * 100}%` }}>
+        {touched && (
+          <svg className="ts-slider-check" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3.5 8.5l3 3 6-6" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
     </div>
   );
 }

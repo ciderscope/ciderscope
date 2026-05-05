@@ -333,6 +333,49 @@ canvas { max-width: 100%; }
   .poste-screen { padding: 18px 14px; margin: 14px 8px; }
 }
 
+/* ── Écran ordre de service participant ─────────────────────────────── */
+.order-screen {
+  max-width: 720px; margin: 30px auto; padding: 26px 22px;
+  background: var(--paper); border-radius: var(--radius-lg);
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.order-screen h2 { font-size: 24px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.3px; }
+.order-screen .hint { font-size: 14px; color: var(--mid); margin: 0; }
+.order-empty {
+  margin-top: 18px; padding: 18px; text-align: center;
+  background: var(--paper2); border: 1px dashed var(--border); border-radius: var(--radius);
+  color: var(--mid); font-size: 14px;
+}
+.order-block { margin-top: 18px; }
+.order-block-title {
+  font-size: 13px; font-weight: 700; color: var(--primary);
+  margin-bottom: 8px; text-transform: uppercase; letter-spacing: .06em;
+}
+.order-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.order-item {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 14px; min-height: 46px;
+}
+.order-pos {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-weight: 700; font-size: 12px;
+}
+.order-code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 700; font-size: 18px; color: var(--ink);
+  letter-spacing: .5px;
+}
+@media (max-width: 480px) {
+  .order-screen { padding: 18px 14px; margin: 14px 8px; }
+  .order-code { font-size: 16px; }
+}
+
 /* ══════════════════════════════════════════
    PARTICIPANT — landing, connexion jury, questionnaire
    ══════════════════════════════════════════ */
@@ -448,6 +491,42 @@ canvas { max-width: 100%; }
 .done-icon { font-size: 58px; margin-bottom: 18px; }
 .done-screen h2 { font-weight: 800; font-size: 28px; margin-bottom: 8px; letter-spacing: -.5px; }
 .done-screen p  { color: var(--mid); font-size: 16px; margin-bottom: 24px; }
+
+/* Bouton "résumé du panel" : grisé tant que l'animateur n'a pas autorisé,
+   vert et cliquable une fois débloqué. */
+.done-summary-row { margin: 12px 0 4px; }
+.done-summary-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: inherit; font-weight: 600; font-size: 14.5px;
+  padding: 11px 18px; border-radius: 10px; cursor: pointer;
+  border: 1.5px solid; transition: background .15s, border-color .15s, color .15s, transform .1s;
+  min-height: 44px;
+}
+.done-summary-btn--locked {
+  background: var(--paper2); color: var(--mid); border-color: var(--border);
+  cursor: not-allowed; opacity: .85;
+}
+.done-summary-btn--ready {
+  background: color-mix(in srgb, var(--accent) 14%, #fff);
+  color: var(--accent); border-color: var(--accent);
+}
+.done-summary-btn--ready:hover { background: var(--accent); color: #fff; transform: translateY(-1px); }
+.done-summary-hint {
+  margin: 8px auto 0; font-size: 12.5px; color: var(--mid); max-width: 380px;
+}
+
+/* Coque du résumé côté participant — version simplifiée d'analyse-shell. */
+.summary-shell {
+  max-width: min(96%, 1200px); margin: 0 auto;
+  padding: 18px 14px 80px;
+}
+.analyse-shell--participant .data-table tr.self,
+.analyse-shell--participant .data-table tr.self td {
+  background: color-mix(in srgb, var(--accent) 14%, #fff);
+}
+.analyse-shell--participant .data-table tr.self td:first-child {
+  border-left: 3px solid var(--accent);
+}
 
 /* ══════════════════════════════════════════
    QUESTIONS — types d'input participant
@@ -573,6 +652,17 @@ input[type=range]::-webkit-slider-thumb {
 .ts-slider.dragging .ts-slider-thumb {
   background: var(--accent);
   box-shadow: 0 0 0 8px rgba(238, 140, 0, .18);
+}
+/* État "touché" — coche verte centrée dans le pouce. Sert au radar pour
+   indiquer qu'une famille a été délibérément validée par le jury. */
+.ts-slider.touched .ts-slider-thumb {
+  background: var(--ok, #1a6b3a);
+  border-color: var(--ok, #1a6b3a);
+}
+.ts-slider-check {
+  position: absolute; inset: 0; margin: auto;
+  width: 14px; height: 14px; color: #fff;
+  pointer-events: none;
 }
 @keyframes ts-thumb-pulse {
   0%, 100% { transform: translate(-50%, -50%) scale(1); }
@@ -752,6 +842,18 @@ button, [role="button"], a.btn, .Button, .btn {
   background: var(--lime);
   border-radius: 6px;
   animation: radar-highlight-fade 1.8s ease forwards;
+}
+
+/* Famille jamais touchée (pas de coche) — surlignée discrètement en rouge
+   pour rappeler au jury qu'il doit valider même si la valeur lui convient. */
+.radar-tree-node.radar-tree-node--untouched.depth-0 > .radar-tree-row {
+  background: rgba(192, 57, 43, .08);
+  border-left: 3px solid #c0392b;
+  border-radius: 6px;
+  padding-left: 8px;
+}
+.radar-tree-node.radar-tree-node--untouched .radar-tree-label {
+  color: #c0392b;
 }
 
 .radar-tree-node.depth-custom .radar-tree-row {

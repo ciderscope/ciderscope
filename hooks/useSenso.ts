@@ -209,7 +209,7 @@ export const useSenso = () => {
     if (!keepLoading) setLoading(true);
     const { data, error } = await supabase
       .from("sessions")
-      .select("id, name, date, active, juror_count, config")
+      .select("id, name, date, active, juror_count, config, results_visible")
       .order("created_at", { ascending: false });
     if (error) {
       console.error("Erreur lors du chargement des séances:", error);
@@ -223,6 +223,7 @@ export const useSenso = () => {
         active: boolean;
         juror_count: number;
         config: SessionConfig | null;
+        results_visible: boolean | null;
       };
       const next: SessionListItem[] = (data as SessionRow[]).map(r => {
         const cfg = r.config;
@@ -234,6 +235,7 @@ export const useSenso = () => {
           jurorCount: r.juror_count,
           productCount: cfg?.products?.length || 0,
           questionCount: cfg?.questions?.length || 0,
+          resultsVisible: !!r.results_visible,
         };
       });
       // En polling, évite de remplacer la liste (et de re-render tout l'arbre)
@@ -246,7 +248,8 @@ export const useSenso = () => {
             const a = prev[i], b = next[i];
             if (a.id !== b.id || a.name !== b.name || a.date !== b.date ||
                 a.active !== b.active || a.jurorCount !== b.jurorCount ||
-                a.productCount !== b.productCount || a.questionCount !== b.questionCount) {
+                a.productCount !== b.productCount || a.questionCount !== b.questionCount ||
+                a.resultsVisible !== b.resultsVisible) {
               same = false; break;
             }
           }
@@ -509,7 +512,8 @@ export const useSenso = () => {
     }
     setCs(0);
     setValidatedSteps(new Set());
-    setScreen("form");
+    // L'écran "order" affiche l'ordre de service personnel avant le questionnaire.
+    setScreen("order");
   }, []);
 
   const validateStep = useCallback((idx: number) => {
@@ -717,6 +721,7 @@ export const useSenso = () => {
       active: meta.active ?? false,
       juror_count: meta.jurorCount ?? 0,
       config: cfg,
+      results_visible: meta.resultsVisible ?? false,
     });
     if (error) {
       // L'objet PostgrestError peut sérialiser vide via JSON.stringify ; on logge
@@ -788,6 +793,19 @@ export const useSenso = () => {
     const newActive = !s.active;
     await supabase.from("sessions").update({ active: newActive }).eq("id", id);
     setSessions(prev => prev.map(x => x.id === id ? { ...x, active: newActive } : x));
+  }, []);
+
+  // Bascule l'affichage du résumé d'analyse côté participant. Stocké en
+  // colonne dédiée pour pouvoir être basculé sans réécrire `config`, et lu
+  // par le polling de la liste : tous les jurys verront le bouton passer
+  // au vert dans la fenêtre de polling suivante.
+  const toggleResultsVisible = useCallback(async (id: string) => {
+    const { sessions } = stateRef.current;
+    const s = sessions.find(x => x.id === id);
+    if (!s) return;
+    const next = !s.resultsVisible;
+    await supabase.from("sessions").update({ results_visible: next }).eq("id", id);
+    setSessions(prev => prev.map(x => x.id === id ? { ...x, resultsVisible: next } : x));
   }, []);
 
   const csvData = useMemo<CSVRow[]>(() => {
@@ -915,7 +933,7 @@ export const useSenso = () => {
     handleSelectSession, handleLoginJury, handleSelectPoste,
     handleSetJa, validateStep, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
-    listJurorsForSession, toggleActive,
+    listJurorsForSession, toggleActive, toggleResultsVisible,
     buildSteps, isStepComplete,
     flushPending, flushSave,
     // Les useState setters sont stables par contrat React et n'ont pas besoin
@@ -925,7 +943,7 @@ export const useSenso = () => {
     handleSelectSession, handleLoginJury, handleSelectPoste,
     handleSetJa, validateStep, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
-    listJurorsForSession, toggleActive,
+    listJurorsForSession, toggleActive, toggleResultsVisible,
     buildSteps, isStepComplete, flushPending, flushSave,
   ]);
 
