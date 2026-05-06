@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { Chip, SampleToggle, ChipPool, DropSlot } from "./ClassementBuilder";
 import type { Product } from "../../../types";
 
