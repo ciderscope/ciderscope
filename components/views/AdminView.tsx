@@ -50,7 +50,6 @@ interface AdminViewProps {
   allAnswers: AllAnswers;
   anSessId: string | null;
   anCfg: SessionConfig | null;
-  csvData: CSVRow[];
   curAnT: string;
   onAnSessChange: (id: string) => void;
   onAnTabChange: (tab: string) => void;
@@ -62,7 +61,7 @@ export const AdminView = ({
   onNewSession, onEditSession, onToggleActive, onToggleResultsVisible, onDuplicateSession, onDeleteSession,
   onSetEditCfg, onSetEditTab, onSaveEdit, onHome, downloadCSV,
   listJurorsForSession, deleteJury,
-  allAnswers, anSessId, anCfg, csvData, curAnT, onAnSessChange, onAnTabChange,
+  allAnswers, anSessId, anCfg, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -93,7 +92,6 @@ export const AdminView = ({
             sessions={sessions}
             anSessId={anSessId}
             anCfg={anCfg}
-            csvData={csvData}
             allAnswers={allAnswers}
             curAnT={curAnT}
             onAnSessChange={onAnSessChange}

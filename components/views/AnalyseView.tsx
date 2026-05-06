@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState, Fragment } from "react";
 import { Card } from "../ui/Card";
 import { ScrollableTabs } from "../ui/ScrollableTabs";
 import {
@@ -50,6 +50,7 @@ import {
   anovaTwoWay,
   rvCoefficient,
 } from "../../lib/stats";
+import { buildCsvData } from "../../lib/csv";
 
 // Enregistrement Chart.js localisé : seul l'admin chargeant l'analyse paye le coût.
 ChartJS.register(
@@ -127,17 +128,16 @@ interface AnalyseViewProps {
   sessions: SessionListItem[];
   anSessId: string | null;
   anCfg: SessionConfig | null;
-  csvData: CSVRow[];
   allAnswers: AllAnswers;
   curAnT: string;
   onAnSessChange: (id: string) => void;
   onAnTabChange: (tab: string) => void;
-  downloadCSV: (rows: CSVRow[], name: string) => void;
   // Mode résumé participant : masque le sélecteur de séance, les exports CSV
   // et l'onglet "Données" (table brute). currentJuror permet de surligner les
   // lignes du jury dans les tableaux par-jury (highlightSelf=true).
   participantMode?: boolean;
   currentJuror?: string;
+  downloadCSV?: (rows: CSVRow[], name: string) => void;
 }
 
 const downloadSensoMinerCSV = (data: CSVRow[], name: string) => {
@@ -174,10 +174,12 @@ const downloadSensoMinerCSV = (data: CSVRow[], name: string) => {
 };
 
 export const AnalyseView = ({
-  sessions, anSessId, anCfg, csvData, allAnswers, curAnT,
+  sessions, anSessId, anCfg, allAnswers, curAnT,
   onAnSessChange, onAnTabChange, downloadCSV,
   participantMode = false, currentJuror,
 }: AnalyseViewProps) => {
+  const csvData = useMemo(() => buildCsvData(anCfg, allAnswers), [anCfg, allAnswers]);
+
   const tabs = useMemo(() => {
     const all = computeTabs(anCfg);
     // Vue participant : on retire l'onglet "Données" (table brute) — l'utilisateur
@@ -209,7 +211,7 @@ export const AnalyseView = ({
           {anCfg && (
             <div className="flex gap-2">
               <button
-                onClick={() => downloadCSV(csvData, anCfg.name)}
+                onClick={() => downloadCSV?.(csvData, anCfg.name)}
                 title="Toutes les réponses (Format Long)"
                 className="text-xs py-[5px] px-2.5 border border-[var(--border)] rounded-md cursor-pointer bg-[var(--paper)] text-[var(--ink)]"
               >
@@ -1028,7 +1030,7 @@ function flattenRadarAnswers(ans: RadarAnswer, prefix = "", out: Record<string, 
   return out;
 }
 
-function AnalyseRadar({ config, allAnswers }: { config: SessionConfig; allAnswers: AllAnswers }) {
+function AnalyseRadar({ config, allAnswers, participantMode, currentJuror }: { config: SessionConfig; allAnswers: AllAnswers; participantMode?: boolean; currentJuror?: string }) {
   const radarQs = config.questions.filter(q => q.type === "radar");
   const products = config.products || [];
   const jurors = Object.keys(allAnswers);
@@ -1040,13 +1042,13 @@ function AnalyseRadar({ config, allAnswers }: { config: SessionConfig; allAnswer
   return (
     <AnalysisStack deep>
       {radarQs.map(q => (
-        <RadarQuestionAnalysis key={q.id} question={q} products={products} jurors={jurors} allAnswers={allAnswers} />
+        <RadarQuestionAnalysis key={q.id} question={q} products={products} jurors={jurors} allAnswers={allAnswers} participantMode={participantMode} currentJuror={currentJuror} />
       ))}
     </AnalysisStack>
   );
 }
 
-function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { question: Question; products: Product[]; jurors: string[]; allAnswers: AllAnswers }) {
+function RadarQuestionAnalysis({ question, products, jurors, allAnswers, participantMode, currentJuror }: { question: Question; products: Product[]; jurors: string[]; allAnswers: AllAnswers; participantMode?: boolean; currentJuror?: string }) {
   // Criteria par groupe (pour filtrer l'ACP) + liste globale
   const groups = question.radarGroups || [];
   const criteriaByGroup: Record<string, string[]> = {};
@@ -1243,63 +1245,87 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
             }))
           };
 
+          const jurorRadarData = (participantMode && currentJuror) ? {
+            labels: displayCriteria.map(c => c.split(" > ").pop()),
+            datasets: products.map((p, pi) => ({
+              label: p.code,
+              data: displayCriteria.map(c => getNote(currentJuror, p.code, c) ?? 0),
+              borderColor: COLORS[pi % 8],
+              backgroundColor: COLORS[pi % 8] + "22",
+              pointBackgroundColor: COLORS[pi % 8],
+            }))
+          } : null;
+
           return (
-            <Card key={g.id} title={g.title}>
-              <div className="analyse-radar-wrap">
-                <Radar data={radarData} options={{ responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 10 } } }} />
-              </div>
-              <div className="mt-5">
-                <table className="data-table text-[11px]">
-                  <thead>
-                    <tr>
-                      <th>Critère</th>
-                      {products.map(p => <th key={p.code}>{p.code}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayCriteria.map(c => (
-                      <tr key={c}>
-                        <td
-                          className={c.includes(">") ? "font-normal text-[var(--mid)]" : "font-bold"}
-                          style={{ paddingLeft: `${(c.split(" > ").length - 1) * 12}px` }}
-                        >
-                          {c.split(" > ").pop()}
-                        </td>
-                        {products.map(p => {
-                          const m = avg(p.code, c);
-                          const s = sd(p.code, c);
-                          return <td key={p.code} className={`num ${m > 0 ? "opacity-100" : "opacity-30"}`}>
-                            {m > 0 ? `${m.toFixed(1)} ±${s.toFixed(1)}` : "—"}
-                          </td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+            <Fragment key={g.id}>
+              <Card title={participantMode ? `${g.title} (Moyenne globale)` : g.title}>
+                <div className="analyse-radar-wrap">
+                  <Radar data={radarData} options={{ responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 10 } } }} />
+                </div>
+                {!participantMode && (
+                  <div className="mt-5">
+                    <table className="data-table text-[11px]">
+                      <thead>
+                        <tr>
+                          <th>Critère</th>
+                          {products.map(p => <th key={p.code}>{p.code}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayCriteria.map(c => (
+                          <tr key={c}>
+                            <td
+                              className={c.includes(">") ? "font-normal text-[var(--mid)]" : "font-bold"}
+                              style={{ paddingLeft: `${(c.split(" > ").length - 1) * 12}px` }}
+                            >
+                              {c.split(" > ").pop()}
+                            </td>
+                            {products.map(p => {
+                              const m = avg(p.code, c);
+                              const s = sd(p.code, c);
+                              return <td key={p.code} className={`num ${m > 0 ? "opacity-100" : "opacity-30"}`}>
+                                {m > 0 ? `${m.toFixed(1)} ±${s.toFixed(1)}` : "—"}
+                              </td>;
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
+              {jurorRadarData && (
+                <Card title={`${g.title} (Vos réponses)`}>
+                  <div className="analyse-radar-wrap">
+                    <Radar data={jurorRadarData} options={{ responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 10 } } }} />
+                  </div>
+                </Card>
+              )}
+            </Fragment>
           );
         })}
       </div>
 
-      <Card title="Significativité des descripteurs (ANOVA)">
-        <table className="data-table text-xs">
-          <thead>
-            <tr><th>Descripteur</th><th>F-produit</th><th>p-value</th></tr>
-          </thead>
-          <tbody>
-            {anovaRows.filter(r => r.ok).map(r => (
-              <tr key={r.crit}>
-                <td>{r.crit}</td>
-                <td className="num">{r.fProd.toFixed(2)}</td>
-                <td className={`num ${r.pProd < 0.05 ? `font-bold ${OK_TEXT}` : "font-normal"}`}>
-                  {r.pProd < 0.001 ? "< 0,001" : r.pProd.toFixed(3)} {r.pProd < 0.05 ? "*" : ""}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      {!participantMode && (
+        <Card title="Significativité des descripteurs (ANOVA)">
+          <table className="data-table text-xs">
+            <thead>
+              <tr><th>Descripteur</th><th>F-produit</th><th>p-value</th></tr>
+            </thead>
+            <tbody>
+              {anovaRows.filter(r => r.ok).map(r => (
+                <tr key={r.crit}>
+                  <td>{r.crit}</td>
+                  <td className="num">{r.fProd.toFixed(2)}</td>
+                  <td className={`num ${r.pProd < 0.05 ? `font-bold ${OK_TEXT}` : "font-normal"}`}>
+                    {r.pProd < 0.001 ? "< 0,001" : r.pProd.toFixed(3)} {r.pProd < 0.05 ? "*" : ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
 
       <div className={ANALYSIS_TOOLBAR}>
         {groups.length > 1 && (
@@ -1459,34 +1485,36 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers }: { que
         </div>
       )}
 
-      <Card title="Performance du jury">
-        <table className="data-table text-xs">
-          <thead>
-            <tr>
-              <th>Jury</th>
-              <th title="Corrélation de Pearson entre le juge et la moyenne du panel">R-Pearson</th>
-              <th title="Coefficient RV : corrélation multidimensionnelle entre le juge et le panel (plus robuste)">Coeff. RV</th>
-              <th>Amplitude</th>
-              <th>Statut</th>
-            </tr>
-          </thead>
-          <tbody>
-            {juryPerf.map(p => (
-              <tr key={p.jury}>
-                <td>{p.jury}</td>
-                <td className={`num font-bold ${confidenceClass(p.conf)}`}>
-                  {p.conf.toFixed(2)}
-                </td>
-                <td className={`num ${p.rv !== null && p.rv > 0.6 ? OK_TEXT : ""}`}>
-                  {p.rv !== null ? p.rv.toFixed(2) : "—"}
-                </td>
-                <td className="num">{p.range.toFixed(1)}</td>
-                <td>{p.conf > 0.6 ? "Conforme" : p.conf > 0.3 ? "Modéré" : "Discordant"}</td>
+      {!participantMode && (
+        <Card title="Performance du jury">
+          <table className="data-table text-xs">
+            <thead>
+              <tr>
+                <th>Jury</th>
+                <th title="Corrélation de Pearson entre le juge et la moyenne du panel">R-Pearson</th>
+                <th title="Coefficient RV : corrélation multidimensionnelle entre le juge et le panel (plus robuste)">Coeff. RV</th>
+                <th>Amplitude</th>
+                <th>Statut</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+            </thead>
+            <tbody>
+              {juryPerf.map(p => (
+                <tr key={p.jury}>
+                  <td>{p.jury}</td>
+                  <td className={`num font-bold ${confidenceClass(p.conf)}`}>
+                    {p.conf.toFixed(2)}
+                  </td>
+                  <td className={`num ${p.rv !== null && p.rv > 0.6 ? OK_TEXT : ""}`}>
+                    {p.rv !== null ? p.rv.toFixed(2) : "—"}
+                  </td>
+                  <td className="num">{p.range.toFixed(1)}</td>
+                  <td>{p.conf > 0.6 ? "Conforme" : p.conf > 0.3 ? "Modéré" : "Discordant"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </AnalysisStack>
   );
 }
@@ -1587,10 +1615,12 @@ function AnalyseWordCloud({ data, config }: { data: CSVRow[]; config?: SessionCo
 
 // ─── Par jury ─────────────────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const checkStepDone = (s: any, jaState: any): boolean => {
   if (!s) return true;
   if (s.type === "product") {
     const pa = jaState[s.product.code] || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return s.questions.every((q: any) => q.type === "scale" || (pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null));
   }
   if (s.type === "ranking") return Array.isArray(jaState["_rank"]?.[s.question.id]);
@@ -1606,19 +1636,23 @@ const checkStepDone = (s: any, jaState: any): boolean => {
       const levels = s.question.betLevels || [];
       if (!v || typeof v !== "object" || Array.isArray(v)) return false;
       const rec = v as unknown as Record<string, string>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return levels.length > 0 && levels.every((_: any, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
     }
     return v != null && v !== "";
   }
   if (s.type === "global") {
     const ga = jaState["_global"] || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return s.questions.every((q: any) => q.type === "scale" || (ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null));
   }
   return true;
 };
 
 // Version simplifiée de buildSteps pour l'analyse (sans randomisation/Williams car on veut juste la liste)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getSteps(cfg: SessionConfig): any[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const steps: any[] = [];
   const ppQuestions = cfg.questions.filter(q => q.scope === "per-product");
   const productMap = new Map<string, Question[]>();

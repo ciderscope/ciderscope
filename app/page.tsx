@@ -8,7 +8,8 @@ import { AdminLoginView } from "../components/views/AdminLoginView";
 import { validateSession } from "../lib/validation";
 import { hsh } from "../lib/utils";
 import { useApp } from "./AppProviders";
-import type { CSVRow } from "../types";
+
+import { downloadCSV } from "../lib/csv";
 
 // L'admin n'est jamais chargé côté participant — split du bundle.
 const AdminView = dynamic(() => import("../components/views/AdminView").then(m => m.AdminView), {
@@ -22,16 +23,6 @@ const AnalyseView = dynamic(() => import("../components/views/AnalyseView").then
   ssr: false,
   loading: () => <div className="p-8 text-[var(--mid)]">Chargement du résumé…</div>,
 });
-
-const downloadCSV = (rows: CSVRow[], name: string) => {
-  if (rows.length === 0) return;
-  const hd = Object.keys(rows[0]);
-  const csv = "﻿" + [hd.join(";"), ...rows.map(r => hd.map(h => r[h] ?? "").join(";"))].join("\n");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  a.download = name + ".csv";
-  a.click();
-};
 
 const fingerprint = (cfg: unknown) => hsh(JSON.stringify(cfg));
 
@@ -48,7 +39,7 @@ export default function CiderScope() {
     editCfg, setEditCfg,
     editSessId, setEditSessId,
     curEditTab, setCurEditTab,
-    anSessId, anCfg, csvData, curAnT, setCurAnT,
+    anSessId, anCfg, curAnT, setCurAnT,
     adminSection, setAdminSection,
     handleAnSessChange,
     allAnswers,
@@ -86,12 +77,10 @@ export default function CiderScope() {
           sessions={sessions}
           anSessId={anSessId}
           anCfg={anCfg}
-          csvData={csvData}
           allAnswers={allAnswers}
           curAnT={curAnT}
           onAnSessChange={() => { /* non interactif côté participant */ }}
           onAnTabChange={setCurAnT}
-          downloadCSV={downloadCSV}
           participantMode
           currentJuror={cj}
         />
@@ -229,7 +218,6 @@ export default function CiderScope() {
       allAnswers={allAnswers}
       anSessId={anSessId}
       anCfg={anCfg}
-      csvData={csvData}
       curAnT={curAnT}
       onAnSessChange={handleAnSessChange}
       onAnTabChange={setCurAnT}

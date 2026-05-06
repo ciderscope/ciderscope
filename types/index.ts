@@ -117,6 +117,7 @@ export type AnswerValue =
 export type JurorAnswers = {
   _finished?: boolean;
   _poste?: Record<string, string | number>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 };
 
