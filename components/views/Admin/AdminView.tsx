@@ -263,8 +263,8 @@ export const AdminView = ({
                 <label className="toggle-row">
                   <input
                     type="checkbox"
-                    checked={editCfg.randomizeOrder}
-                    onChange={(e) => onSetEditCfg({ ...editCfg, randomizeOrder: e.target.checked })}
+                    checked={editCfg.presMode === "latin"}
+                    onChange={(e) => onSetEditCfg({ ...editCfg, presMode: e.target.checked ? "latin" : "fixed" })}
                   />
                   <span>
                     <strong>Williams Design (Carré latin)</strong>
