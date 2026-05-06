@@ -38,6 +38,7 @@ interface ParticipantViewProps {
   summaryView: React.ReactNode | null;
   steps: SessionStep[];
   completion: boolean[];
+  buildSteps: (cfg: SessionConfig, name: string) => SessionStep[];
   isStepComplete: (idx: number) => boolean;
 }
 
