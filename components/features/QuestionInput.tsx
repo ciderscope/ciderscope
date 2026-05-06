@@ -12,7 +12,7 @@ interface QuestionInputProps {
 }
 
 // Horizontal draggable rank for classement / seuil
-function HorizontalRank({ items, value, onChange }: { items: string[]; value: AnswerValue; onChange: (v: string[]) => void }) {
+const HorizontalRank = React.memo(function HorizontalRank({ items, value, onChange }: { items: string[]; value: AnswerValue; onChange: (v: string[]) => void }) {
   const hasValue = Array.isArray(value) && value.length === items.length;
   const ordered: string[] = hasValue ? value : items;
 
@@ -128,11 +128,11 @@ function HorizontalRank({ items, value, onChange }: { items: string[]; value: An
       </div>
     </div>
   );
-}
+});
 
 // ── ScaleInput (extracted to allow hooks usage) ─────────────────────────────
 // Answer format: number (no subs) OR { _: number, _subs: string[], [label]: number }
-function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; onChange: (v: AnswerValue) => void }) {
+const ScaleInput = React.memo(function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; onChange: (v: AnswerValue) => void }) {
   const mn = q.min ?? 0;
   const mx = q.max ?? 10;
   const mid = Math.round((mn + mx) / 2);
@@ -227,7 +227,7 @@ function ScaleInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
       </div>
     </div>
   );
-}
+});
 
 // ── RadarInput ──────────────────────────────────────────────────────────────
 // Answer format: { [axisLabel]: { _: number, _subs: string[], [precision]: number } }
@@ -984,7 +984,7 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched,
   );
 }
 
-function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; onChange: (v: RadarAnswer) => void }) {
+const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; onChange: (v: RadarAnswer) => void }) {
   const mn = q.min ?? 0;
   const mx = q.max ?? 10;
   const groups = useMemo(() => q.radarGroups || [], [q.radarGroups]);
@@ -1067,9 +1067,9 @@ function RadarInput({ q, value, onChange }: { q: Question; value: AnswerValue; o
       )}
     </div>
   );
-}
+});
 
-export const QuestionInput = ({ q, value, onChange, products }: QuestionInputProps) => {
+export const QuestionInput = React.memo(({ q, value, onChange, products }: QuestionInputProps) => {
   if (q.type === "scale") {
     return <ScaleInput q={q} value={value} onChange={onChange} />;
   }
@@ -1238,4 +1238,5 @@ export const QuestionInput = ({ q, value, onChange, products }: QuestionInputPro
   }
 
   return null;
-};
+});
+QuestionInput.displayName = "QuestionInput";

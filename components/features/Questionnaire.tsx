@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { QuestionInput } from "./QuestionInput";
 import { Question, Product, SessionStep, JurorAnswers, AnswerValue } from "../../types";
 
@@ -46,13 +46,28 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
 
   if (!step) return null;
 
-  const handleUpdate = (ctx: string, qid: string, val: AnswerValue) => {
-    const newJa: JurorAnswers = {
-      ...ja,
-      [ctx]: { ...(ja[ctx] || {}), [qid]: val },
-    };
-    setJa(newJa);
-  };
+  // Setter stable : lit `ja` depuis la ref pour ne pas être ré-instancié à
+  // chaque saisie. Permet aux QuestionInput memoïsés en aval de ne pas se
+  // re-rendre quand seul `ja` change pour un autre champ que le leur.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleUpdate = useCallback((ctx: string, qid: string, val: AnswerValue) => {
+    const cur = jaRef.current;
+    setJa({ ...cur, [ctx]: { ...(cur[ctx] || {}), [qid]: val } });
+  }, [setJa]);
+
+  // Cache un `onChange(val)` stable par couple (ctx, qid) — sinon l'arrow
+  // créée à chaque render casserait React.memo sur QuestionInput.
+  // L'instance est jetée quand `handleUpdate` change (rare).
+  const onChangeMap = useMemo(() => new Map<string, (val: AnswerValue) => void>(), [handleUpdate]);
+  const getOnChange = useCallback((ctx: string, qid: string) => {
+    const k = `${ctx}|${qid}`;
+    let cb = onChangeMap.get(k);
+    if (!cb) {
+      cb = (val: AnswerValue) => handleUpdate(ctx, qid, val);
+      onChangeMap.set(k, cb);
+    }
+    return cb;
+  }, [handleUpdate, onChangeMap]);
 
   return (
     <div className="product-card">
@@ -64,7 +79,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
               key={`${step.product.code}:${q.id}`}
               q={q}
               value={ja[step.product.code]?.[q.id]}
-              onChange={(val) => handleUpdate(step.product.code, q.id, val)}
+              onChange={getOnChange(step.product.code, q.id)}
               products={products}
             />
           ))}
@@ -76,7 +91,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
           <QuestionInput
             q={step.question}
             value={ja["_rank"]?.[step.question.id]}
-            onChange={(val) => handleUpdate("_rank", step.question.id, val)}
+            onChange={getOnChange("_rank", step.question.id)}
             products={products}
           />
         </>
@@ -87,7 +102,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
           <QuestionInput
             q={step.question}
             value={ja["_discrim"]?.[step.question.id]}
-            onChange={(val) => handleUpdate("_discrim", step.question.id, val)}
+            onChange={getOnChange("_discrim", step.question.id)}
             products={products}
           />
         </>
@@ -100,7 +115,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
               key={q.id}
               q={q}
               value={ja["_global"]?.[q.id]}
-              onChange={(val) => handleUpdate("_global", q.id, val)}
+              onChange={getOnChange("_global", q.id)}
               products={products}
             />
           ))}

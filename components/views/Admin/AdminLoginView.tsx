@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { Button } from "../ui/Button";
+import { Button } from "../../ui/Button";
 
 interface AdminLoginViewProps {
   onSuccess: () => void;

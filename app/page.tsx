@@ -3,8 +3,8 @@
 import { useRef } from "react";
 import dynamic from "next/dynamic";
 
-import { ParticipantView } from "../components/views/ParticipantView";
-import { AdminLoginView } from "../components/views/AdminLoginView";
+import { ParticipantView } from "../components/views/Participant/ParticipantView";
+import { AdminLoginView } from "../components/views/Admin/AdminLoginView";
 import { validateSession } from "../lib/validation";
 import { hsh } from "../lib/utils";
 import { useApp } from "./AppProviders";
@@ -12,14 +12,14 @@ import { useApp } from "./AppProviders";
 import { downloadCSV } from "../lib/csv";
 
 // L'admin n'est jamais chargé côté participant — split du bundle.
-const AdminView = dynamic(() => import("../components/views/AdminView").then(m => m.AdminView), {
+const AdminView = dynamic(() => import("../components/views/Admin/AdminView").then(m => m.AdminView), {
   ssr: false,
   loading: () => <div style={{ padding: 32, color: "var(--mid)" }}>Chargement…</div>,
 });
 
 // AnalyseView (Chart.js) chargée à la demande aussi côté participant pour
 // le résumé de fin de séance — ne pèse pas sur le bundle initial.
-const AnalyseView = dynamic(() => import("../components/views/AnalyseView").then(m => m.AnalyseView), {
+const AnalyseView = dynamic(() => import("../components/views/Analyse/AnalyseView").then(m => m.AnalyseView), {
   ssr: false,
   loading: () => <div className="p-8 text-[var(--mid)]">Chargement du résumé…</div>,
 });
