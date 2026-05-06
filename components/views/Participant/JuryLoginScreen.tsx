@@ -2,57 +2,48 @@
 import React, { useState } from "react";
 import { FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import { Button } from "../../ui/Button";
+import { SessionConfig } from "../../../types";
 
 interface JuryLoginScreenProps {
-  onGoBack: () => void;
+  curSess: SessionConfig | null;
   jurors: string[];
   onLoginJury: (name: string) => void;
+  onHome: () => void;
+  onGoBack: () => void;
 }
 
-export const JuryLoginScreen = ({ onGoBack, jurors, onLoginJury }: JuryLoginScreenProps) => {
+export const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome, onGoBack }: JuryLoginScreenProps) => {
   const [name, setName] = useState("");
-  const [showList, setShowList] = useState(false);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (name.trim()) onLoginJury(name.trim());
-  };
-
+  const submit = () => { if (name.trim()) onLoginJury(name.trim()); };
+  
   return (
     <div className="jury-login">
-      <header className="step-header">
-        <button className="back-btn" onClick={onGoBack}><FiArrowLeft /> Retour</button>
-        <h2>Votre identité</h2>
-      </header>
-
-      <form onSubmit={handleSubmit} className="login-form">
-        <p className="sub">Entrez votre prénom ou choisissez-le dans la liste.</p>
-        <div className="input-group">
-          <input
-            autoFocus
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Ex: Jean"
-            className="login-input"
-          />
-          <Button type="submit" disabled={!name.trim()}>Suivant <FiArrowRight /></Button>
-        </div>
-
-        {jurors.length > 0 && (
-          <div className="juror-list-toggle">
-            <button type="button" onClick={() => setShowList(!showList)} className="text-btn">
-              {showList ? "Masquer la liste" : "Déjà venu ? Choisir dans la liste"}
-            </button>
-            {showList && (
-              <div className="juror-chips">
-                {jurors.map(j => (
-                  <button key={j} type="button" className="juror-chip" onClick={() => onLoginJury(j)}>{j}</button>
-                ))}
-              </div>
-            )}
+      <h2>Identifiez-vous</h2>
+      <p className="hint">{curSess?.name}</p>
+      <div className="jury-input-wrap">
+        <input
+          type="text"
+          placeholder="Votre prénom…"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          autoFocus
+        />
+      </div>
+      <Button onClick={submit}>
+        Commencer <FiArrowRight />
+      </Button>
+      {jurors.length > 0 && (
+        <div className="jury-existing">
+          <div className="jury-existing-title">Reprendre :</div>
+          <div className="jury-existing-grid">
+            {jurors.map(n => (
+              <button key={n} className="jury-existing-btn" onClick={() => onLoginJury(n)}>{n}</button>
+            ))}
           </div>
-        )}
-      </form>
+        </div>
+      )}
+      <Button variant="ghost" size="sm" className="mt16" onClick={onGoBack || onHome}><FiArrowLeft /> Retour</Button>
     </div>
   );
 };

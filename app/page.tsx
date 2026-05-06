@@ -59,7 +59,6 @@ export default function CiderScope() {
     completion,
     flushSave,
     adminAuth, setAdminAuth,
-    loading,
     restored,
   } = useApp();
 

@@ -61,28 +61,34 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           onGoBack={props.onGoBack}
           takenPostes={props.takenPostes}
           onSelectPoste={props.onSelectPoste}
+          cj={props.cj}
         />
       )}
 
       {screen === "jury" && (
         <JuryLoginScreen
-          onGoBack={props.onGoBack}
+          curSess={props.curSess}
           jurors={props.jurors}
           onLoginJury={props.onLoginJury}
+          onHome={props.onHome}
+          onGoBack={props.onGoBack}
         />
       )}
 
-      {screen === "order" && (
+      {screen === "order" && props.curSess && (
         <OrderScreen
-          onGoBack={props.onGoBack}
+          curSess={props.curSess}
+          cj={props.cj}
           steps={props.steps}
           onStartFromOrder={props.onStartFromOrder}
+          onGoBack={props.onGoBack}
         />
       )}
 
       {screen === "form" && props.curSess && (
         <FormScreen
           onHome={props.onHome}
+          onGoBack={props.onGoBack}
           steps={props.steps}
           cs={props.cs}
           completion={props.completion}
@@ -94,15 +100,18 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           ja={props.ja}
           onSetJa={props.onSetJa}
           onValidateStep={props.onValidateStep}
+          saveStatus={props.saveStatus}
+          pendingCount={props.pendingCount}
+          validatedSteps={props.validatedSteps}
         />
       )}
 
       {screen === "done" && props.curSess && (
         <DoneScreen
-          curSess={props.curSess}
           resultsVisible={props.sessions.find(s => s.id === props.curSessId)?.resultsVisible}
           onReviewAnswers={props.onReviewAnswers}
           onShowSummary={props.onShowSummary}
+          onHome={props.onHome}
         />
       )}
 

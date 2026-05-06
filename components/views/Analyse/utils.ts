@@ -74,9 +74,7 @@ export function flattenRadarAnswers(ans: RadarAnswer, prefix = "", out: Record<s
 }
 
 // Version simplifiée de buildSteps pour l'analyse (sans randomisation/Williams car on veut juste la liste)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getSteps(cfg: any): any[] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const steps: any[] = [];
   const ppQuestions = cfg.questions.filter((q: any) => q.scope === "per-product");
   const productMap = new Map<string, any[]>();
@@ -109,12 +107,10 @@ export function getSteps(cfg: any): any[] {
   return steps;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const checkStepDone = (s: any, jaState: any): boolean => {
   if (!s) return true;
   if (s.type === "product") {
     const pa = jaState[s.product.code] || {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return s.questions.every((q: any) => q.type === "scale" || (pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null));
   }
   if (s.type === "ranking") return Array.isArray(jaState["_rank"]?.[s.question.id]);
@@ -130,15 +126,15 @@ export const checkStepDone = (s: any, jaState: any): boolean => {
       const levels = s.question.betLevels || [];
       if (!v || typeof v !== "object" || Array.isArray(v)) return false;
       const rec = v as unknown as Record<string, string>;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return levels.length > 0 && levels.every((_: any, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
     }
     return v != null && v !== "";
   }
   if (s.type === "global") {
     const ga = jaState["_global"] || {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return s.questions.every((q: any) => q.type === "scale" || (ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null));
   }
   return true;
 };
+
+

@@ -100,7 +100,7 @@ export function QuestionBuilder({ editCfg, onSetEditCfg }: QuestionBuilderProps)
       {/* Add question buttons */}
       <div className="mt-5">
         <div className="builder-section-label">AJOUTER UNE QUESTION</div>
-        <div className="flex mt8 flex-wrap">
+        <div className="flex mt8 flex-wrap gap-2">
           {TYPES.map(t => (
             <Button key={t} variant="secondary" size="sm" onClick={() => addQuestion(t)}>
               <FiPlus /> {TYPE_LABELS[t] || t}

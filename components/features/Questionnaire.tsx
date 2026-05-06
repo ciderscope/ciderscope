@@ -47,7 +47,6 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
   // Setter stable : lit `ja` depuis la ref pour ne pas être ré-instancié à
   // chaque saisie. Permet aux QuestionInput memoïsés en aval de ne pas se
   // re-rendre quand seul `ja` change pour un autre champ que le leur.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleUpdate = useCallback((ctx: string, qid: string, val: AnswerValue) => {
     const cur = jaRef.current;
     setJa({ ...cur, [ctx]: { ...(cur[ctx] || {}), [qid]: val } });
@@ -56,7 +55,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
   // Cache un `onChange(val)` stable par couple (ctx, qid) — sinon l'arrow
   // créée à chaque render casserait React.memo sur QuestionInput.
   // L'instance est jetée quand `handleUpdate` change (rare).
-  const onChangeMap = useMemo(() => new Map<string, (val: AnswerValue) => void>(), [handleUpdate]);
+  const onChangeMap = useMemo(() => new Map<string, (val: AnswerValue) => void>(), []);
   const getOnChange = useCallback((ctx: string, qid: string) => {
     const k = `${ctx}|${qid}`;
     let cb = onChangeMap.get(k);

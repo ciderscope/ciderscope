@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, Dispatch, SetStateAction } from "react";
 import dynamic from "next/dynamic";
-import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart } from "react-icons/fi";
+import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { Badge } from "../../ui/Badge";
-import { ConfirmDialog, DangerGhostButton } from "../../ui/ViewPrimitives";
+import { DangerGhostButton, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { SessionConfig, SessionListItem, AllAnswers, CSVRow, AppScreen } from "../../../types";
 
 // Import subcomponents
@@ -94,66 +94,54 @@ export const AdminView = ({
         )}
 
         {adminSection === "seances" && (
-          <div className="admin-grid">
-            <header className="admin-header">
-              <div>
-                <h2 className="font-extrabold text-[clamp(17px,2.5vw,22px)]">Séances</h2>
-                <p className="text-[11px] text-[var(--mid)] mt-1 uppercase tracking-wider font-mono">Panel et configuration</p>
-              </div>
-              <Button onClick={onNewSession} size="sm">
-                <FiPlus /> Nouvelle séance
-              </Button>
-            </header>
-
-            <div className="sessions-list">
-              {sessions.map(s => (
-                <Card key={s.id} className="session-item-admin">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-bold text-lg">{s.name}</h3>
-                        {s.active && <Badge variant="ok">Active</Badge>}
-                        {!s.active && <Badge variant="ns">Fermée</Badge>}
+          <>
+            <div className="flex items-center gap-3.5 mb-6 flex-wrap">
+              <h2 className="font-extrabold text-[22px]">Séances</h2>
+              <div className="flex-1"></div>
+              <Button size="sm" onClick={onNewSession}>+ Nouvelle</Button>
+            </div>
+            <div id="sessList">
+              {sessions.length === 0 ? (
+                <div className="no-session">Aucune séance.</div>
+              ) : (
+                sessions.map(s => (
+                  <div key={s.id} className="sess-list-card">
+                    <div>
+                      <div className="name">
+                        {s.name}
+                        {s.active ? <Badge variant="active">ACTIVE</Badge> : <Badge variant="inactive">INACTIVE</Badge>}
                       </div>
-                      <div className="flex gap-4 text-[13px] text-[var(--mid)]">
-                        <span><strong>{s.jurorCount}</strong> jurys</span>
-                        <span><strong>{s.productCount}</strong> échantillons</span>
-                      </div>
+                      <div className="info">{s.date} · {s.productCount} éch. · {s.questionCount} Q · {s.jurorCount} jurys</div>
                     </div>
-                    <div className="flex gap-1.5">
-                      <button className="admin-icon-btn" title="Modifier" onClick={() => onEditSession(s.id)}><FiEdit2 size={16} /></button>
-                      <button className="admin-icon-btn" title="Dupliquer" onClick={() => onDuplicateSession(s.id)}><FiCopy size={16} /></button>
-                      <button className="admin-icon-btn !text-[var(--danger)]" title="Supprimer" onClick={() => setConfirmingId(s.id)}><FiX size={18} /></button>
+                    <div className="spacer"></div>
+                    <div className="actions">
+                      {s.active
+                        ? <Button variant="ghost" size="sm" onClick={() => onToggleActive(s.id)}>Désactiver</Button>
+                        : <Button variant="ok" size="sm" onClick={() => onToggleActive(s.id)}>Activer</Button>}
+                      <Button
+                        variant={s.resultsVisible ? "ok" : "ghost"}
+                        size="sm"
+                        onClick={() => onToggleResultsVisible(s.id)}
+                        title={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
+                      >
+                        <FiPieChart /> {s.resultsVisible ? "Résumé visible" : "Partager résumé"}
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier"><FiEdit2 /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer"><FiCopy /></Button>
+                      {confirmingId === s.id ? (
+                        <div className="flex gap-1">
+                          <Button variant="danger" size="sm" onClick={() => { onDeleteSession(s.id); setConfirmingId(null); }}>Confirmer ?</Button>
+                          <Button variant="ghost" size="sm" onClick={() => setConfirmingId(null)}>Annuler</Button>
+                        </div>
+                      ) : (
+                        <DangerGhostButton onClick={() => setConfirmingId(s.id)} title="Supprimer"><FiX /></DangerGhostButton>
+                      )}
                     </div>
                   </div>
-
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex gap-3 flex-wrap">
-                    <Button
-                      variant={s.active ? "secondary" : "primary"}
-                      size="sm"
-                      onClick={() => onToggleActive(s.id)}
-                    >
-                      {s.active ? "Fermer la séance" : "Ouvrir la séance"}
-                    </Button>
-                    
-                    <button
-                      className="text-xs px-3 py-1.5 border border-[var(--border)] rounded-md hover:bg-[var(--paper2)] transition-colors inline-flex items-center gap-1.5"
-                      onClick={() => onToggleResultsVisible(s.id)}
-                    >
-                      {s.resultsVisible ? <FiEye size={14} /> : <FiEyeOff size={14} />}
-                      {s.resultsVisible ? "Résultats visibles" : "Résultats masqués"}
-                    </button>
-                  </div>
-                </Card>
-              ))}
-
-              {sessions.length === 0 && (
-                <div className="p-12 text-center border-2 border-dashed border-[var(--border)] rounded-2xl text-[var(--mid)]">
-                  Aucune séance créée. Commencez par en ajouter une.
-                </div>
+                ))
               )}
             </div>
-          </div>
+          </>
         )}
 
         {confirmingId && (

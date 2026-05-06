@@ -15,6 +15,7 @@ const NAV = [
 export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarProps) => (
   <div className="topbar">
     <div className="topbar-logo">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/assets/logo.png" alt="IFPC" />
       <span className="topbar-logo-ifpc">IFPC</span>
       <span className="topbar-logo-sep">·</span>

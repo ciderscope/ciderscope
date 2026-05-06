@@ -1,45 +1,47 @@
 "use client";
 import React from "react";
 import { FiArrowLeft } from "react-icons/fi";
+import { Button } from "../../ui/Button";
 import { PosteDay } from "../../../types";
 
 interface PosteScreenProps {
   onGoBack: () => void;
   takenPostes: Record<string, string>;
   onSelectPoste: (day: PosteDay, num: number) => void;
+  cj: string; // current juror
 }
 
-export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste }: PosteScreenProps) => {
+export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste, cj }: PosteScreenProps) => {
   const days: PosteDay[] = ["mardi", "jeudi"];
-  const postes = Array.from({ length: 12 }, (_, i) => i + 1);
+  const numbers = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
     <div className="poste-selection">
-      <header className="step-header">
-        <button className="back-btn" onClick={onGoBack}><FiArrowLeft /> Retour</button>
-        <h2>Votre poste de dégustation</h2>
-      </header>
-
-      <p className="sub">Choisissez votre numéro de poste pour cette demi-journée.</p>
-
-      <div className="poste-grid-container">
-        {days.map(day => (
-          <div key={day} className="day-section">
-            <h3 className="day-title">{day === "mardi" ? "Mardi" : "Jeudi"}</h3>
-            <div className="poste-grid">
-              {postes.map(num => {
-                const key = `${day}${num}`;
-                const takenBy = takenPostes[key];
+      <h2>Votre poste</h2>
+      <p className="sub">
+        Sélectionnez le numéro indiqué sur votre feuille de service.
+      </p>
+      <div className="poste-grid">
+        {days.map(d => (
+          <div key={d} className="poste-col">
+            <h3 className="poste-col-title">{d.charAt(0).toUpperCase() + d.slice(1)}</h3>
+            <div className="poste-list">
+              {numbers.map(n => {
+                const key = `${d}-${n}`;
+                const owner = takenPostes[key];
+                const taken = !!owner && owner !== cj;
+                const mine = owner === cj;
                 return (
                   <button
-                    key={num}
-                    className={`poste-btn ${takenBy ? "taken" : ""}`}
-                    disabled={!!takenBy}
-                    onClick={() => onSelectPoste(day, num)}
-                    title={takenBy ? `Occupé par ${takenBy}` : `Poste ${num}`}
+                    key={n}
+                    type="button"
+                    className={`poste-btn ${taken ? "taken" : ""} ${mine ? "mine" : ""}`}
+                    onClick={() => !taken && onSelectPoste(d, n)}
+                    disabled={taken}
+                    title={taken ? `Pris par ${owner}` : `Poste ${n}`}
                   >
-                    <span className="num">{num}</span>
-                    {takenBy && <span className="taken-by">{takenBy}</span>}
+                    <span className="poste-num">{n}</span>
+                    {taken && <span className="poste-owner">{owner}</span>}
                   </button>
                 );
               })}
@@ -47,6 +49,7 @@ export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste }: PosteScree
           </div>
         ))}
       </div>
+      <Button variant="ghost" size="sm" className="mt16" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
     </div>
   );
 };

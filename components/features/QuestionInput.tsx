@@ -994,7 +994,7 @@ const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Q
 
   // Familles = valeur minimale (0) → toujours visibles au départ.
   // Classes / mots = 0 → visibles dès que la famille parente est dépliée.
-  const defaults = useMemo(() => ({ family: mn, child: mn }), [mn, mx]);
+  const defaults = useMemo(() => ({ family: mn, child: mn }), [mn]);
 
   const answer: RadarAnswer = useMemo(
     () => normalizeRadarValue(value, allAxes, defaults),
