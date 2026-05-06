@@ -60,11 +60,6 @@
      le bloc @media (prefers-color-scheme: dark) plus bas. */
   --chart-grid:  rgba(0, 0, 0, .08);
   --chart-axis:  #6B7280;
-
-  /* Accent par défaut pour tous les contrôles natifs (sliders, checkbox,
-     radio, progress). Évite que les tablettes Android/iOS n'utilisent
-     l'accent système (souvent rouge/violet selon le thème) en mode sombre. */
-  accent-color: var(--accent);
 }
 
 /* ══════════════════════════════════════════
@@ -81,7 +76,7 @@
        leur identité IFPC mais ne brûlent plus l'œil sur fond sombre. */
     --primary:   #86b53b;
     --primary-2: #6f9b2c;
-    --accent:    #ffa838;
+    --accent:    #ffcc33;     /* Plus jaune/clair pour éviter le rendu rouge sur tablettes */
     --accent2:   #e08e1e;
     --highlight: #cdd24c;
     --sand:      #d8b06a;
@@ -98,7 +93,7 @@
     --mid2:   #6b7480;
 
     --ok:     #86b53b;
-    --warn:   #ffa838;
+    --warn:   #ffcc33;
     --danger: #e57373;
 
     --border:        rgba(255, 255, 255, 0.10);
@@ -623,11 +618,6 @@ canvas { max-width: 100%; }
 input[type=range] {
   flex: 1; -webkit-appearance: none; appearance: none;
   height: 4px; background: var(--paper3); border-radius: 10px; outline: none; cursor: pointer;
-  /* Sur tablette en mode sombre (color-scheme: dark), Chrome/Android utilisait
-     l'accent système (souvent rouge/violet selon le thème Material You) pour
-     la portion remplie du track quand on n'explicite pas accent-color. On
-     verrouille la couleur sur notre orange IFPC dans tous les modes. */
-  accent-color: var(--accent);
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
