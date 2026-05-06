@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, Dispatch, SetStateAction } from "react";
 import dynamic from "next/dynamic";
-import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart } from "react-icons/fi";
+import { FiEdit2, FiCopy, FiEye, FiEyeOff, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { Badge } from "../../ui/Badge";
