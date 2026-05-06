@@ -112,11 +112,11 @@ export const AdminView = ({
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-bold text-lg">{s.name}</h3>
-                        {s.isActive && <Badge variant="ok">Active</Badge>}
-                        {!s.isActive && <Badge variant="ns">Fermée</Badge>}
+                        {s.active && <Badge variant="ok">Active</Badge>}
+                        {!s.active && <Badge variant="ns">Fermée</Badge>}
                       </div>
                       <div className="flex gap-4 text-[13px] text-[var(--mid)]">
-                        <span><strong>{s.juryCount}</strong> jurys</span>
+                        <span><strong>{s.jurorCount}</strong> jurys</span>
                         <span><strong>{s.productCount}</strong> échantillons</span>
                       </div>
                     </div>
@@ -129,11 +129,11 @@ export const AdminView = ({
 
                   <div className="mt-4 pt-4 border-t border-[var(--border)] flex gap-3 flex-wrap">
                     <Button
-                      variant={s.isActive ? "secondary" : "primary"}
+                      variant={s.active ? "secondary" : "primary"}
                       size="sm"
                       onClick={() => onToggleActive(s.id)}
                     >
-                      {s.isActive ? "Fermer la séance" : "Ouvrir la séance"}
+                      {s.active ? "Fermer la séance" : "Ouvrir la séance"}
                     </Button>
                     
                     <button
