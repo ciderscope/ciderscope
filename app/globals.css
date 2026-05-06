@@ -1196,6 +1196,106 @@ textarea.q-text:focus { border-color: var(--accent); }
 .admin-section-btn:hover { color: var(--ink); }
 .admin-section-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--paper2); }
 
+/* ── Édition d'une séance : header, retour, onglets, contenu ── */
+.admin-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 4px 18px; margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.admin-header h2 { font-size: 20px; font-weight: 800; line-height: 1.2; letter-spacing: -.2px; }
+.admin-header.edit-mode { position: sticky; top: 60px; z-index: 40; background: var(--paper2); }
+
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 12px; min-height: 36px;
+  background: var(--paper); border: 1px solid var(--border); border-radius: 8px;
+  font: inherit; font-weight: 600; font-size: 13px; color: var(--ink);
+  cursor: pointer; transition: background .12s, border-color .12s, transform .08s;
+}
+.back-btn:hover { background: var(--paper2); border-color: var(--border-strong); }
+.back-btn:active { transform: translateY(1px); }
+
+/* Onglets de l'éditeur de séance — pilule visible avec icône + label.
+   Utilise les mêmes couleurs que .admin-tab pour rester cohérent, mais
+   avec un peu plus de présence (hauteur, gap, fond actif). */
+.edit-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 6px; margin-bottom: 22px;
+  background: var(--paper2); border: 1px solid var(--border); border-radius: 12px;
+}
+.edit-tab {
+  flex: 1 1 auto; min-width: 140px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px 16px; min-height: 44px;
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  font: inherit; font-weight: 600; font-size: 14px; color: var(--mid);
+  cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+}
+.edit-tab:hover { color: var(--ink); background: var(--paper); }
+.edit-tab.active {
+  color: var(--ink); background: var(--paper);
+  border-color: var(--border-strong);
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.edit-tab.active svg { color: var(--accent); }
+
+.edit-content {
+  display: flex; flex-direction: column; gap: 18px;
+  padding-bottom: 32px;
+}
+
+/* Grille admin : une seule colonne avec espacement aéré entre cards. */
+.admin-grid-single {
+  display: flex; flex-direction: column; gap: 18px;
+}
+
+/* En-tête d'écran participant (Summary, etc.) */
+.step-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 4px 16px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.step-header h2 { font-size: 19px; font-weight: 800; letter-spacing: -.2px; }
+
+/* Écran "résumé" du jury : container scrollable plein écran. */
+.summary-screen {
+  max-width: min(96%, 1200px); margin: 0 auto;
+  padding: 16px 14px 80px;
+}
+.summary-scroll-area {
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+/* Écran "Terminé !" : carte centrale avec contenu condensé. */
+.done-box {
+  background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 32px 28px; box-shadow: var(--shadow);
+  text-align: center;
+}
+
+/* Petits "+" pour ajouter un descripteur dans le builder radar. */
+.chip-add {
+  width: 24px; height: 24px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; line-height: 1;
+  transition: background .12s, transform .08s;
+}
+.chip-add:hover { background: var(--paper2); transform: scale(1.08); }
+.chip-add:active { transform: scale(0.92); }
+
+@media (max-width: 720px) {
+  .admin-header { gap: 8px; padding: 8px 2px 14px; }
+  .admin-header h2 { font-size: 17px; }
+  .back-btn { padding: 7px 10px; font-size: 12.5px; min-height: 34px; }
+  .edit-tabs { padding: 4px; gap: 4px; }
+  .edit-tab { min-width: 0; padding: 9px 12px; font-size: 13px; min-height: 40px; }
+  .edit-tab > svg { display: none; }
+  .step-header { gap: 10px; padding: 8px 2px 12px; }
+  .step-header h2 { font-size: 16.5px; }
+  .summary-screen { padding: 10px 8px 80px; }
+  .done-box { padding: 24px 18px; }
+}
+
 .sample-picker { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
 .sample-picker-btn {
   background: var(--paper); border: 1px solid var(--border); border-radius: 6px;
