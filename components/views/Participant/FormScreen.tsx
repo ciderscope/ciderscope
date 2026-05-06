@@ -185,22 +185,35 @@ export const FormScreen = ({
         <ConfirmModal
           title="Attention : réponses incomplètes"
           message={
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2.5">
               <p>Certains critères de la toile d&apos;araignée n&apos;ont pas été évalués.</p>
               {radarIssues.untouched.length > 0 && (
-                <div><strong>Familles ignorées :</strong> {radarIssues.untouched.join(", ")}</div>
+                <div>
+                  <strong>Curseurs jamais validés :</strong>
+                  <ul className="mt-1 ml-4 list-disc text-[13px]">
+                    {radarIssues.untouched.map(f => <li key={f}><em>{f}</em></li>)}
+                  </ul>
+                  <p className="text-[12px] text-[var(--mid)] mt-1">
+                    Touchez le pouce de chaque curseur (au moins une fois) pour confirmer votre évaluation, y compris si l&apos;intensité est nulle.
+                  </p>
+                </div>
               )}
               {radarIssues.emptyChildren.length > 0 && (
                 <div>
-                  <strong>Descripteurs manquants :</strong> Vous avez donné une note globale, mais le détail est vide pour : {radarIssues.emptyChildren.join(", ")}.
+                  <strong>Familles évaluées sans aucun descripteur précisé :</strong>
+                  <ul className="mt-1 ml-4 list-disc text-[13px]">
+                    {radarIssues.emptyChildren.map(f => <li key={f}><em>{f}</em></li>)}
+                  </ul>
+                  <p className="text-[12px] text-[var(--mid)] mt-1">
+                    Si une famille a une intensité &gt; 0, dépliez-la (bouton +) et notez au moins un de ses descripteurs.
+                  </p>
                 </div>
               )}
             </div>
           }
-          confirmLabel="Passer quand même"
-          cancelLabel="Compléter"
+          confirmLabel="Compris, je corrige"
           tone="warn"
-          onConfirm={() => { setRadarIssues(null); setConfirmNext(true); }}
+          onConfirm={() => setRadarIssues(null)}
           onCancel={() => setRadarIssues(null)}
         />
       )}

@@ -327,8 +327,9 @@ function setNodeAtPath(
 
   const updateNode = (node: RadarNodeAnswer, remaining: string[]): RadarNodeAnswer => {
     if (remaining.length === 0) {
-      // Nœud cible : on applique la nouvelle valeur et on clampe les enfants vers le bas.
-      return clampNodeTree({ ...node, _: newValue }, newValue);
+      // Nœud cible : on applique la nouvelle valeur, on marque comme touché,
+      // et on clampe les enfants vers le bas.
+      return clampNodeTree({ ...node, _: newValue, _touched: true }, newValue);
     }
     const [h, ...t] = remaining;
     const child = node.children?.[h] ?? { _: 0 };
@@ -340,6 +341,7 @@ function setNodeAtPath(
     return {
       ...node,
       _: nextVal,
+      _touched: node._touched || (nextVal !== node._), // Marque aussi le parent comme touché si sa valeur a changé
       children: { ...node.children, [h]: updatedChild }
     };
   };
@@ -359,9 +361,8 @@ function setFamilyTouched(answer: RadarAnswer, axisLabel: string): RadarAnswer {
 // Validation appelée au passage à l'étape suivante (radar uniquement).
 // Renvoie deux listes pour le modal :
 //   - untouched : familles qui n'ont jamais été interagies (ni drag, ni tap).
-//   - emptyChildren : familles dont la valeur est > min mais dont aucune
-//     classe directe (depth 1) n'a été levée au-dessus de min.
-// Les sous-sous-catégories ne sont pas inspectées.
+//   - emptyChildren : nœuds (familles ou classes) dont la valeur est > min
+//     mais dont aucun enfant direct n'a été levé au-dessus de min.
 export interface RadarValidationIssues {
   untouched: string[];
   emptyChildren: string[];
@@ -372,23 +373,49 @@ export function validateRadarAnswer(
   min: number
 ): RadarValidationIssues {
   const out: RadarValidationIssues = { untouched: [], emptyChildren: [] };
-  for (const ax of axes) {
-    const node = answer[ax.label];
+
+  const checkNode = (node: RadarNodeAnswer | undefined, ax: RadarAxis) => {
+    // 1. Check if touched (only for root families)
     if (!node || !node._touched) {
-      out.untouched.push(ax.label);
-      continue;
+      // On ne remonte que les familles racines dans "untouched" pour ne pas
+      // polluer le modal, car les enfants ne sont visibles que si le parent est touché/étendu.
+      return;
     }
+
+    // 2. Si > min, on vérifie qu'au moins un enfant est aussi > min
     if (node._ > min) {
       const childAxes = ax.children && ax.children.length > 0
         ? ax.children
         : (ax.subCriteria || []).map(l => ({ label: l } as RadarAxis));
+      
       if (childAxes.length > 0) {
-        const anyChildAboveMin = childAxes.some(c => {
-          const cn = node.children?.[c.label];
-          return (cn?._ ?? min) > min;
-        });
-        if (!anyChildAboveMin) out.emptyChildren.push(ax.label);
+        const childrenNodes = childAxes.map(c => ({
+          ax: c,
+          node: node.children?.[c.label]
+        }));
+
+        const anyChildAboveMin = childrenNodes.some(c => (c.node?._ ?? min) > min);
+        
+        if (!anyChildAboveMin) {
+          out.emptyChildren.push(ax.label);
+        } else {
+          // Récursion : on vérifie les enfants qui sont > min
+          for (const c of childrenNodes) {
+            if (c.node && c.node._ > min) {
+              checkNode(c.node, c.ax);
+            }
+          }
+        }
       }
+    }
+  };
+
+  for (const ax of axes) {
+    const node = answer[ax.label];
+    if (!node || !node._touched) {
+      out.untouched.push(ax.label);
+    } else {
+      checkNode(node, ax);
     }
   }
   return out;
@@ -653,7 +680,7 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
   const customForHere = customChildren[pathKey] || [];
 
   const isFamily = path.length === 1;
-  const untouchedFlag = isFamily && familyTouched === false;
+  const untouchedFlag = !nodeAnswer._touched;
 
   return (
     <div
@@ -667,8 +694,8 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
           max={max}
           value={v}
           onChange={(nv) => setPathValue(path, nv)}
-          onTap={isFamily ? onTouchFamily : undefined}
-          touched={isFamily ? familyTouched : false}
+          onTap={() => setPathValue(path, v)} // Re-valider la valeur courante = marquer comme touché
+          touched={!!nodeAnswer._touched}
           ariaLabel={axis.label}
           thumbOnly
         />
