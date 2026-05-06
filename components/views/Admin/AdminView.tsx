@@ -247,19 +247,9 @@ export const AdminView = ({
                 </div>
               </Card>
 
-              <Card title="Options avancées">
-                <label className="toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={editCfg.presMode === "latin"}
-                    onChange={(e) => onSetEditCfg({ ...editCfg, presMode: e.target.checked ? "latin" : "fixed" })}
-                  />
-                  <span>
-                    <strong>Williams Design (Carré latin)</strong>
-                    <div className="text-[11px] text-[var(--mid)]">Équilibre les effets d&apos;ordre et de report entre jurys.</div>
-                  </span>
-                </label>
-              </Card>
+              {/* Option "Williams Design (Carré latin)" masquée à la demande.
+                  La logique reste branchée côté hook (presMode peut valoir
+                  "latin"/"fixed"/"random") ; on n'expose juste plus le toggle. */}
 
               <div className="py-6">
                 <DangerGhostButton onClick={() => onDeleteSession(editSessId!)}>Supprimer définitivement la séance</DangerGhostButton>
