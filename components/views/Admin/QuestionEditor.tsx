@@ -133,7 +133,7 @@ export function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDupl
                     <input
                       value={q.questionText || ""}
                       onChange={(e) => onUpdate({ questionText: e.target.value })}
-                      placeholder="Ex : À quel cidre de référence l'échantillon test est-il similaire ?"
+                      placeholder=""
                     />
                   </div>
                 </div>
@@ -155,7 +155,7 @@ export function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDupl
                     <input
                       value={q.questionText || ""}
                       onChange={(e) => onUpdate({ questionText: e.target.value })}
-                      placeholder="Ex : Les échantillons tests sont-ils différents de l'échantillon de référence ?"
+                      placeholder=""
                     />
                   </div>
                 </div>

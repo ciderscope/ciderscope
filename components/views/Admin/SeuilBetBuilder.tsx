@@ -35,7 +35,7 @@ export function SeuilBetBuilder({ levels, onChange }: SeuilBetBuilderProps) {
             <span className="font-bold text-xs text-[var(--mid)]">#{i + 1}</span>
             <input
               value={lv.label}
-              placeholder="Libellé (ex. 0,1 g/L)"
+              placeholder="Libellé"
               onChange={e => updateLevel(i, { label: e.target.value })}
               className="flex-1 px-2.5 py-1.5 rounded-md border border-[var(--border)] text-[13px]"
             />

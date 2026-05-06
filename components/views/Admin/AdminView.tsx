@@ -197,16 +197,12 @@ export const AdminView = ({
                     <input
                       value={editCfg.name}
                       onChange={(e) => onSetEditCfg({ ...editCfg, name: e.target.value })}
-                      placeholder="Ex: Dégustation Cidres AOC"
                     />
                   </div>
                 </div>
               </Card>
 
               <Card title="Échantillons">
-                <p className="text-[11px] text-[var(--mid)] mb-3">
-                  Ajoutez les codes des produits à déguster (ex: 402, 781).
-                </p>
                 <div className="flex flex-col gap-2">
                   {editCfg.products.map((p, i) => (
                     <div key={i} className="flex gap-2 items-start">
@@ -217,7 +213,7 @@ export const AdminView = ({
                           n[i] = { ...n[i], code: e.target.value.toUpperCase() };
                           onSetEditCfg({ ...editCfg, products: n });
                         }}
-                        className="w-24 font-mono font-bold text-center"
+                        className="w-24 font-mono font-bold text-left"
                         placeholder="Code"
                       />
                       <input
@@ -228,7 +224,7 @@ export const AdminView = ({
                           onSetEditCfg({ ...editCfg, products: n });
                         }}
                         className="flex-1"
-                        placeholder="Libellé optionnel (ex: Cidre Brut)"
+                        placeholder="Libellé optionnel"
                       />
                       <button
                         className="chip-x mt-2"
@@ -240,7 +236,18 @@ export const AdminView = ({
                     variant="ghost"
                     size="sm"
                     className="self-start mt-1"
-                    onClick={() => onSetEditCfg({ ...editCfg, products: [...editCfg.products, { code: "" }] })}
+                    onClick={() => {
+                      // Tire un code à 3 chiffres (101–999) non encore utilisé
+                      // dans la séance, pour éviter les doublons à la saisie.
+                      const used = new Set(editCfg.products.map(p => p.code).filter(Boolean));
+                      let code = "";
+                      for (let attempt = 0; attempt < 50; attempt++) {
+                        const n = 101 + Math.floor(Math.random() * 899);
+                        const c = String(n);
+                        if (!used.has(c)) { code = c; break; }
+                      }
+                      onSetEditCfg({ ...editCfg, products: [...editCfg.products, { code }] });
+                    }}
                   >
                     <FiPlus /> Ajouter un échantillon
                   </Button>
