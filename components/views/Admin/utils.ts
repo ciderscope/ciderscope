@@ -1,5 +1,5 @@
 "use client";
-import { RadarAxis } from "../../types";
+import { RadarAxis } from "../../../types";
 
 // Génère un id unique pour une nouvelle question/groupe.
 export const nextId = (prefix: string): string => {

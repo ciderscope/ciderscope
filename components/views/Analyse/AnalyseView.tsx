@@ -2,9 +2,6 @@
 import React, { useEffect, useMemo } from "react";
 import { ScrollableTabs } from "../../ui/ScrollableTabs";
 import {
-  AnalysisEmpty,
-} from "../../ui/AnalysisPrimitives";
-import {
   Chart as ChartJS,
   RadialLinearScale,
   PointElement,

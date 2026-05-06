@@ -44,8 +44,6 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStepIdx]);
 
-  if (!step) return null;
-
   // Setter stable : lit `ja` depuis la ref pour ne pas être ré-instancié à
   // chaque saisie. Permet aux QuestionInput memoïsés en aval de ne pas se
   // re-rendre quand seul `ja` change pour un autre champ que le leur.
@@ -68,6 +66,8 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
     }
     return cb;
   }, [handleUpdate, onChangeMap]);
+
+  if (!step) return null;
 
   return (
     <div className="product-card">

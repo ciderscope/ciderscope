@@ -100,6 +100,7 @@ export const ParticipantView = (props: ParticipantViewProps) => {
       {screen === "done" && props.curSess && (
         <DoneScreen
           curSess={props.curSess}
+          resultsVisible={props.sessions.find(s => s.id === props.curSessId)?.resultsVisible}
           onReviewAnswers={props.onReviewAnswers}
           onShowSummary={props.onShowSummary}
         />

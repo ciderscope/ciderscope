@@ -6,11 +6,12 @@ import { SessionConfig } from "../../../types";
 
 interface DoneScreenProps {
   curSess: SessionConfig;
+  resultsVisible?: boolean;
   onReviewAnswers: () => void;
   onShowSummary: () => void;
 }
 
-export const DoneScreen = ({ curSess, onReviewAnswers, onShowSummary }: DoneScreenProps) => (
+export const DoneScreen = ({ resultsVisible, onReviewAnswers, onShowSummary }: DoneScreenProps) => (
   <div className="done-screen">
     <div className="done-card">
       <FiCheckCircle size={64} className="done-icon" />
@@ -19,7 +20,7 @@ export const DoneScreen = ({ curSess, onReviewAnswers, onShowSummary }: DoneScre
 
       <div className="done-actions">
         <Button variant="ghost" onClick={onReviewAnswers}>Relire mes réponses</Button>
-        {curSess.resultsVisible && (
+        {resultsVisible && (
           <Button onClick={onShowSummary} className="summary-btn">
             <FiPieChart /> Voir les résultats du panel
           </Button>

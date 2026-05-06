@@ -10,7 +10,7 @@ interface PosteScreenProps {
 }
 
 export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste }: PosteScreenProps) => {
-  const days: PosteDay[] = ["M", "A"];
+  const days: PosteDay[] = ["mardi", "jeudi"];
   const postes = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
@@ -25,7 +25,7 @@ export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste }: PosteScree
       <div className="poste-grid-container">
         {days.map(day => (
           <div key={day} className="day-section">
-            <h3 className="day-title">{day === "M" ? "Matin" : "Après-midi"}</h3>
+            <h3 className="day-title">{day === "mardi" ? "Mardi" : "Jeudi"}</h3>
             <div className="poste-grid">
               {postes.map(num => {
                 const key = `${day}${num}`;

@@ -56,7 +56,7 @@ export const OrderScreen = ({ onGoBack, steps, onStartFromOrder }: OrderScreenPr
       </div>
 
       <div className="mt-8 text-center">
-        <Button onClick={onStartFromOrder} size="lg">Commencer la séance <FiArrowRight /></Button>
+        <Button onClick={onStartFromOrder} size="md">Commencer la séance <FiArrowRight /></Button>
       </div>
     </div>
   );

@@ -10,7 +10,6 @@ import {
   ANALYSIS_CHART_BOX,
   ToolbarLabel,
   OK_TEXT,
-  significanceClass,
   confidenceClass
 } from "../../ui/AnalysisPrimitives";
 import { anovaTwoWay, pca2D, rvCoefficient } from "../../../lib/stats";

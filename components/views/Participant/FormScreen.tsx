@@ -25,7 +25,6 @@ export const FormScreen = ({
   onHome, steps, cs, completion, isStepComplete, onPrevStep, onNextStep,
   curSess, cj, ja, onSetJa, onValidateStep
 }: FormScreenProps) => {
-  const currentStep = steps[cs];
   const isLast = cs >= steps.length - 1;
 
   return (
@@ -47,18 +46,17 @@ export const FormScreen = ({
 
       <div className="form-container">
         <Questionnaire
-          key={cs}
-          step={currentStep}
-          config={curSess}
-          answers={ja}
-          onChange={onSetJa}
-          onValidate={() => onValidateStep(cs)}
+          steps={steps}
+          currentStepIdx={cs}
+          ja={ja}
+          setJa={onSetJa}
+          products={curSess.products}
         />
 
         <div className="form-nav">
           <Button variant="ghost" onClick={onPrevStep} disabled={cs === 0}><FiArrowLeft /> Précédent</Button>
           <div className="flex-1" />
-          <Button onClick={onNextStep} disabled={!isStepComplete(cs)}>
+          <Button onClick={() => { onValidateStep(cs); onNextStep(); }} disabled={!isStepComplete(cs)}>
             {isLast ? "Terminer" : "Suivant"} <FiArrowRight />
           </Button>
         </div>
@@ -66,3 +64,4 @@ export const FormScreen = ({
     </div>
   );
 };
+
