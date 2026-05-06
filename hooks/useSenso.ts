@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, Product, SessionStep, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
-import { hsh, wlm, formatVal } from "../lib/utils";
+import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, SessionStep, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
+import { hsh, wlm } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
 

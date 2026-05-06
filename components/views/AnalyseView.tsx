@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState, Fragment } from "react";
+import React, { useEffect, useMemo, useState, Fragment } from "react";
 import { Card } from "../ui/Card";
 import { ScrollableTabs } from "../ui/ScrollableTabs";
 import {
@@ -58,7 +58,46 @@ ChartJS.register(
   CategoryScale, LinearScale, BarElement
 );
 
-const COLORS = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
+// Palettes série Chart.js — version sombre éclaircie pour rester lisible
+// sur fond noir. La sélection est runtime via prefers-color-scheme et
+// l'arbre se rafraîchit grâce à useDarkMode() en tête de AnalyseView.
+const COLORS_LIGHT = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
+const COLORS_DARK  = ["#ef7a3c", "#5b9cc1", "#5cab73", "#bb7fbb", "#c0a13a", "#a07a5e", "#5b8db1", "#92a35a"];
+function getChartColors(): string[] {
+  if (typeof window === "undefined") return COLORS_LIGHT;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? COLORS_DARK : COLORS_LIGHT;
+}
+// Hook déclenchant un re-render de l'arbre au changement de thème OS.
+// Utilisé une fois en tête de AnalyseView : ses descendants se re-rendent
+// alors avec la palette à jour.
+function useDarkMode(): boolean {
+  const [dark, setDark] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const cb = (e: MediaQueryListEvent) => setDark(e.matches);
+    mq.addEventListener("change", cb);
+    return () => mq.removeEventListener("change", cb);
+  }, []);
+  return dark;
+}
+
+// Synchronise les couleurs par défaut de Chart.js (axes, grille, tooltip)
+// avec les variables CSS — qui basculent automatiquement en mode sombre.
+function syncChartDefaults() {
+  if (typeof document === "undefined") return;
+  const styles = getComputedStyle(document.documentElement);
+  const axis = styles.getPropertyValue("--chart-axis").trim() || "#6B7280";
+  const grid = styles.getPropertyValue("--chart-grid").trim() || "rgba(0,0,0,.08)";
+  ChartJS.defaults.color = axis;
+  ChartJS.defaults.borderColor = grid;
+  // Chart.js v4 : la grille est sur le scale.
+  if (ChartJS.defaults.scale?.grid) {
+    (ChartJS.defaults.scale.grid as { color: string }).color = grid;
+  }
+}
 // ─── Stats helpers ───────────────────────────────────────────────────────────
 
 // Conformité = corrélation de Pearson entre notes du jury et moyennes du panel
@@ -79,7 +118,8 @@ const pearson = (xs: number[], ys: number[]): number => {
 function wordColor(w: string) {
   let h = 0;
   for (const c of w) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
-  return COLORS[h % COLORS.length];
+  const palette = getChartColors();
+  return palette[h % palette.length];
 }
 
 // ─── Dynamic tab computation ──────────────────────────────────────────────────
@@ -179,6 +219,14 @@ export const AnalyseView = ({
   participantMode = false, currentJuror,
 }: AnalyseViewProps) => {
   const csvData = useMemo(() => buildCsvData(anCfg, allAnswers), [anCfg, allAnswers]);
+
+  // Theming Chart.js : on aligne les défauts (axes, grille) sur les variables
+  // CSS qui basculent en mode sombre. useDarkMode déclenche un re-render au
+  // changement de thème OS, ce qui propage la palette à tous les graphes.
+  const isDark = useDarkMode();
+  useEffect(() => {
+    syncChartDefaults();
+  }, [isDark]);
 
   const tabs = useMemo(() => {
     const all = computeTabs(anCfg);
@@ -494,8 +542,8 @@ function AnalyseFriedman({ config, data, type, questionLabel }: { config: Sessio
           datasets: [{
             label: "Rang moyen",
             data: sortedByMean.map((p: string) => parseFloat(rankMeans[p].toFixed(2))),
-            backgroundColor: sortedByMean.map((_, i) => COLORS[i % 8] + "cc"),
-            borderColor: sortedByMean.map((_, i) => COLORS[i % 8]),
+            backgroundColor: sortedByMean.map((_, i) => getChartColors()[i % 8] + "cc"),
+            borderColor: sortedByMean.map((_, i) => getChartColors()[i % 8]),
             borderWidth: 1,
           }]
         };
@@ -1239,9 +1287,9 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             datasets: products.map((p, pi) => ({
               label: p.code,
               data: displayCriteria.map(c => avg(p.code, c)),
-              borderColor: COLORS[pi % 8],
-              backgroundColor: COLORS[pi % 8] + "22",
-              pointBackgroundColor: COLORS[pi % 8],
+              borderColor: getChartColors()[pi % 8],
+              backgroundColor: getChartColors()[pi % 8] + "22",
+              pointBackgroundColor: getChartColors()[pi % 8],
             }))
           };
 
@@ -1250,9 +1298,9 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             datasets: products.map((p, pi) => ({
               label: p.code,
               data: displayCriteria.map(c => getNote(currentJuror, p.code, c) ?? 0),
-              borderColor: COLORS[pi % 8],
-              backgroundColor: COLORS[pi % 8] + "22",
-              pointBackgroundColor: COLORS[pi % 8],
+              borderColor: getChartColors()[pi % 8],
+              backgroundColor: getChartColors()[pi % 8] + "22",
+              pointBackgroundColor: getChartColors()[pi % 8],
             }))
           } : null;
 
@@ -1379,8 +1427,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                   datasets: products.map((p, i) => ({
                     label: p.code,
                     data: [{ x: pcaRes.scores[i][0], y: pcaRes.scores[i][1], label: p.code }],
-                    backgroundColor: COLORS[i % 8],
-                    borderColor: COLORS[i % 8],
+                    backgroundColor: getChartColors()[i % 8],
+                    borderColor: getChartColors()[i % 8],
                     pointRadius: 7,
                     pointHoverRadius: 10,
                   }))
@@ -1437,8 +1485,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                           { x: 0, y: 0 },
                           { x: lx, y: ly },
                         ],
-                        borderColor: COLORS[i % 8],
-                        backgroundColor: COLORS[i % 8],
+                        borderColor: getChartColors()[i % 8],
+                        backgroundColor: getChartColors()[i % 8],
                         borderWidth: 1,
                         pointStyle: ["circle", "triangle"] as Array<"circle" | "triangle">,
                         pointRadius: [0, 5],
