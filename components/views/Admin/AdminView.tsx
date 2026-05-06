@@ -159,6 +159,7 @@ export const AdminView = ({
         {confirmingId && (
           <ConfirmDialog
             title="Supprimer la séance ?"
+            confirmLabel="Supprimer"
             onCancel={() => setConfirmingId(null)}
             onConfirm={() => { onDeleteSession(confirmingId); setConfirmingId(null); }}
           >
