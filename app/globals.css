@@ -60,6 +60,11 @@
      le bloc @media (prefers-color-scheme: dark) plus bas. */
   --chart-grid:  rgba(0, 0, 0, .08);
   --chart-axis:  #6B7280;
+
+  /* Accent par défaut pour tous les contrôles natifs (sliders, checkbox,
+     radio, progress). Évite que les tablettes Android/iOS n'utilisent
+     l'accent système (souvent rouge/violet selon le thème) en mode sombre. */
+  accent-color: var(--accent);
 }
 
 /* ══════════════════════════════════════════
@@ -618,11 +623,24 @@ canvas { max-width: 100%; }
 input[type=range] {
   flex: 1; -webkit-appearance: none; appearance: none;
   height: 4px; background: var(--paper3); border-radius: 10px; outline: none; cursor: pointer;
+  /* Sur tablette en mode sombre (color-scheme: dark), Chrome/Android utilisait
+     l'accent système (souvent rouge/violet selon le thème Material You) pour
+     la portion remplie du track quand on n'explicite pas accent-color. On
+     verrouille la couleur sur notre orange IFPC dans tous les modes. */
+  accent-color: var(--accent);
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
   background: var(--ink); border: 2px solid var(--accent);
   box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}
+input[type=range]::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--ink); border: 2px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}
+input[type=range]::-moz-range-progress {
+  background: var(--accent); height: 4px; border-radius: 10px;
 }
 .scale-value { font-family: inherit; font-weight: 800; font-size: 20px; color: var(--accent); min-width: 28px; text-align: center; }
 .scale-not-rated { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--mid); display: flex; align-items: center; gap: 5px; }
