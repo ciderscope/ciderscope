@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 
 import { ParticipantView } from "../components/views/Participant/ParticipantView";
 import { AdminLoginView } from "../components/views/Admin/AdminLoginView";
+import { HomeScreen } from "../components/views/Home/HomeScreen";
 import { validateSession } from "../lib/validation";
 import { hsh } from "../lib/utils";
 import { useApp } from "./AppProviders";
@@ -30,7 +31,7 @@ export default function CiderScope() {
   const editFingerprintRef = useRef<number | null>(null);
 
   const {
-    mode, screen, setScreen,
+    mode, setMode, screen, setScreen,
     sessions,
     curSess, curSessId,
     jurors, cj, ja, cs, setCs,
@@ -64,6 +65,20 @@ export default function CiderScope() {
 
   if (!restored) {
     return <div style={{ padding: 32, textAlign: "center", color: "var(--mid)" }}>Initialisation de l&apos;application…</div>;
+  }
+
+  const goHome = () => {
+    setMode("home");
+    setScreen("landing");
+  };
+
+  if (mode === "home") {
+    return (
+      <HomeScreen
+        onSelectParticipant={() => { setMode("participant"); setScreen("landing"); }}
+        onSelectAdmin={() => { setMode("admin"); setScreen("landing"); }}
+      />
+    );
   }
 
   if (mode === "participant") {
@@ -117,8 +132,8 @@ export default function CiderScope() {
             setCs(cs + 1);
           }
         }}
-        onGoBack={() => setScreen("landing")}
-        onHome={() => setScreen("landing")}
+        onGoBack={goHome}
+        onHome={goHome}
         onReviewAnswers={() => handleLoginJury(cj)}
         onShowSummary={async () => {
           if (!curSessId) return;
@@ -180,7 +195,7 @@ export default function CiderScope() {
       }}
       onSetEditCfg={setEditCfg}
       onSetEditTab={setCurEditTab}
-      onHome={() => setScreen("landing")}
+      onHome={goHome}
       onSaveEdit={async () => {
         if (!editCfg) return;
         const errs = validateSession(editCfg);

@@ -67,7 +67,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
             actions.setScreen("landing");
           }}
           onHome={() => {
-            actions.setMode("participant");
+            actions.setMode("home");
             actions.setScreen("landing");
           }}
           onLogout={state.adminAuth ? handleLogout : undefined}

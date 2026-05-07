@@ -13,7 +13,7 @@ const _configCache = new Map<string, ConfigCacheEntry>();
 const CONFIG_CACHE_TTL_MS = 60_000;
 
 export const useSenso = () => {
-  const [mode, setMode] = useState<AppMode>("participant");
+  const [mode, setMode] = useState<AppMode>("home");
   const [screen, setScreen] = useState<AppScreen>("landing");
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);

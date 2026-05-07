@@ -125,7 +125,7 @@ export type JurorAnswers = {
 export type AllAnswers = Record<string, JurorAnswers>;
 
 // ── UI / app state ─────────────────────────────────────────────────────────
-export type AppMode = "participant" | "admin";
+export type AppMode = "home" | "participant" | "admin";
 export type AppScreen = "landing" | "jury" | "poste" | "order" | "form" | "done" | "summary" | "edit";
 
 export type PosteDay = "mardi" | "jeudi";

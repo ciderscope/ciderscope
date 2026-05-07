@@ -9,7 +9,7 @@ const axes: RadarAxis[] = [
     label: "Fruit",
     children: [
       { label: "Fruit rouge", children: leaves(["Cassis", "Cerise", "Figue", "Fraise", "Framboise", "Groseille", "Mûre", "Myrtille"]) },
-      { label: "Fruit blanc/jaune", children: leaves(["Abricot", "Coing", "Melon", "Pêche", "Poire", "Pomme", "Prune", "Raisin"]) },
+      { label: "Fruit blanc/jaune", children: leaves(["Abricot", "Coing", "Melon", "Pêche", "Poire", "Pomme", "Prune"]) },
       { label: "Agrume", children: leaves(["Citron", "Orange", "Pamplemousse"]) },
       { label: "Fruit tropical", children: leaves(["Ananas", "Banane", "Fruit de la passion", "Litchi", "Mangue"]) },
       { label: "Fruit élaboré", children: leaves(["Compote", "Fruit confit"]) },
@@ -46,13 +46,13 @@ const axes: RadarAxis[] = [
   {
     label: "Chimique",
     children: [
-      { label: "Chimique", children: leaves(["Alcool", "Caoutchouc", "Dissolvant à ongles", "Encre/Gouache", "Vinaigre"]) },
+      { label: "Chimique", children: leaves(["Alcool", "Colle scotch", "Caoutchouc", "Dissolvant à ongles", "Encre/Gouache", "Vinaigre"]) },
     ],
   },
   {
     label: "Soufrée",
     children: [
-      { label: "Soufrée", children: leaves(["Ail", "Choux", "Serpillère", "Oeuf pourri"]) },
+      { label: "Soufrée", children: leaves(["Ail", "Chou", "Serpillère", "Oeuf pourri"]) },
     ],
   },
   {

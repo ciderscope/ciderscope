@@ -494,6 +494,99 @@ canvas { max-width: 100%; }
 }
 
 /* ══════════════════════════════════════════
+   HOME — écran d'accueil avec choix Participant / Admin
+   ══════════════════════════════════════════ */
+.home-screen {
+  max-width: min(94%, 1080px); margin: 0 auto;
+  padding: 56px 28px 64px; text-align: center;
+  display: flex; flex-direction: column; align-items: center;
+}
+.home-hero { margin-bottom: 48px; }
+.home-title {
+  font-weight: 800;
+  font-size: clamp(44px, 7vw, 80px);
+  line-height: 1.02; letter-spacing: -1.5px;
+  color: var(--ink); margin-bottom: 14px;
+}
+.home-title em { color: var(--accent); font-style: normal; }
+.home-subtitle {
+  color: var(--mid); font-size: 15px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: .02em;
+}
+.home-tiles {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  width: 100%; max-width: 880px;
+}
+@media (max-width: 720px) {
+  .home-tiles { grid-template-columns: 1fr; }
+}
+.home-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 20px;
+  padding: 28px 26px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+  transition: border-color .15s, box-shadow .2s, transform .15s;
+}
+.home-tile::before {
+  content: "";
+  position: absolute; top: 0; left: 0; bottom: 0;
+  width: 4px; background: var(--tile-color, var(--accent));
+  transition: width .2s ease;
+}
+.home-tile:hover {
+  border-color: color-mix(in srgb, var(--tile-color, var(--accent)) 45%, var(--border-strong));
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(30,46,46,.09);
+}
+.home-tile:hover::before { width: 6px; }
+.home-tile:focus-visible {
+  outline: 2px solid var(--tile-color, var(--accent));
+  outline-offset: 3px;
+}
+.home-tile-participant { --tile-color: var(--primary); }
+.home-tile-admin       { --tile-color: var(--accent); }
+
+.home-tile-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tile-color) 12%, var(--paper2));
+  color: var(--tile-color);
+  flex-shrink: 0;
+}
+.home-tile-body {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.home-tile-label {
+  font-size: 20px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.2px;
+}
+.home-tile-desc {
+  font-size: 13px; color: var(--mid); line-height: 1.4;
+}
+.home-tile-arrow {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--mid2);
+  transition: transform .2s ease, color .2s ease;
+}
+.home-tile:hover .home-tile-arrow {
+  color: var(--tile-color);
+  transform: translateX(3px);
+}
+
+/* ══════════════════════════════════════════
    PARTICIPANT — landing, connexion jury, questionnaire
    ══════════════════════════════════════════ */
 .landing {
