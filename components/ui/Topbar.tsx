@@ -1,7 +1,7 @@
 import { FiUsers, FiSettings, FiLogOut, FiHome } from "react-icons/fi";
 
 interface TopbarProps {
-  mode: "participant" | "admin";
+  mode: "home" | "participant" | "admin";
   onModeChange: (mode: "participant" | "admin") => void;
   onHome: () => void;
   online?: boolean;
