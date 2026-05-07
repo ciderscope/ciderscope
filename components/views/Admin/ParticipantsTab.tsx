@@ -50,23 +50,28 @@ export function ParticipantsTab({ sessionId, listJurorsForSession, deleteJury }:
         <MutedText>Aucun participant n&apos;a encore répondu à cette séance.</MutedText>
       ) : (
         <>
-          <p className="text-[11px] text-[var(--mid)] mb-2.5">
+          <p className="text-[12px] text-[var(--mid)]" style={{ marginBottom: 36 }}>
             Cliquez sur la croix pour supprimer définitivement les réponses d&apos;un participant.
           </p>
-          <div className="flex flex-col gap-1.5">
-            {jurors.map(n => (
-              <div key={n} className="flex items-center gap-2 px-3 py-2 bg-[var(--paper2)] rounded-lg border border-[var(--border)]">
-                <span className="flex-1 font-semibold">{n}</span>
-                <button
-                  type="button"
-                  className="chip-x !text-[var(--danger)]"
-                  title="Supprimer ce participant"
-                  onClick={() => setConfirmDelete(n)}
-                >
-                  <FiX size={14} />
-                </button>
-              </div>
-            ))}
+          <div className="participants-list">
+            <div className="participants-list-header">
+              <span>{jurors.length} participant{jurors.length > 1 ? "s" : ""}</span>
+            </div>
+            <ul className="participants-list-items">
+              {jurors.map(n => (
+                <li key={n} className="participants-list-row">
+                  <span className="flex-1 font-semibold text-[14px]">{n}</span>
+                  <button
+                    type="button"
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--danger)]/10 text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white transition-all"
+                    title="Supprimer ce participant"
+                    onClick={() => setConfirmDelete(n)}
+                  >
+                    <FiX size={16} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         </>
       )}
