@@ -657,17 +657,24 @@ canvas { max-width: 100%; }
 
 .form-shell {
   max-width: min(94%, 1280px); margin: 0 auto;
-  padding: 28px 22px 100px;
+  padding: 36px 32px 110px;
 }
 .form-header {
   display: flex; align-items: center; gap: 14px;
   background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 15px 19px;
-  margin-bottom: 20px; box-shadow: var(--shadow);
+  margin-bottom: 28px; box-shadow: var(--shadow);
 }
 .form-header .jury-name { font-weight: 700; font-size: 17px; line-height: 1.2; }
 .form-header .session-name { color: var(--mid); font-size: 12.5px; font-family: 'JetBrains Mono', ui-monospace, monospace; margin-top: 2px; }
 .form-header-sep { flex: 1; }
+.form-progress-wrap { margin-bottom: 26px; }
+.form-progress-wrap .step-list { margin-top: 18px !important; }
+
+.save-indicator {
+  top: auto !important; left: auto !important;
+  bottom: 86px !important; right: 24px !important;
+}
 
 .progress-bar { background: var(--paper2); border-radius: 20px; height: 5px; margin-bottom: 20px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--accent); border-radius: 20px; transition: width .35s; }
@@ -1740,7 +1747,7 @@ textarea.q-text:focus { border-color: var(--accent); }
   .landing h1 { font-size: 24px; line-height: 1.15; }
   .landing .sub { font-size: 13px; margin-bottom: 22px; }
 
-  .form-shell { padding: 14px 10px 110px; }
+  .form-shell { padding: 18px 14px 120px; }
   .admin-shell { padding: 14px 10px 56px; }
   .analyse-shell { padding: 14px 10px; }
 
@@ -1756,7 +1763,7 @@ textarea.q-text:focus { border-color: var(--accent); }
   .count-badge strong { font-size: 18px; }
 
   .save-indicator { bottom: 74px !important; right: 10px !important; left: 10px !important; justify-content: center; }
-  .form-progress-wrap { padding: 0 4px !important; }
+  .form-progress-wrap { padding: 0 4px !important; margin-bottom: 18px !important; }
   .step-list { gap: 4px !important; }
 
   .product-nav { padding: 9px 10px; gap: 7px; }
