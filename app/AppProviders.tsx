@@ -66,6 +66,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
             actions.setMode(m);
             actions.setScreen("landing");
           }}
+          onHome={() => {
+            actions.setMode("participant");
+            actions.setScreen("landing");
+          }}
           onLogout={state.adminAuth ? handleLogout : undefined}
         />
         <main className="app-main">{children}</main>

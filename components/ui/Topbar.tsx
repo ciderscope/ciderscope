@@ -1,8 +1,9 @@
-import { FiUsers, FiSettings, FiLogOut } from "react-icons/fi";
+import { FiUsers, FiSettings, FiLogOut, FiHome } from "react-icons/fi";
 
 interface TopbarProps {
   mode: "participant" | "admin";
   onModeChange: (mode: "participant" | "admin") => void;
+  onHome: () => void;
   online?: boolean;
   onLogout?: () => void;
 }
@@ -12,7 +13,7 @@ const NAV = [
   { id: "admin"       as const, label: "Admin",        icon: FiSettings },
 ];
 
-export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarProps) => (
+export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }: TopbarProps) => (
   <div className="topbar">
     <div className="topbar-logo">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -26,6 +27,14 @@ export const Topbar = ({ mode, onModeChange, online = false, onLogout }: TopbarP
       {online ? "Connecté" : "Local"}
     </span>
     <div className="topbar-nav">
+      <button
+        className="topbar-navbtn"
+        onClick={onHome}
+        title="Retour à l'accueil"
+      >
+        <FiHome size={14} />
+        <span>Accueil</span>
+      </button>
       {NAV.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
