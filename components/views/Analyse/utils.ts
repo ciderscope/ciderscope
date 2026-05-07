@@ -31,10 +31,24 @@ export function syncChartDefaults() {
   const styles = getComputedStyle(document.documentElement);
   const axis = styles.getPropertyValue("--chart-axis").trim() || "#6B7280";
   const grid = styles.getPropertyValue("--chart-grid").trim() || "rgba(0,0,0,.08)";
+  const paper = styles.getPropertyValue("--paper").trim() || "#ffffff";
   ChartJS.defaults.color = axis;
   ChartJS.defaults.borderColor = grid;
   if (ChartJS.defaults.scale?.grid) {
     (ChartJS.defaults.scale.grid as { color: string }).color = grid;
+  }
+  // Radar (radialLinear) : pas de rectangle gris derrière les ticks ;
+  // on simule un halo via textStroke pour garder la lisibilité.
+  const radial = (ChartJS.defaults.scales as any)?.radialLinear;
+  if (radial) {
+    radial.ticks = {
+      ...(radial.ticks || {}),
+      showLabelBackdrop: false,
+      backdropColor: "transparent",
+      color: axis,
+      textStrokeColor: paper,
+      textStrokeWidth: 3,
+    };
   }
 }
 

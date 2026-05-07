@@ -41,6 +41,10 @@ export function TouchSafeSlider({
   min, max, step = 1, value, onChange, ariaLabel, className, touched = false, onTap, thumbOnly = false,
 }: TouchSafeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
+  // Référence sur la piste interne (insetée de 11px) : sert au calcul de
+  // valeur depuis clientX, pour que ratio 0/1 corresponde au centre du
+  // pouce en butée et non au bord du conteneur cliquable.
+  const innerTrackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [arming, setArming] = useState(false);
 
@@ -56,7 +60,7 @@ export function TouchSafeSlider({
   const ratio = max > min ? Math.max(0, Math.min(1, (value - min) / (max - min))) : 0;
 
   const valueFromClientX = (clientX: number): number => {
-    const rect = trackRef.current?.getBoundingClientRect();
+    const rect = innerTrackRef.current?.getBoundingClientRect() ?? trackRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0) return value;
     const r = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const raw = min + r * (max - min);
@@ -183,9 +187,9 @@ export function TouchSafeSlider({
       // n'a plus d'effet (on possède le pointeur).
       style={{ touchAction: "pan-y" }}
     >
-      <div className="ts-slider-track" />
-      <div className="ts-slider-fill" style={{ width: `${ratio * 100}%` }} />
-      <div className="ts-slider-thumb" style={{ left: `${ratio * 100}%` }}>
+      <div className="ts-slider-track" ref={innerTrackRef} />
+      <div className="ts-slider-fill" style={{ width: `calc(${ratio} * (100% - 22px))` }} />
+      <div className="ts-slider-thumb" style={{ left: `calc(${ratio * 100}% + ${11 - ratio * 22}px)` }}>
         {touched && (
           <svg className="ts-slider-check" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M3.5 8.5l3 3 6-6" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />

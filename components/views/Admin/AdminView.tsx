@@ -259,7 +259,14 @@ export const AdminView = ({
                   "latin"/"fixed"/"random") ; on n'expose juste plus le toggle. */}
 
               <div className="py-6">
-                <DangerGhostButton onClick={() => onDeleteSession(editSessId!)}>Supprimer définitivement la séance</DangerGhostButton>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="btn-danger-outline"
+                  onClick={() => onDeleteSession(editSessId!)}
+                >
+                  <FiX /> Supprimer définitivement la séance
+                </Button>
               </div>
             </div>
           )}

@@ -274,8 +274,54 @@ canvas { max-width: 100%; }
 
 .card {
   background: var(--paper); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 22px;
+  border-radius: var(--radius-lg); padding: 26px 28px;
   margin-bottom: 16px; box-shadow: var(--shadow);
+}
+
+/* Variante "danger outline" : aligne sa typo et son gabarit sur .btn,
+   mais reste visuellement secondaire (cadre + fond teinté) plutôt que
+   plein-rouge — utile pour les actions destructrices peu fréquentes. */
+.btn-danger-outline {
+  background: color-mix(in srgb, var(--danger) 8%, var(--paper));
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+.btn-danger-outline:hover {
+  background: color-mix(in srgb, var(--danger) 14%, var(--paper));
+  border-color: var(--danger);
+}
+
+/* Liste des participants ayant répondu : boîte cadrée, aérée,
+   avec un en-tête comptant les inscrits et des lignes bien séparées. */
+.participants-list {
+  margin-top: 28px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--paper);
+  overflow: hidden;
+}
+.participants-list-header {
+  padding: 12px 18px;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--mid);
+  background: var(--paper2);
+  border-bottom: 1px solid var(--border);
+}
+.participants-list-items {
+  list-style: none; margin: 0; padding: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 520px; overflow-y: auto;
+}
+.participants-list-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: var(--paper2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.participants-list-row:hover {
+  border-color: var(--border-strong);
 }
 .card h3 { font-weight: 700; font-size: 15px; margin-bottom: 14px; color: var(--ink); letter-spacing: -0.01em; }
 
@@ -330,13 +376,13 @@ canvas { max-width: 100%; }
   z-index: 200; backdrop-filter: blur(4px);
 }
 .modal {
-  background: var(--paper); border-radius: 10px;
-  padding: 28px; max-width: 460px; width: 90%;
+  background: var(--paper); border-radius: 12px;
+  padding: 32px 34px; max-width: 540px; width: 92%;
   box-shadow: 0 24px 64px rgba(0,0,0,.18);
   position: relative;
 }
-.modal h2 { font-weight: 700; font-size: 20px; margin-bottom: 8px; }
-.modal p  { color: var(--mid); font-size: 14px; margin-bottom: 16px; }
+.modal h2 { font-weight: 700; font-size: 20px; margin-bottom: 10px; line-height: 1.3; }
+.modal p  { color: var(--mid); font-size: 14px; margin-bottom: 18px; line-height: 1.5; }
 .modal-close {
   position: absolute; top: 10px; right: 10px;
   width: 28px; height: 28px; border-radius: 50%;
@@ -701,17 +747,18 @@ input[type=range]::-moz-range-progress {
   user-select: none;
   outline: none;
   cursor: pointer;
-  /* Empêche le double-tap zoom & autres délais, gardé compatible avec pan-y inline. */
   -webkit-tap-highlight-color: transparent;
 }
 .ts-slider:focus-visible .ts-slider-thumb { box-shadow: 0 0 0 4px rgba(238, 140, 0, .25); }
 .ts-slider-track {
-  position: absolute; left: 0; right: 0;
+  /* Insets de 11px = rayon du pouce, pour que le pouce aux valeurs extrêmes
+     (0 et max) reste entièrement dans la zone cliquable du .ts-slider. */
+  position: absolute; left: 11px; right: 11px;
   height: 6px; background: var(--paper3); border-radius: 3px;
   pointer-events: none;
 }
 .ts-slider-fill {
-  position: absolute; left: 0;
+  position: absolute; left: 11px;
   height: 6px; background: var(--accent); border-radius: 3px;
   pointer-events: none;
 }
@@ -931,7 +978,7 @@ button, [role="button"], a.btn, .Button, .btn {
   border-radius: 6px;
   padding-left: 8px;
 }
-.radar-tree-node.radar-tree-node--untouched .radar-tree-label {
+.radar-tree-node.radar-tree-node--untouched.depth-0 > .radar-tree-row .radar-tree-label {
   color: #c0392b;
 }
 
@@ -1659,7 +1706,7 @@ textarea.q-text:focus { border-color: var(--accent); }
   .radar-slider-label, .radar-sub-label { min-width: 80px; }
   .radar-subs { margin-left: 0; }
 
-  .modal { padding: 20px 18px; width: 94%; }
+  .modal { padding: 24px 22px; width: 94%; }
 
   .data-table, .preview-table { font-size: 11px; }
   .data-table th, .data-table td,

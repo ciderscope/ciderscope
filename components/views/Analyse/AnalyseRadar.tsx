@@ -174,9 +174,22 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   // on masque alors le sélecteur de niveau et on force "famille".
   const isFlatGroup = scopeCriteria.length > 0 && scopeCriteria.every(c => !c.includes(" > "));
   const effectiveLevel: PcaLevel = isFlatGroup ? "famille" : pcaLevel;
-  const pcaCriteria = scopeCriteria
+  // Moyenne globale d'un critère (toutes notes ≥ 0 confondues, sur tous les produits)
+  // — utilisée pour ne garder que les 9 critères les plus marqués aux niveaux
+  // classe / descripteur où la liste peut devenir illisible.
+  const overallMean = (c: string) => {
+    if (products.length === 0) return 0;
+    let s = 0;
+    for (const p of products) s += avg(p.code, c);
+    return s / products.length;
+  };
+  const TOP_N = 9;
+  const pcaCriteriaAll = scopeCriteria
     .filter(c => depthOf(c) === levelDepth[effectiveLevel])
     .filter(c => products.some(p => avg(p.code, c) > 0));
+  const pcaCriteria = effectiveLevel === "famille"
+    ? pcaCriteriaAll
+    : [...pcaCriteriaAll].sort((a, b) => overallMean(b) - overallMean(a)).slice(0, TOP_N);
   const pcaMatrix = products.map(p => pcaCriteria.map(c => avg(p.code, c)));
   const canPca = products.length >= 3 && pcaCriteria.length >= 2;
   const pcaRes = canPca ? pca2D(pcaMatrix) : null;
@@ -222,9 +235,15 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           // hiérarchie, ex. profil gustatif) restent affichés tels quels au niveau famille.
           const isFlat = groupCriteria.length > 0 && groupCriteria.every(c => !c.includes(" > "));
           const effectiveDisplayLevel: PcaLevel = isFlat ? "famille" : displayLevel;
-          const displayCriteria = groupCriteria
+          const displayCriteriaAll = groupCriteria
             .filter(c => depthOf(c) === levelDepth[effectiveDisplayLevel])
             .filter(c => products.some(p => avg(p.code, c) > 0));
+          // Aux niveaux classe / descripteur, la liste peut être très longue : on
+          // ne garde que les 9 critères avec la moyenne globale la plus haute
+          // pour rendre la toile lisible.
+          const displayCriteria = effectiveDisplayLevel === "famille"
+            ? displayCriteriaAll
+            : [...displayCriteriaAll].sort((a, b) => overallMean(b) - overallMean(a)).slice(0, TOP_N);
 
           const radarData = {
             labels: displayCriteria.map(c => c.split(" > ").pop()),
