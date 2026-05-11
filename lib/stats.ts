@@ -6,6 +6,9 @@
 // --- Basic Math & Gamma Functions ---
 
 /** ln Γ(x) — Lanczos approximation (precision ~1e-14) */
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
 export function logGamma(x: number): number {
   if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
   const g = 7;
@@ -116,17 +119,21 @@ export function anovaTwoWay(
 } {
   const pN = matrix.length;
   const jN = matrix[0]?.length ?? 0;
-  const flat = matrix.flat().filter((v): v is number => v !== null);
+  const isComplete = pN >= 2
+    && jN >= 2
+    && matrix.every(row => row.length === jN && row.every(isFiniteNumber));
   
-  if (flat.length < pN * jN || pN < 2 || jN < 2) return { fProd: 0, pProd: 1, fJury: 0, pJury: 1, ok: false };
+  if (!isComplete) return { fProd: 0, pProd: 1, fJury: 0, pJury: 1, ok: false };
+
+  const flat = matrix.flat() as number[];
   
   const grand = flat.reduce((a, b) => a + b, 0) / flat.length;
   const prodMeans = matrix.map(row => {
-    const v = row.filter((x): x is number => x !== null);
+    const v = row.filter(isFiniteNumber);
     return v.reduce((a, b) => a + b, 0) / v.length;
   });
   const juryMeans = Array.from({ length: jN }, (_, j) => {
-    const col = matrix.map(row => row[j]).filter((x): x is number => x !== null);
+    const col = matrix.map(row => row[j]).filter(isFiniteNumber);
     return col.reduce((a, b) => a + b, 0) / col.length;
   });
 
@@ -134,8 +141,8 @@ export function anovaTwoWay(
   for (let i = 0; i < pN; i++) ssProd += jN * (prodMeans[i] - grand) ** 2;
   for (let j = 0; j < jN; j++) ssJury += pN * (juryMeans[j] - grand) ** 2;
   for (let i = 0; i < pN; i++) for (let j = 0; j < jN; j++) {
-    const v = matrix[i][j];
-    if (v !== null) ssTot += (v - grand) ** 2;
+    const v = matrix[i][j] as number;
+    ssTot += (v - grand) ** 2;
   }
 
   const ssErr = Math.max(0, ssTot - ssProd - ssJury);
@@ -158,7 +165,7 @@ export function anovaTwoWay(
  * Handles unbalanced data perfectly. Matrix is an array where each element is an array of values for that group (e.g., product).
  */
 export function anovaOneWay(groups: (number | null)[][]): { fVal: number; pValue: number; ok: boolean } {
-  const validGroups = groups.map(g => g.filter((v): v is number => v !== null && !isNaN(v)));
+  const validGroups = groups.map(g => g.filter(isFiniteNumber));
   const flat = validGroups.flat();
   const N = flat.length;
   const k = validGroups.filter(g => g.length > 0).length;
@@ -270,7 +277,7 @@ export function jacobiEigen(A: number[][]): { values: number[]; vectors: number[
     if (off < eps) break;
     for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
       if (Math.abs(D[p][q]) < eps) continue;
-      const theta = (D[q][q] - D[p][p]) / (2 * D[p][p] === D[q][q] ? 1e-20 : 2 * D[p][q]);
+      const theta = (D[q][q] - D[p][p]) / (2 * D[p][q]);
       const t = (theta >= 0 ? 1 : -1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
       const c = 1 / Math.sqrt(t * t + 1);
       const s = t * c;
@@ -389,8 +396,17 @@ export function computeCLD(products: string[], rankMeans: Record<string, number>
   arr.sort((a, b) => Math.min(...a) - Math.min(...b));
 
   const letters = "abcdefghijklmnopqrstuvwxyz";
+  const letterFor = (idx: number): string => {
+    let n = idx;
+    let out = "";
+    do {
+      out = letters[n % letters.length] + out;
+      n = Math.floor(n / letters.length) - 1;
+    } while (n >= 0);
+    return out;
+  };
   arr.forEach((g, idx) => {
-    const l = letters[idx % 26];
+    const l = letterFor(idx);
     g.forEach(i => { out[sorted[i]] += l; });
   });
   return out;
@@ -470,7 +486,6 @@ export function cochranQ(matrix: number[][]): { q: number; pValue: number } {
   let sumTj2 = 0;
   const colSums = Array(k).fill(0);
   const rowSums = Array(n).fill(0);
-  let totalSum = 0;
 
   for (let i = 0; i < n; i++) {
     let rowSum = 0;
@@ -480,7 +495,6 @@ export function cochranQ(matrix: number[][]): { q: number; pValue: number } {
       rowSum += val;
     }
     rowSums[i] = rowSum;
-    totalSum += rowSum;
   }
 
   for (let j = 0; j < k; j++) {

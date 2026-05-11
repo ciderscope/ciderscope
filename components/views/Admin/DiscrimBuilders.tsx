@@ -85,7 +85,11 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
   // Parse correctAnswer string "X:A,Y:non-A" → {X:'A', Y:'non-A'}
   const parseAnswer = (s: string): Record<string, string> => {
     if (!s) return {};
-    return Object.fromEntries(s.split(",").map(p => p.split(":")).filter(a => a.length === 2));
+    return Object.fromEntries(
+      s.split(",")
+        .map(part => part.trim().split(":").map(x => x.trim()))
+        .filter(([code, value]) => code && value)
+    );
   };
   const serializeAnswer = (obj: Record<string, string>) =>
     Object.entries(obj).map(([k, v]) => `${k}:${v}`).join(",");

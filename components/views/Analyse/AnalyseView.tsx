@@ -14,7 +14,7 @@ import {
   BarElement,
 } from "chart.js";
 import type { SessionConfig, SessionListItem, Question, AllAnswers, CSVRow } from "../../../types";
-import { buildCsvData } from "../../../lib/csv";
+import { buildCsvData, buildDelimitedText, downloadTextFile } from "../../../lib/csv";
 
 // Import subcomponents
 import { AnalyseProfil } from "./AnalyseProfil";
@@ -113,15 +113,7 @@ const downloadSensoMinerCSV = (data: CSVRow[], name: string) => {
   const descArray = Array.from(descriptors).sort();
   const headers = ["Juge", "Produit", ...descArray];
   
-  const rows = Array.from(pivotMap.values()).map(row => {
-    return headers.map(h => row[h] ?? "").join(";");
-  });
-  
-  const csv = "\uFEFF" + [headers.join(";"), ...rows].join("\n");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  a.download = name + "_SensoMineR.csv";
-  a.click();
+  downloadTextFile(buildDelimitedText(headers, Array.from(pivotMap.values())), name + "_SensoMineR.csv");
 };
 
 export const AnalyseView = ({

@@ -4,6 +4,7 @@ import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, Sessi
 import { hsh, wlm } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
+import { asRecord, isStepDone } from "../lib/sessionSteps";
 
 // Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
 // et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
@@ -12,54 +13,18 @@ type ConfigCacheEntry = { cfg: SessionConfig; ts: number };
 const _configCache = new Map<string, ConfigCacheEntry>();
 const CONFIG_CACHE_TTL_MS = 60_000;
 
-const isScaleAnsweredValue = (v: unknown): boolean => {
-  if (typeof v === "number") return true;
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    return (v as { _touched?: boolean })._touched === true;
-  }
-  return false;
+const APP_MODES = ["home", "participant", "admin"] as const satisfies readonly AppMode[];
+const APP_SCREENS = ["landing", "jury", "poste", "order", "form", "done", "summary", "edit"] as const satisfies readonly AppScreen[];
+const ADMIN_SECTIONS = ["seances", "analyse"] as const;
+
+const isStoredChoice = <T extends string>(value: string | null, choices: readonly T[]): value is T => {
+  return !!value && (choices as readonly string[]).includes(value);
 };
 
-const asAnswerBucket = (value: unknown): Record<string, unknown> => {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-};
-
-const isSessionStepDone = (s: SessionStep, jaState: JurorAnswers): boolean => {
-  if (!s) return true;
-  if (s.type === "product") {
-    const pa = asAnswerBucket(jaState[s.product.code]);
-    return s.questions.every(q => {
-      if (q.type === "scale") return isScaleAnsweredValue(pa[q.id]);
-      return pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null;
-    });
-  }
-  if (s.type === "ranking") return Array.isArray(asAnswerBucket(jaState["_rank"])[s.question.id]);
-  if (s.type === "discrim") {
-    const v = asAnswerBucket(jaState["_discrim"])[s.question.id];
-    if (s.question.type === "a-non-a") {
-      const codes: string[] = s.question.codes || [];
-      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-      const rec = v as unknown as Record<string, string>;
-      return codes.length > 0 && codes.every(c => rec[c] != null);
-    }
-    if (s.question.type === "seuil-bet") {
-      const levels = s.question.betLevels || [];
-      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-      const rec = v as unknown as Record<string, string>;
-      return levels.length > 0 && levels.every((_: BetLevel, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
-    }
-    return v != null && v !== "";
-  }
-  if (s.type === "global") {
-    const ga = asAnswerBucket(jaState["_global"]);
-    return s.questions.every(q => {
-      if (q.type === "scale") return isScaleAnsweredValue(ga[q.id]);
-      return ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null;
-    });
-  }
-  return true;
+const parseStoredStep = (value: string | null): number | null => {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 };
 
 const logDataError = (message: string, error: unknown) => {
@@ -176,6 +141,7 @@ export const useSenso = () => {
 
   // Online/offline detection
   useEffect(() => {
+    setOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
     const handleOnline = () => setOnline(true);
     const handleOffline = () => setOnline(false);
     window.addEventListener("online", handleOnline);
@@ -192,8 +158,8 @@ export const useSenso = () => {
       setLoading(true);
       await loadSessions(true);
 
-      const savedMode = localStorage.getItem("senso_mode") as AppMode;
-      const savedScreen = localStorage.getItem("senso_screen") as AppScreen;
+      const savedMode = localStorage.getItem("senso_mode");
+      const savedScreen = localStorage.getItem("senso_screen");
       const savedSessId = localStorage.getItem("senso_curSessId");
       const savedCj = localStorage.getItem("senso_cj");
       const savedCs = localStorage.getItem("senso_cs");
@@ -201,14 +167,14 @@ export const useSenso = () => {
       const savedEditTab = localStorage.getItem("senso_curEditTab");
       const savedAnSessId = localStorage.getItem("senso_anSessId");
       const savedAnT = localStorage.getItem("senso_curAnT");
-      const savedAdminSection = localStorage.getItem("senso_admin_section") as "seances" | "analyse";
+      const savedAdminSection = localStorage.getItem("senso_admin_section");
 
       // Auth admin local : un flag dans sessionStorage suffit (auth simple par hash).
       if (sessionStorage.getItem("admin_auth") === "1") setAdminAuth(true);
 
-      if (savedMode) setMode(savedMode);
-      if (savedScreen) setScreen(savedScreen);
-      if (savedAdminSection === "analyse" || savedAdminSection === "seances") setAdminSection(savedAdminSection);
+      if (isStoredChoice(savedMode, APP_MODES)) setMode(savedMode);
+      if (isStoredChoice(savedScreen, APP_SCREENS)) setScreen(savedScreen);
+      if (isStoredChoice(savedAdminSection, ADMIN_SECTIONS)) setAdminSection(savedAdminSection);
 
       const promises: Promise<unknown>[] = [];
 
@@ -220,7 +186,8 @@ export const useSenso = () => {
       }
       if (savedEditTab) setCurEditTab(savedEditTab);
       if (savedAnT) setCurAnT(savedAnT);
-      if (savedCs) setCs(parseInt(savedCs, 10));
+      const savedStep = parseStoredStep(savedCs);
+      if (savedStep !== null) setCs(savedStep);
 
       if (savedSessId) {
         setCurSessId(savedSessId);
@@ -316,10 +283,6 @@ export const useSenso = () => {
     if (!keepLoading) setLoading(false);
   }, []);
 
-  const saveSessions = useCallback(async (newList: SessionListItem[]) => {
-    setSessions(newList);
-  }, []);
-
   // Lecture du cache : on accepte une entrée fraîche (< TTL) sauf si `force` est demandé.
   // Les entrées expirées sont supprimées pour ne pas grossir la map indéfiniment.
   const loadSessionConfig = useCallback(async (
@@ -355,10 +318,9 @@ export const useSenso = () => {
 
   const posteKey = (p: Poste) => `${p.day}-${p.num}`;
   const readPoste = (jaData: JurorAnswers | null | undefined): Poste | null => {
-    const meta = jaData?.["_poste"];
-    if (!meta || typeof meta !== "object") return null;
-    const day = (meta as Record<string, unknown>).day;
-    const num = (meta as Record<string, unknown>).num;
+    const meta = asRecord(jaData?.["_poste"]);
+    const day = meta.day;
+    const num = meta.num;
     if ((day === "mardi" || day === "jeudi") && typeof num === "number" && num >= 1 && num <= 10) {
       return { day, num };
     }
@@ -540,7 +502,7 @@ export const useSenso = () => {
       const steps = buildSteps(curSess, name, jl, existing);
       let firstIncomplete = 0;
       for (let i = 0; i < steps.length; i++) {
-        if (!isSessionStepDone(steps[i], answers)) {
+        if (!isStepDone(steps[i], answers)) {
           firstIncomplete = i;
           break;
         }
@@ -747,7 +709,7 @@ export const useSenso = () => {
   // déjà validé pour la rétrocompatibilité.
   // Tableau de complétion par étape — calculé une seule fois par changement de ja/steps.
   const completion = useMemo<boolean[]>(
-    () => currentSteps.map(s => isSessionStepDone(s, ja)),
+    () => currentSteps.map(s => isStepDone(s, ja)),
     [currentSteps, ja]
   );
 
@@ -889,23 +851,22 @@ export const useSenso = () => {
     setMode, setScreen, setAdminAuth, setCs,
     setEditCfg, setEditSessId, setCurEditTab,
     setAnSessId, setCurAnT, setAdminSection,
-    saveSessions,
     loadSessionConfig, loadSessions,
     handleSelectSession, handleLoginJury, handleSelectPoste,
     handleSetJa, validateStep, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
     listJurorsForSession, toggleActive, toggleResultsVisible,
-    buildSteps, isStepComplete,
+    isStepComplete,
     flushPending, flushSave,
     // Les useState setters sont stables par contrat React et n'ont pas besoin
     // d'être listés en deps.
   }), [
-    saveSessions, loadSessionConfig, loadSessions,
+    loadSessionConfig, loadSessions,
     handleSelectSession, handleLoginJury, handleSelectPoste,
     handleSetJa, validateStep, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
     listJurorsForSession, toggleActive, toggleResultsVisible,
-    buildSteps, isStepComplete, flushPending, flushSave,
+    isStepComplete, flushPending, flushSave,
   ]);
 
   // Groupe "state" : valeurs réactives + dérivées. Bust à chaque changement d'état,

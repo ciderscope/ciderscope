@@ -5,6 +5,7 @@ import { SaveStatus, SessionStep } from "../../../types";
 
 export const SaveIndicator = ({ status, pendingCount }: { status: SaveStatus; pendingCount: number }) => {
   if (status === "idle" && pendingCount === 0) return null;
+  const isWide = status === "pending" || status === "error";
   const map = {
     idle:    { icon: <FiCloud size={13} />, text: `${pendingCount} en attente de synchronisation`, color: "#c8820a" },
     saving:  { icon: <FiLoader size={13} className="animate-spin" />, text: "Enregistrement…", color: "var(--mid)" },
@@ -17,7 +18,7 @@ export const SaveIndicator = ({ status, pendingCount }: { status: SaveStatus; pe
     <div
       role="status"
       aria-live="polite"
-      className="save-indicator fixed z-50 flex items-center gap-1.5 py-1.5 px-3 bg-[var(--paper)] rounded-full text-[12.5px] font-medium shadow-sm"
+      className={`save-indicator fixed z-50 flex items-center gap-1.5 py-1.5 px-3 bg-[var(--paper)] rounded-full text-[12.5px] font-medium shadow-sm${isWide ? " save-indicator--wide" : ""}`}
       style={{ border: `1px solid ${m.color}33`, color: m.color }}
     >
       {m.icon}<span>{m.text}</span>

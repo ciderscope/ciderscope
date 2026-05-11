@@ -10,12 +10,26 @@ export interface PendingEntry {
   ts: number;
 }
 
+const isPendingEntry = (value: unknown): value is PendingEntry => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  return typeof entry.sessionId === "string"
+    && typeof entry.jurorName === "string"
+    && typeof entry.ts === "number"
+    && Number.isFinite(entry.ts)
+    && "data" in entry;
+};
+
 const readAll = (): PendingEntry[] => {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) as PendingEntry[] : [];
-  } catch { return []; }
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isPendingEntry) : [];
+  } catch {
+    return [];
+  }
 };
 
 const writeAll = (entries: PendingEntry[]) => {

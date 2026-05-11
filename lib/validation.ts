@@ -11,7 +11,7 @@ export const validateQuestion = (q: Question, codes: string[]): string[] => {
   }
 
   if (q.type === "classement" || q.type === "seuil") {
-    const qc = q.codes || [];
+    const qc = q.codes?.length ? q.codes : codes;
     if (qc.length < 2) errs.push(`"${label}" : au moins 2 échantillons nécessaires.`);
     if (q.correctOrder && q.correctOrder.length > 0) {
       const setQ = new Set(qc), setC = new Set(q.correctOrder);
@@ -42,7 +42,12 @@ export const validateQuestion = (q: Question, codes: string[]): string[] => {
     if (qc.length < 1) errs.push(`"${label}" : au moins 1 code à évaluer.`);
     if (!q.refCode) errs.push(`"${label}" : la référence A n'est pas définie.`);
     const parsed = typeof q.correctAnswer === "string"
-      ? Object.fromEntries(q.correctAnswer.split(",").filter(Boolean).map(p => p.split(":")))
+      ? Object.fromEntries(
+        q.correctAnswer
+          .split(",")
+          .map(part => part.trim().split(":").map(x => x.trim()))
+          .filter(([code, value]) => code && value)
+      )
       : {};
     const missing = qc.filter(c => !parsed[c]);
     if (missing.length > 0) errs.push(`"${label}" : le statut A / non-A manque pour ${missing.join(", ")}.`);

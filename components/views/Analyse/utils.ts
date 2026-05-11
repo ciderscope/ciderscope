@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Chart as ChartJS } from "chart.js";
-import type { BetLevel, JurorAnswers, Product, Question, RadarAnswer, SessionConfig, SessionStep } from "../../../types";
+import type { RadarAnswer } from "../../../types";
+export { buildAnalysisSteps as getSteps, isStepDone as checkStepDone } from "../../../lib/sessionSteps";
 
 export const COLORS_LIGHT = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
 export const COLORS_DARK  = ["#ef7a3c", "#5b9cc1", "#5cab73", "#bb7fbb", "#c0a13a", "#a07a5e", "#5b8db1", "#92a35a"];
@@ -87,89 +88,4 @@ export function flattenRadarAnswers(ans: RadarAnswer, prefix = "", out: Record<s
   }
   return out;
 }
-
-// Version simplifiée de buildSteps pour l'analyse (sans randomisation/Williams car on veut juste la liste)
-export function getSteps(cfg: SessionConfig): SessionStep[] {
-  const steps: SessionStep[] = [];
-  const ppQuestions = cfg.questions.filter(q => q.scope === "per-product");
-  const productMap = new Map<string, Question[]>();
-  ppQuestions.forEach(q => {
-    const targetCodes = q.codes?.length ? q.codes : cfg.products.map(p => p.code);
-    targetCodes.forEach((code: string) => {
-      if (!productMap.has(code)) productMap.set(code, []);
-      productMap.get(code)!.push(q);
-    });
-  });
-  if (productMap.size > 0) {
-    const activeCodes = Array.from(productMap.keys());
-    activeCodes.forEach(code => {
-      const product: Product = cfg.products.find(p => p.code === code) || { code };
-      const questions = productMap.get(code) || [];
-      steps.push({ type: "product", product, questions });
-    });
-  }
-  const standaloneQuestions = cfg.questions.filter(q => q.scope !== "per-product");
-  const seriesQuestions = standaloneQuestions.filter(q => q.type !== "text" && q.type !== "qcm" && q.scope !== "global");
-  const globalQuestions = standaloneQuestions.filter(q => q.type === "text" || q.type === "qcm" || q.scope === "global");
-
-  seriesQuestions.forEach(q => {
-    const type = (q.type === "classement" || q.type === "seuil") ? "ranking" : "discrim";
-    steps.push({ type, question: q });
-  });
-  if (globalQuestions.length > 0) {
-    steps.push({ type: "global", questions: globalQuestions });
-  }
-  return steps;
-}
-
-const isScaleAnswered = (v: unknown): boolean => {
-  if (typeof v === "number") return true;
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    return (v as { _touched?: boolean })._touched === true;
-  }
-  return false;
-};
-
-const asAnswerBucket = (value: unknown): Record<string, unknown> => {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-};
-
-export const checkStepDone = (s: SessionStep | undefined, jaState: JurorAnswers): boolean => {
-  if (!s) return true;
-  if (s.type === "product") {
-    const pa = asAnswerBucket(jaState[s.product.code]);
-    return s.questions.every(q => {
-      if (q.type === "scale") return isScaleAnswered(pa[q.id]);
-      return pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null;
-    });
-  }
-  if (s.type === "ranking") return Array.isArray(asAnswerBucket(jaState["_rank"])[s.question.id]);
-  if (s.type === "discrim") {
-    const v = asAnswerBucket(jaState["_discrim"])[s.question.id];
-    if (s.question.type === "a-non-a") {
-      const codes: string[] = s.question.codes || [];
-      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-      const rec = v as unknown as Record<string, string>;
-      return codes.length > 0 && codes.every(c => rec[c] != null);
-    }
-    if (s.question.type === "seuil-bet") {
-      const levels = s.question.betLevels || [];
-      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-      const rec = v as unknown as Record<string, string>;
-      return levels.length > 0 && levels.every((_: BetLevel, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
-    }
-    return v != null && v !== "";
-  }
-  if (s.type === "global") {
-    const ga = asAnswerBucket(jaState["_global"]);
-    return s.questions.every(q => {
-      if (q.type === "scale") return isScaleAnswered(ga[q.id]);
-      return ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null;
-    });
-  }
-  return true;
-};
-
 

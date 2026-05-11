@@ -31,6 +31,7 @@ export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }:
         className="topbar-navbtn"
         onClick={onHome}
         title="Retour à l'accueil"
+        aria-label="Retour à l'accueil"
       >
         <FiHome size={14} />
         <span>Accueil</span>
@@ -40,6 +41,8 @@ export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }:
           key={id}
           className={`topbar-navbtn ${mode === id ? "active" : ""}`}
           onClick={() => onModeChange(id)}
+          title={label}
+          aria-label={label}
         >
           <Icon size={14} />
           <span>{label}</span>
@@ -50,6 +53,7 @@ export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }:
           className="topbar-navbtn topbar-logout"
           onClick={onLogout}
           title="Se déconnecter"
+          aria-label="Se déconnecter"
         >
           <FiLogOut size={14} />
           <span>Déconnexion</span>

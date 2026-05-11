@@ -17,7 +17,6 @@ interface QuestionnaireProps {
   ja: JurorAnswers;
   setJa: SetJa;
   products?: Product[];
-  jurorName?: string;
 }
 
 const stepKey = (step: SessionStep | undefined, idx: number) => {

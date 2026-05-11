@@ -91,22 +91,23 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
   let thresholdProduct: string | null = null;
   if (type === "seuil" && pValue < 0.05) {
     const sortedByMeanLocal = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
-    const firstGroup = cld[sortedByMeanLocal[0]] || "";
+    const initialGroup = "a";
     thresholdProduct = sortedByMeanLocal.find(p => {
       const letters = cld[p] || "";
-      return ![...firstGroup].some(l => letters.includes(l));
+      return !letters.includes(initialGroup);
     }) || null;
   }
 
   // Bar chart data — rank means (lower = better rank)
   const sortedByMean = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
+  const chartColors = getChartColors();
   const barData = {
     labels: sortedByMean,
     datasets: [{
       label: "Rang moyen",
       data: sortedByMean.map((p: string) => parseFloat(rankMeans[p].toFixed(2))),
-      backgroundColor: sortedByMean.map((_, i) => getChartColors()[i % 8] + "cc"),
-      borderColor: sortedByMean.map((_, i) => getChartColors()[i % 8]),
+      backgroundColor: sortedByMean.map((_, i) => chartColors[i % chartColors.length] + "cc"),
+      borderColor: sortedByMean.map((_, i) => chartColors[i % chartColors.length]),
       borderWidth: 1,
     }]
   };

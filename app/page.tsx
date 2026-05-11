@@ -44,7 +44,6 @@ export default function CiderScope() {
     adminSection, setAdminSection,
     handleAnSessChange,
     allAnswers,
-    buildSteps,
     saveSession,
     deleteSession,
     deleteJury,
@@ -120,16 +119,16 @@ export default function CiderScope() {
         onSelectSession={handleSelectSession}
         onLoginJury={handleLoginJury}
         onSetJa={handleSetJa}
-        onPrevStep={() => setCs(Math.max(0, cs - 1))}
+        onPrevStep={() => setCs(prev => Math.max(0, prev - 1))}
         onNextStep={() => {
           if (!isStepComplete(cs)) return;
           if (cs >= currentSteps.length - 1) {
-            handleSetJa({ ...ja, _finished: true });
+            handleSetJa(prev => ({ ...prev, _finished: true }));
             void flushSave();
             setScreen("done");
           } else {
             void flushSave();
-            setCs(cs + 1);
+            setCs(prev => Math.min(currentSteps.length - 1, prev + 1));
           }
         }}
         onGoBack={goHome}
@@ -145,7 +144,6 @@ export default function CiderScope() {
         summaryView={summaryView}
         steps={currentSteps}
         completion={completion}
-        buildSteps={buildSteps}
       />
     );
   }

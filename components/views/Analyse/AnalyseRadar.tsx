@@ -12,8 +12,8 @@ import {
   OK_TEXT,
   confidenceClass
 } from "../../ui/AnalysisPrimitives";
-import { anovaTwoWay, pca2D, rvCoefficient, dravnieksScore, cochranQ, pcaCovariance, projectToPCA } from "../../../lib/stats";
-import { analyzeAttributes, getProductAttributeMatrix, runHrataMultidimensional, HrataObservation } from "../../../lib/hrata";
+import { anovaTwoWay, pca2D, rvCoefficient, dravnieksScore, cochranQ, pcaCovariance } from "../../../lib/stats";
+import { analyzeAttributes, HrataObservation } from "../../../lib/hrata";
 import type { SessionConfig, AllAnswers, Question, Product, RadarAxis, RadarAnswer } from "../../../types";
 import { getChartColors, pearson, flattenRadarAnswers } from "./utils";
 
@@ -35,7 +35,7 @@ const getRadarAnswer = (answers: AllAnswers[string] | undefined, productCode: st
 export function AnalyseRadar({ config, allAnswers, participantMode, currentJuror }: AnalyseRadarProps) {
   const radarQs = config.questions.filter(q => q.type === "radar");
   const products = config.products || [];
-  const jurors = Object.keys(allAnswers);
+  const jurors = useMemo(() => Object.keys(allAnswers), [allAnswers]);
 
   if (radarQs.length === 0) {
     return <AnalysisEmpty>Aucune donnée radar disponible.</AnalysisEmpty>;
@@ -52,23 +52,26 @@ export function AnalyseRadar({ config, allAnswers, participantMode, currentJuror
 
 function RadarQuestionAnalysis({ question, products, jurors, allAnswers, participantMode, currentJuror }: { question: Question; products: Product[]; jurors: string[]; allAnswers: AllAnswers; participantMode?: boolean; currentJuror?: string }) {
   // Criteria par groupe (pour filtrer l'ACP) + liste globale
-  const groups = question.radarGroups || [];
-  const criteriaByGroup: Record<string, string[]> = {};
-  const allCriteriaNames = new Set<string>();
-  groups.forEach(g => {
-    const acc: string[] = [];
-    const walk = (axes: RadarAxis[], prefix = "") => {
-      axes.forEach(ax => {
-        const full = prefix ? `${prefix} > ${ax.label}` : ax.label;
-        acc.push(full);
-        allCriteriaNames.add(full);
-        if (ax.children) walk(ax.children, full);
-      });
-    };
-    walk(g.axes);
-    criteriaByGroup[g.id] = acc;
-  });
-  const criteria = Array.from(allCriteriaNames);
+  const groups = useMemo(() => question.radarGroups || [], [question.radarGroups]);
+  const { criteriaByGroup, criteria } = useMemo(() => {
+    const byGroup: Record<string, string[]> = {};
+    const allNames = new Set<string>();
+    groups.forEach(g => {
+      const acc: string[] = [];
+      const walk = (axes: RadarAxis[], prefix = "") => {
+        axes.forEach(ax => {
+          const full = prefix ? `${prefix} > ${ax.label}` : ax.label;
+          acc.push(full);
+          allNames.add(full);
+          if (ax.children) walk(ax.children, full);
+        });
+      };
+      walk(g.axes);
+      byGroup[g.id] = acc;
+    });
+    return { criteriaByGroup: byGroup, criteria: Array.from(allNames) };
+  }, [groups]);
+  const chartColors = getChartColors();
 
   // Précalcul d'une map { jury → produit → crit → note } pour éviter de re-flatten à chaque accès.
   const noteMap = useMemo(() => {
@@ -124,14 +127,16 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
     });
   }, [hrataMode, jurors, products, criteria, noteMap]);
 
-  // Imputation rule HRATA : identifie les juges ayant évalué un attribut au moins une fois
+  // Imputation HRATA : seuls les attributs cités (> 0) définissent le sous-panel
+  // qui a réellement considéré l'attribut. Les zéros par défaut restent NC.
   const citedAtLeastOnce = useMemo(() => {
     const map: Record<string, Set<string>> = {};
     for (const c of criteria) {
       map[c] = new Set<string>();
       for (const j of jurors) {
         for (const p of products) {
-          if (typeof noteMap[j]?.[p.code]?.[c] === "number") {
+          const value = noteMap[j]?.[p.code]?.[c];
+          if (typeof value === "number" && value > 0) {
             map[c].add(j);
             break; // found for this juror
           }
@@ -344,9 +349,9 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             datasets: products.map((p, pi) => ({
               label: p.code,
               data: displayCriteria.map(c => avg(p.code, c)),
-              borderColor: getChartColors()[pi % 8],
-              backgroundColor: getChartColors()[pi % 8] + "22",
-              pointBackgroundColor: getChartColors()[pi % 8],
+              borderColor: chartColors[pi % chartColors.length],
+              backgroundColor: chartColors[pi % chartColors.length] + "22",
+              pointBackgroundColor: chartColors[pi % chartColors.length],
             }))
           };
 
@@ -355,9 +360,9 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             datasets: products.map((p, pi) => ({
               label: p.code,
               data: displayCriteria.map(c => getNote(currentJuror, p.code, c) ?? 0),
-              borderColor: getChartColors()[pi % 8],
-              backgroundColor: getChartColors()[pi % 8] + "22",
-              pointBackgroundColor: getChartColors()[pi % 8],
+              borderColor: chartColors[pi % chartColors.length],
+              backgroundColor: chartColors[pi % chartColors.length] + "22",
+              pointBackgroundColor: chartColors[pi % chartColors.length],
             }))
           } : null;
 
@@ -584,8 +589,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                   datasets: products.map((p, i) => ({
                     label: p.code,
                     data: [{ x: pcaRes.scores[i][0], y: pcaRes.scores[i][1], label: p.code }],
-                    backgroundColor: getChartColors()[i % 8],
-                    borderColor: getChartColors()[i % 8],
+                    backgroundColor: chartColors[i % chartColors.length],
+                    borderColor: chartColors[i % chartColors.length],
                     pointRadius: 7,
                     pointHoverRadius: 10,
                   }))
@@ -642,8 +647,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                           { x: 0, y: 0 },
                           { x: lx, y: ly },
                         ],
-                        borderColor: getChartColors()[i % 8],
-                        backgroundColor: getChartColors()[i % 8],
+                        borderColor: chartColors[i % chartColors.length],
+                        backgroundColor: chartColors[i % chartColors.length],
                         borderWidth: 1,
                         pointStyle: ["circle", "triangle"] as Array<"circle" | "triangle">,
                         pointRadius: [0, 5],

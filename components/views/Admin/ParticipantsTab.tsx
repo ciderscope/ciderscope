@@ -1,11 +1,11 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { FiX, FiUserPlus } from "react-icons/fi";
 import { Card } from "../../ui/Card";
 import { MutedText, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { Button } from "../../ui/Button";
 import { supabase } from "../../../lib/supabase";
-import type { SessionConfig, JurorAnswers, Question, RadarAxis, RadarNodeAnswer, BetLevel } from "../../../types";
+import type { SessionConfig, JurorAnswers, RadarAxis, RadarNodeAnswer, BetLevel } from "../../../types";
 
 interface ParticipantsTabProps {
   sessionId: string | null;
@@ -20,19 +20,18 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     if (!sessionId) {
       setJurors([]);
       return;
     }
     const list = await listJurorsForSession(sessionId);
     setJurors(list);
-  };
+  }, [listJurorsForSession, sessionId]);
 
   useEffect(() => { 
     void reload(); 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [reload]);
 
   // Rafraîchit la liste pendant que l'animateur regarde l'onglet, pour voir
   // les arrivées en direct sans devoir réouvrir la séance.
@@ -49,8 +48,7 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [reload, sessionId]);
 
   const handleGenerateFakes = async () => {
     if (!sessionId) {
@@ -61,7 +59,6 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
     try {
       if (!config) {
         alert("Configuration de séance introuvable.");
-        setGenerating(false);
         return;
       }
       
@@ -184,9 +181,10 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
         await supabase.from("sessions").update({ juror_count: allJurors.length }).eq("id", realSessionId);
       }
       
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
       console.error(e);
-      alert("Erreur lors de la génération de données: " + (e.message || "Erreur inconnue"));
+      alert("Erreur lors de la génération de données: " + message);
     } finally {
       setGenerating(false);
     }

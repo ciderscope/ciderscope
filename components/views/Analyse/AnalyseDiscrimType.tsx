@@ -14,7 +14,7 @@ import {
   DIM_TEXT,
   significanceClass
 } from "../../ui/AnalysisPrimitives";
-import { chiSquarePValue, normalInvCDF } from "../../../lib/stats";
+import { binomialPValue, chiSquarePValue, normalInvCDF } from "../../../lib/stats";
 import type { CSVRow } from "../../../types";
 
 interface AnalyseDiscrimTypeProps {
@@ -23,6 +23,38 @@ interface AnalyseDiscrimTypeProps {
   label: string;
   questionLabel: string;
 }
+
+const parseCodeMap = (value: string | undefined): Record<string, string> => {
+  const raw = value?.trim();
+  if (!raw) return {};
+
+  if (raw.startsWith("{")) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return Object.fromEntries(
+          Object.entries(parsed)
+            .filter(([, v]) => typeof v === "string")
+            .map(([k, v]) => [k, v as string])
+        );
+      }
+    } catch {
+      return {};
+    }
+  }
+
+  return Object.fromEntries(
+    raw
+      .split(",")
+      .map(part => part.trim())
+      .filter(Boolean)
+      .map(part => {
+        const [code, ...answerParts] = part.split(":");
+        return [code.trim(), answerParts.join(":").trim()] as const;
+      })
+      .filter(([code, answer]) => code && answer)
+  );
+};
 
 export function AnalyseDiscrimType({ data, type, label, questionLabel }: AnalyseDiscrimTypeProps) {
   const dd = data.filter(r => r.type === type && r.question === questionLabel);
@@ -34,26 +66,6 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
   // Binomial test p-value (exact, one-sided)
   // P(X >= k | n, p_chance) where p_chance = 1/3 for triangulaire, 1/2 for duo-trio, varies for a-non-a
   const pChance = type === "triangulaire" ? 1 / 3 : type === "duo-trio" ? 1 / 2 : 0.5;
-
-  const binomCoeff = (n: number, k: number): number => {
-    if (k > n) return 0;
-    if (k === 0 || k === n) return 1;
-    let c = 1;
-    for (let i = 0; i < Math.min(k, n - k); i++) {
-      c = c * (n - i) / (i + 1);
-    }
-    return c;
-  };
-
-  const binomialPValue = (n: number, k: number, p: number): number => {
-    if (n === 0) return 1;
-    // P(X >= k) = sum P(X=i) for i=k..n
-    let prob = 0;
-    for (let i = k; i <= n; i++) {
-      prob += binomCoeff(n, i) * Math.pow(p, i) * Math.pow(1 - p, n - i);
-    }
-    return Math.min(1, prob);
-  };
 
   // Minimum correct answers for significance (p<0.05, one-sided)
   const minCorrect = (n: number, p: number): number => {
@@ -69,14 +81,8 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
     let hits = 0, misses = 0, fa = 0, cr = 0;
     const perJury: Array<{ jury: string; hit: number; miss: number; fa: number; cr: number }> = [];
     qd.forEach(r => {
-      let val: Record<string, string> = {};
-      let cor: Record<string, string> = {};
-      try {
-        val = typeof r.valeur === "string" && r.valeur.startsWith("{") ? JSON.parse(r.valeur) : (r.valeur || {});
-        cor = typeof r.correct === "string" && r.correct.includes(":")
-          ? Object.fromEntries(r.correct.split(",").map((p: string) => p.split(":")))
-          : {};
-      } catch { /* ignore */ }
+      const val = parseCodeMap(r.valeur);
+      const cor = parseCodeMap(r.correct);
       let h = 0, m = 0, f = 0, c = 0;
       Object.keys(cor).forEach(code => {
         const stim = cor[code];

@@ -20,6 +20,17 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
   const qs: Question[] = config.questions || [];
   const products: Product[] = config.products || [];
   const allSteps = getSteps(config);
+  const trackedQuestions = qs.filter(q => ["classement","seuil","seuil-bet","triangulaire","duo-trio","a-non-a"].includes(q.type));
+  const productStepByCode = new Map(
+    allSteps
+      .filter(step => step.type === "product")
+      .map(step => [step.product.code, step])
+  );
+  const questionStepById = new Map(
+    allSteps
+      .filter(step => step.type === "ranking" || step.type === "discrim")
+      .map(step => [step.question.id, step])
+  );
 
   return (
     <Card title="Avancement par jury">
@@ -28,7 +39,7 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
           <tr>
             <th>Jury</th>
             {products.map(p => <th key={p.code}>{p.code}</th>)}
-            {qs.filter(q => ["classement","seuil","seuil-bet","triangulaire","duo-trio","a-non-a"].includes(q.type)).map(q => (
+            {trackedQuestions.map(q => (
               <th key={q.id} className="max-w-20 overflow-hidden text-ellipsis" title={q.label}>
                 {q.label.length > 12 ? q.label.slice(0, 10) + "…" : q.label}
               </th>
@@ -46,7 +57,7 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
               <tr key={j} className={isSelf ? "self" : ""}>
                 <td className="font-semibold">{j}{isSelf && <span className="ml-1 text-[var(--accent)]" aria-label="vous">★</span>}</td>
                 {products.map(p => {
-                  const step = allSteps.find(s => s.type === "product" && s.product.code === p.code);
+                  const step = productStepByCode.get(p.code);
                   const answered = step ? checkStepDone(step, ja) : false;
                   return (
                     <td key={p.code} className={answerStateClass(answered)}>
@@ -54,10 +65,8 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
                     </td>
                   );
                 })}
-                {qs.filter(q => ["classement","seuil","seuil-bet","triangulaire","duo-trio","a-non-a"].includes(q.type)).map(q => {
-                  const step = allSteps.find(s =>
-                    (s.type === "ranking" || s.type === "discrim") && s.question.id === q.id
-                  );
+                {trackedQuestions.map(q => {
+                  const step = questionStepById.get(q.id);
                   const answered = step ? checkStepDone(step, ja) : false;
                   return (
                     <td key={q.id} className={answerStateClass(answered)}>

@@ -39,7 +39,6 @@ interface ParticipantViewProps {
   summaryView: React.ReactNode | null;
   steps: SessionStep[];
   completion: boolean[];
-  buildSteps: (cfg: SessionConfig, name: string) => SessionStep[];
 }
 
 export const ParticipantView = (props: ParticipantViewProps) => {
@@ -98,8 +97,6 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           ja={props.ja}
           onSetJa={props.onSetJa}
           onValidateStep={props.onValidateStep}
-          saveStatus={props.saveStatus}
-          pendingCount={props.pendingCount}
           validatedSteps={props.validatedSteps}
         />
       )}

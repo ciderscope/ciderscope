@@ -145,9 +145,6 @@ export interface Poste {
 }
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "pending";
 
-export type JurorsMap = Record<string, string[]>;
-export type SessionsMap = Record<string, SessionListItem>;
-
 // ── Steps générés pour le questionnaire ────────────────────────────────────
 export type SessionStep =
   | { type: "product"; product: Product; questions: Question[] }
@@ -164,12 +161,4 @@ export interface CSVRow {
   valeur: string;
   correct?: string;
   [key: string]: string | undefined;
-}
-
-// ── Entrées de la file d'attente hors-ligne ────────────────────────────────
-export interface PendingEntry {
-  sessionId: string;
-  jurorName: string;
-  data: JurorAnswers;
-  ts: number;
 }

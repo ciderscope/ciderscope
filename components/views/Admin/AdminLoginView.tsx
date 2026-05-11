@@ -41,7 +41,7 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center">
-      <div className="bg-white border-[1.5px] border-[var(--border)] rounded-2xl px-9 py-10 w-full max-w-[360px] shadow-[0_4px_24px_rgba(0,0,0,0.08)]">
+      <div className="bg-[var(--paper)] border-[1.5px] border-[var(--border)] rounded-2xl px-9 py-10 w-full max-w-[360px] shadow-[0_4px_24px_rgba(0,0,0,0.08)]">
         <h2 className="font-extrabold mb-1.5 text-[var(--ink)] text-[clamp(18px,2.5vw,22px)]">
           Accès administration
         </h2>

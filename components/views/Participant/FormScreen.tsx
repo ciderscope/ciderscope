@@ -5,9 +5,8 @@ import { Button } from "../../ui/Button";
 import { Questionnaire } from "../../features/Questionnaire";
 import { validateRadarAnswer } from "../../features/QuestionInput";
 import { stepShortLabel } from "./utils";
-import { SaveIndicator } from "./utils";
 import { ConfirmModal } from "./ConfirmModal";
-import { SessionStep, SessionConfig, JurorAnswers, SaveStatus, Question, RadarAxis, RadarAnswer, Product } from "../../../types";
+import { SessionStep, SessionConfig, JurorAnswers, Question, RadarAxis, RadarAnswer, Product } from "../../../types";
 
 type SetJa = (updater: JurorAnswers | ((prev: JurorAnswers) => JurorAnswers)) => void;
 
@@ -32,14 +31,12 @@ interface FormScreenProps {
   ja: JurorAnswers;
   onSetJa: SetJa;
   onValidateStep: (idx: number) => void;
-  saveStatus: SaveStatus;
-  pendingCount: number;
   validatedSteps: Set<number>;
 }
 
 export const FormScreen = ({
   onChangeJury, steps, cs, completion, onPrevStep, onNextStep,
-  curSess, cj, ja, onSetJa, onValidateStep, saveStatus, pendingCount, validatedSteps
+  curSess, cj, ja, onSetJa, onValidateStep, validatedSteps
 }: FormScreenProps) => {
   const products: Product[] = curSess.products || [];
   const total = steps.length;
@@ -144,7 +141,6 @@ export const FormScreen = ({
           ja={ja}
           setJa={onSetJa}
           products={products}
-          jurorName={cj}
         />
       </div>
       
@@ -154,7 +150,14 @@ export const FormScreen = ({
             <span className="text-[11px] text-[#c0392b]">Répondez à la question pour continuer.</span>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={handlePrevClick} className={cs === 0 ? "invisible" : "visible"}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handlePrevClick}
+          className={cs === 0 ? "invisible" : "visible"}
+          aria-label="Étape précédente"
+          title="Étape précédente"
+        >
           <FiArrowLeft />
         </Button>
         <Button
@@ -162,12 +165,12 @@ export const FormScreen = ({
           onClick={handleNextClick}
           disabled={!canAdvance}
           className={!canAdvance ? "opacity-50 cursor-not-allowed" : ""}
+          aria-label={cs >= total - 1 ? "Terminer le questionnaire" : "Étape suivante"}
+          title={cs >= total - 1 ? "Terminer le questionnaire" : "Étape suivante"}
         >
           <FiArrowRight />
         </Button>
       </div>
-
-      <SaveIndicator status={saveStatus} pendingCount={pendingCount} />
 
       {confirmNext && (
         <ConfirmModal

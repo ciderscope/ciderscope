@@ -126,15 +126,15 @@ export const AdminView = ({
                       >
                         <FiPieChart /> {s.resultsVisible ? "Résumé visible" : "Partager résumé"}
                       </Button>
-                      <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier"><FiEdit2 /></Button>
-                      <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer"><FiCopy /></Button>
+                      <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier" aria-label="Modifier la séance"><FiEdit2 /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer" aria-label="Dupliquer la séance"><FiCopy /></Button>
                       {confirmingId === s.id ? (
                         <div className="flex gap-1">
                           <Button variant="danger" size="sm" onClick={() => { onDeleteSession(s.id); setConfirmingId(null); }}>Confirmer ?</Button>
                           <Button variant="ghost" size="sm" onClick={() => setConfirmingId(null)}>Annuler</Button>
                         </div>
                       ) : (
-                        <DangerGhostButton onClick={() => setConfirmingId(s.id)} title="Supprimer"><FiX /></DangerGhostButton>
+                        <DangerGhostButton onClick={() => setConfirmingId(s.id)} title="Supprimer" aria-label="Supprimer la séance"><FiX /></DangerGhostButton>
                       )}
                     </div>
                   </div>
@@ -196,7 +196,10 @@ export const AdminView = ({
                     <label>NOM DE LA SÉANCE</label>
                     <input
                       value={editCfg.name}
-                      onChange={(e) => onSetEditCfg({ ...editCfg, name: e.target.value })}
+                      onChange={(e) => {
+                        const name = e.target.value;
+                        onSetEditCfg(prev => prev ? { ...prev, name } : prev);
+                      }}
                     />
                   </div>
                 </div>
@@ -209,9 +212,13 @@ export const AdminView = ({
                       <input
                         value={p.code}
                         onChange={(e) => {
-                          const n = [...editCfg.products];
-                          n[i] = { ...n[i], code: e.target.value.toUpperCase() };
-                          onSetEditCfg({ ...editCfg, products: n });
+                          const code = e.target.value.toUpperCase();
+                          onSetEditCfg(prev => prev ? {
+                            ...prev,
+                            products: prev.products.map((product, idx) =>
+                              idx === i ? { ...product, code } : product
+                            ),
+                          } : prev);
                         }}
                         className="w-24 font-mono font-bold text-left"
                         placeholder="Code"
@@ -219,16 +226,26 @@ export const AdminView = ({
                       <input
                         value={p.label || ""}
                         onChange={(e) => {
-                          const n = [...editCfg.products];
-                          n[i] = { ...n[i], label: e.target.value };
-                          onSetEditCfg({ ...editCfg, products: n });
+                          const label = e.target.value;
+                          onSetEditCfg(prev => prev ? {
+                            ...prev,
+                            products: prev.products.map((product, idx) =>
+                              idx === i ? { ...product, label } : product
+                            ),
+                          } : prev);
                         }}
                         className="flex-1"
                         placeholder="Libellé optionnel"
                       />
                       <button
                         className="chip-x mt-2"
-                        onClick={() => onSetEditCfg({ ...editCfg, products: editCfg.products.filter((_, idx) => idx !== i) })}
+                        type="button"
+                        title="Retirer cet échantillon"
+                        aria-label={`Retirer l'échantillon ${p.code || i + 1}`}
+                        onClick={() => onSetEditCfg(prev => prev ? {
+                          ...prev,
+                          products: prev.products.filter((_, idx) => idx !== i),
+                        } : prev)}
                       ><FiX /></button>
                     </div>
                   ))}
@@ -239,14 +256,17 @@ export const AdminView = ({
                     onClick={() => {
                       // Tire un code à 3 chiffres (101–999) non encore utilisé
                       // dans la séance, pour éviter les doublons à la saisie.
-                      const used = new Set(editCfg.products.map(p => p.code).filter(Boolean));
-                      let code = "";
-                      for (let attempt = 0; attempt < 50; attempt++) {
-                        const n = 101 + Math.floor(Math.random() * 899);
-                        const c = String(n);
-                        if (!used.has(c)) { code = c; break; }
-                      }
-                      onSetEditCfg({ ...editCfg, products: [...editCfg.products, { code }] });
+                      onSetEditCfg(prev => {
+                        if (!prev) return prev;
+                        const used = new Set(prev.products.map(p => p.code).filter(Boolean));
+                        let code = "";
+                        for (let attempt = 0; attempt < 50; attempt++) {
+                          const n = 101 + Math.floor(Math.random() * 899);
+                          const c = String(n);
+                          if (!used.has(c)) { code = c; break; }
+                        }
+                        return { ...prev, products: [...prev.products, { code }] };
+                      });
                     }}
                   >
                     <FiPlus /> Ajouter un échantillon
@@ -258,16 +278,18 @@ export const AdminView = ({
                   La logique reste branchée côté hook (presMode peut valoir
                   "latin"/"fixed"/"random") ; on n'expose juste plus le toggle. */}
 
-              <div className="py-6">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="btn-danger-outline"
-                  onClick={() => onDeleteSession(editSessId!)}
-                >
-                  <FiX /> Supprimer définitivement la séance
-                </Button>
-              </div>
+              {editSessId && (
+                <div className="py-6">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="btn-danger-outline"
+                    onClick={() => onDeleteSession(editSessId)}
+                  >
+                    <FiX /> Supprimer définitivement la séance
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 

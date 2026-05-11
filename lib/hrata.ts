@@ -3,7 +3,7 @@
  * Implements the methodology proposed by Léa Koenig for sensory analysis of structured, zero-inflated data.
  */
 
-import { anovaTwoWay, anovaOneWay, cochranQ, pcaCovariance, projectToPCA, rvCoefficient, procrustes2D, pca2D } from "./stats";
+import { anovaOneWay, cochranQ, pcaCovariance, projectToPCA, pca2D } from "./stats";
 
 export interface HrataObservation {
   subjectId: string;
@@ -127,7 +127,6 @@ export function analyzeAttributes(
       matrixIntensity.push([]);
     }
 
-    let subIdx = 0;
     subjects.forEach(sub => {
       if (consideringSubjects.has(sub)) {
         const subAppRow: number[] = [];
@@ -142,7 +141,6 @@ export function analyzeAttributes(
           matrixIntensity[prodIdx].push(val > 0 ? val : null); // ANOVA on positive intensities only
         });
         matrixApplicability.push(subAppRow);
-        subIdx++;
       }
     });
 
@@ -181,20 +179,12 @@ export function analyzeAttributes(
 
     if (!isLowCoverage) {
       // Test applicability: Cochran's Q (Robust alternative to Logistic Regression with subject strata)
-      try {
-        const qRes = cochranQ(matrixApplicability);
-        analysis.pApplicabilityRaw = qRes.pValue;
-      } catch (e) {
-        // Model failed
-      }
+      const qRes = cochranQ(matrixApplicability);
+      analysis.pApplicabilityRaw = qRes.pValue;
 
       // Test intensity: ANOVA on positive values
-      try {
-        const aRes = anovaOneWay(matrixIntensity);
-        analysis.pIntensityRaw = aRes.ok ? aRes.pValue : undefined;
-      } catch (e) {
-        // Not enough data for ANOVA
-      }
+      const aRes = anovaOneWay(matrixIntensity);
+      analysis.pIntensityRaw = aRes.ok ? aRes.pValue : undefined;
     }
 
     analyses.push(analysis);
@@ -251,7 +241,12 @@ export function benjaminiHochberg(pValues: number[]): number[] {
   if (n === 0) return [];
   
   // Create array of objects to keep track of original indices
-  const indexedPvals = pValues.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
+  const indexedPvals = pValues
+    .map((p, i) => ({
+      p: Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 1,
+      i
+    }))
+    .sort((a, b) => a.p - b.p);
   
   const fdr = new Array(n);
   let minAdj = 1;
@@ -306,36 +301,6 @@ function pearson(x: number[], y: number[]): number {
 }
 
 /**
- * Creates matrices for Multidimensional Analysis.
- * Default value metric is "dravnieksWeighted".
- */
-export function preparePcaMatrices(
-  analyses: AttributeAnalysis[],
-  products: string[], // List of product IDs in fixed order
-  metric: "dravnieksWeighted" | "dravnieksConditional" | "conditionalFrequency" | "conditionalMeanIntensity" = "dravnieksWeighted"
-): { 
-  activeMatrix: number[][]; // Categories [products x attributes]
-  illustrativeMatrix: number[][]; // Families & Terms [products x attributes]
-  activeLabels: string[];
-  illustrativeLabels: string[];
-} {
-  
-  const activeAttrs = analyses.filter(a => a.level === "classe" && !a.isLowCoverage);
-  const illusAttrs = analyses.filter(a => (a.level === "famille" || a.level === "descripteur") && !a.isLowCoverage);
-
-  const buildMat = (attrs: AttributeAnalysis[]) => {
-    // Note: This requires the metric to be calculated per product.
-    // The current AttributeMetrics are global. 
-    // Wait, the specification says: "Calculer les scores de Dravnieks par produit × attribut".
-    // I need to expand the analysis to include per-product metrics!
-    return [];
-  };
-
-  // I will refactor the design slightly to expose per-product matrices directly from the raw data processor.
-  throw new Error("Pca matrix preparation requires per-product metric aggregation. Use getProductAttributeMatrix instead.");
-}
-
-/**
  * Calculates per-product metrics (Dravnieks, Means) to feed the PCA.
  */
 export function getProductAttributeMatrix(
@@ -348,7 +313,7 @@ export function getProductAttributeMatrix(
   categories: { labels: string[]; matrix: number[][] }; // Active
   illustratives: { labels: string[]; matrix: number[][] }; // Illustrative
 } {
-  const products = Array.from(new Set(data.map(d => d.productId))).sort();
+  const products = Array.from(new Set(data.map(d => d.productId)));
   
   // Active variables: only classes (categories) with sufficient coverage
   const activeLabels = analyses.filter(a => a.level === "classe" && !a.isLowCoverage).map(a => a.attributeId);
@@ -374,7 +339,6 @@ export function getProductAttributeMatrix(
     
     labels.forEach(attrId => {
       const an = analyses.find(a => a.attributeId === attrId)!;
-      const nTotal = an.totalSubjects;
       const nCons = an.subjectsConsidering;
       const covRate = an.coverageRate;
 
