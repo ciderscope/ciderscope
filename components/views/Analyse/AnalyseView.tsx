@@ -139,6 +139,21 @@ export const AnalyseView = ({
     syncChartDefaults();
   }, [isDark]);
 
+  // Rafraîchissement périodique des réponses côté admin : sans cela, les
+  // finalisations / nouvelles réponses des jurys ne remontent pas (notamment
+  // pour la coche globale dans l'onglet "Par jury"). On évite l'effet en mode
+  // participant — le résumé est figé une fois ouvert.
+  useEffect(() => {
+    if (participantMode) return;
+    if (!anSessId) return;
+    const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void onAnSessChange(anSessId);
+    };
+    const id = setInterval(tick, 5_000);
+    return () => clearInterval(id);
+  }, [participantMode, anSessId, onAnSessChange]);
+
   const tabs = useMemo(() => {
     const all = computeTabs(anCfg);
     // Vue participant : on retire l'onglet "Données" (table brute) — l'utilisateur

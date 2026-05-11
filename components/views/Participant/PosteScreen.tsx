@@ -16,9 +16,9 @@ export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste, cj }: PosteS
   const numbers = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
-    <div className="poste-selection">
+    <div className="poste-screen">
       <h2>Votre poste</h2>
-      <p className="sub">
+      <p className="hint">
         Sélectionnez le numéro indiqué sur votre feuille de service.
       </p>
       <div className="poste-grid">

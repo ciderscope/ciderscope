@@ -12,6 +12,60 @@ type ConfigCacheEntry = { cfg: SessionConfig; ts: number };
 const _configCache = new Map<string, ConfigCacheEntry>();
 const CONFIG_CACHE_TTL_MS = 60_000;
 
+const isScaleAnsweredValue = (v: unknown): boolean => {
+  if (typeof v === "number") return true;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    return (v as { _touched?: boolean })._touched === true;
+  }
+  return false;
+};
+
+const asAnswerBucket = (value: unknown): Record<string, unknown> => {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+};
+
+const isSessionStepDone = (s: SessionStep, jaState: JurorAnswers): boolean => {
+  if (!s) return true;
+  if (s.type === "product") {
+    const pa = asAnswerBucket(jaState[s.product.code]);
+    return s.questions.every(q => {
+      if (q.type === "scale") return isScaleAnsweredValue(pa[q.id]);
+      return pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null;
+    });
+  }
+  if (s.type === "ranking") return Array.isArray(asAnswerBucket(jaState["_rank"])[s.question.id]);
+  if (s.type === "discrim") {
+    const v = asAnswerBucket(jaState["_discrim"])[s.question.id];
+    if (s.question.type === "a-non-a") {
+      const codes: string[] = s.question.codes || [];
+      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+      const rec = v as unknown as Record<string, string>;
+      return codes.length > 0 && codes.every(c => rec[c] != null);
+    }
+    if (s.question.type === "seuil-bet") {
+      const levels = s.question.betLevels || [];
+      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+      const rec = v as unknown as Record<string, string>;
+      return levels.length > 0 && levels.every((_: BetLevel, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
+    }
+    return v != null && v !== "";
+  }
+  if (s.type === "global") {
+    const ga = asAnswerBucket(jaState["_global"]);
+    return s.questions.every(q => {
+      if (q.type === "scale") return isScaleAnsweredValue(ga[q.id]);
+      return ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null;
+    });
+  }
+  return true;
+};
+
+const logDataError = (message: string, error: unknown) => {
+  console.error(message, error);
+};
+
 export const useSenso = () => {
   const [mode, setMode] = useState<AppMode>("home");
   const [screen, setScreen] = useState<AppScreen>("landing");
@@ -324,8 +378,7 @@ export const useSenso = () => {
       .select("juror_name, data")
       .eq("session_id", id);
     if (error) {
-      console.error("Erreur lors du chargement des jurys:", error);
-      if (error && typeof error === "object") console.table(error);
+      logDataError("Erreur lors du chargement des jurys:", error);
     }
     const rows = (data || []) as Array<{ juror_name: string; data: JurorAnswers | null }>;
     setJurors(rows.map(r => r.juror_name));
@@ -344,14 +397,6 @@ export const useSenso = () => {
     setCurSessId(id);
     setScreen("jury");
   }, [loadSessionData]);
-
-  const isStepDone = (s: SessionStep, currentJa: JurorAnswers) => {
-    if (s.type === "product") return !!currentJa[s.product.code] && s.questions.some(q => currentJa[s.product.code][q.id] != null);
-    if (s.type === "ranking") return !!currentJa["_rank"] && currentJa["_rank"][s.question.id] != null;
-    if (s.type === "discrim") return !!currentJa["_discrim"] && currentJa["_discrim"][s.question.id] != null;
-    if (s.type === "global") return !!currentJa["_global"] && s.questions.some(q => currentJa["_global"][q.id] != null);
-    return false;
-  };
 
   const getJurorIndex = (name: string, jurorList: string[]) => {
     const idx = jurorList.indexOf(name);
@@ -463,7 +508,7 @@ export const useSenso = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleLoginJury = useCallback(async (name: string) => {
+  const handleLoginJury = useCallback(async (name: string, opts?: { review?: boolean }) => {
     const { curSessId, curSess, jurors } = stateRef.current;
     if (!name || !curSessId || !curSess) return;
     setCj(name);
@@ -477,6 +522,16 @@ export const useSenso = () => {
     setJa(answers);
     setValidatedSteps(new Set());
 
+    // Si le jury a déjà finalisé sa séance, on l'envoie directement sur l'écran
+    // "Terminé !" plutôt que sur le dernier échantillon. La relecture ("Revoir
+    // mes réponses") force l'entrée dans le formulaire via opts.review.
+    if (!opts?.review && answers["_finished"] === true) {
+      const existing = readPoste(answers);
+      if (existing) setPoste(existing);
+      setScreen("done");
+      return;
+    }
+
     // Si le jury a déjà un poste enregistré (reprise), on saute l'écran de sélection.
     const existing = readPoste(answers);
     if (existing) {
@@ -485,7 +540,7 @@ export const useSenso = () => {
       const steps = buildSteps(curSess, name, jl, existing);
       let firstIncomplete = 0;
       for (let i = 0; i < steps.length; i++) {
-        if (!isStepDone(steps[i], answers)) {
+        if (!isSessionStepDone(steps[i], answers)) {
           firstIncomplete = i;
           break;
         }
@@ -519,8 +574,7 @@ export const useSenso = () => {
         updated_at: new Date().toISOString(),
       }, { onConflict: "session_id,juror_name" });
       if (error) {
-        console.error("Erreur lors de l'enregistrement du poste:", error);
-        if (error && typeof error === "object") console.table(error);
+        logDataError("Erreur lors de l'enregistrement du poste:", error);
       }
     }
     setCs(0);
@@ -577,8 +631,7 @@ export const useSenso = () => {
         .update({ juror_count: newJurors.length })
         .eq("id", curSessId);
       if (upError) {
-        console.error("Erreur lors de la mise à jour du compteur de jurys:", upError);
-        if (upError && typeof upError === "object") console.table(upError);
+        logDataError("Erreur lors de la mise à jour du compteur de jurys:", upError);
       }
       setSessions(prev => prev.map(s =>
         s.id === curSessId ? { ...s, jurorCount: newJurors.length } : s
@@ -586,7 +639,17 @@ export const useSenso = () => {
     }
   }, []);
 
-  const handleSetJa = useCallback((newJa: JurorAnswers) => {
+  // Accepte soit un objet `JurorAnswers` complet, soit un updater fonctionnel
+  // (à la `useState`). Le mode fonctionnel résout une race courante : le
+  // cleanup d'un useEffect (par ex. l'enregistrement du `_timing` du step)
+  // s'exécute pendant le commit de démontage avec un `jaRef` figé sur l'état
+  // du render précédent — il écrasait alors `_finished: true` posé juste
+  // avant `setScreen("done")`. En lisant `stateRef.current.ja`, on récupère
+  // toujours la version la plus récente.
+  type JaUpdater = JurorAnswers | ((prev: JurorAnswers) => JurorAnswers);
+  const handleSetJa = useCallback((updater: JaUpdater) => {
+    const prev = stateRef.current.ja;
+    const newJa = typeof updater === "function" ? (updater as (p: JurorAnswers) => JurorAnswers)(prev) : updater;
     setJa(newJa);
     const { cj, curSessId } = stateRef.current;
     if (!cj || !curSessId) return;
@@ -627,18 +690,22 @@ export const useSenso = () => {
   // Rafraîchissement périodique de la liste des séances tant qu'on regarde
   // le tableau (landing participant ou liste admin). Sans cela, le compteur
   // de jurys reste figé à la valeur lue au montage ; les arrivées d'autres
-  // postes ne remontent jamais à l'écran. On évite de tourner si l'onglet
-  // est masqué (visibilitychange) pour ne pas générer de trafic inutile.
+  // postes ne remontent jamais à l'écran. On étend aussi ce polling à l'écran
+  // "Terminé !" (intervalle 5 s) pour que le bouton "Voir les résultats" se
+  // débloque sans rechargement dès que l'animateur l'autorise. On évite de
+  // tourner si l'onglet est masqué (visibilitychange) pour ne pas générer de
+  // trafic inutile.
   useEffect(() => {
     if (!restored) return;
-    if (screen !== "landing") return;
+    if (screen !== "landing" && screen !== "done") return;
     let cancelled = false;
     const tick = () => {
       if (cancelled) return;
       if (typeof document !== "undefined" && document.hidden) return;
       void loadSessions(true);
     };
-    const id = setInterval(tick, 10_000);
+    const intervalMs = screen === "done" ? 5_000 : 10_000;
+    const id = setInterval(tick, intervalMs);
     const onVisible = () => { if (!document.hidden) tick(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -674,39 +741,13 @@ export const useSenso = () => {
   }, [curSess, cj, buildSteps]);
 
   // Vérifie la complétion d'un step donné contre un état de réponses.
-  const checkStepDone = (s: SessionStep, jaState: JurorAnswers): boolean => {
-    if (!s) return true;
-    if (s.type === "product") {
-      const pa = jaState[s.product.code] || {};
-      return s.questions.every(q => q.type === "scale" || (pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null));
-    }
-    if (s.type === "ranking") return Array.isArray(jaState["_rank"]?.[s.question.id]);
-    if (s.type === "discrim") {
-      const v = jaState["_discrim"]?.[s.question.id];
-      if (s.question.type === "a-non-a") {
-        const codes: string[] = s.question.codes || [];
-        if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-        const rec = v as unknown as Record<string, string>;
-        return codes.length > 0 && codes.every(c => rec[c] != null);
-      }
-      if (s.question.type === "seuil-bet") {
-        const levels = s.question.betLevels || [];
-        if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-        const rec = v as unknown as Record<string, string>;
-        return levels.length > 0 && levels.every((_: BetLevel, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
-      }
-      return v != null && v !== "";
-    }
-    if (s.type === "global") {
-      const ga = jaState["_global"] || {};
-      return s.questions.every(q => q.type === "scale" || (ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null));
-    }
-    return true;
-  };
-
+  // Pour les questions "scale" on exige une validation explicite : le jury
+  // doit avoir tapé/glissé le pouce du curseur (drapeau `_touched` posé par
+  // ScaleInput). Le format ancien (valeur brute number) est considéré comme
+  // déjà validé pour la rétrocompatibilité.
   // Tableau de complétion par étape — calculé une seule fois par changement de ja/steps.
   const completion = useMemo<boolean[]>(
-    () => currentSteps.map(s => checkStepDone(s, ja)),
+    () => currentSteps.map(s => isSessionStepDone(s, ja)),
     [currentSteps, ja]
   );
 
@@ -742,8 +783,7 @@ export const useSenso = () => {
       results_visible: meta.resultsVisible ?? false,
     });
     if (error) {
-      console.error("Erreur lors de l'enregistrement de la séance:", error);
-      if (error && typeof error === "object") console.table(error);
+      logDataError("Erreur lors de l'enregistrement de la séance:", error);
       return { success: false, error };
     }
     _configCache.set(id, { cfg, ts: Date.now() });
@@ -753,8 +793,7 @@ export const useSenso = () => {
   const deleteSession = useCallback(async (id: string) => {
     const { error } = await supabase.from("sessions").delete().eq("id", id);
     if (error) {
-      console.error("Erreur lors de la suppression de la séance:", error);
-      if (error && typeof error === "object") console.table(error);
+      logDataError("Erreur lors de la suppression de la séance:", error);
     }
     _configCache.delete(id);
   }, []);
@@ -765,8 +804,7 @@ export const useSenso = () => {
       .select("juror_name")
       .eq("session_id", sessionId);
     if (error) {
-      console.error("Erreur lors du listage des jurys:", error);
-      if (error && typeof error === "object") console.table(error);
+      logDataError("Erreur lors du listage des jurys:", error);
     }
     if (!data) return [];
     return data.map((r: { juror_name: string }) => r.juror_name);
@@ -780,8 +818,7 @@ export const useSenso = () => {
       .eq("session_id", sessionId)
       .eq("juror_name", name);
     if (error) {
-      console.error("Erreur lors de la suppression du jury:", error);
-      if (error && typeof error === "object") console.table(error);
+      logDataError("Erreur lors de la suppression du jury:", error);
       return { success: false };
     }
     const { curSessId, jurors, cj } = stateRef.current;
@@ -796,8 +833,7 @@ export const useSenso = () => {
       .update({ juror_count: remaining.length })
       .eq("id", sessionId);
     if (upError) {
-      console.error("Erreur lors de la mise à jour du compteur de jurys:", upError);
-      if (upError && typeof upError === "object") console.table(upError);
+      logDataError("Erreur lors de la mise à jour du compteur de jurys:", upError);
     }
     setSessions(prev => prev.map(s =>
       s.id === sessionId ? { ...s, jurorCount: remaining.length } : s
@@ -819,8 +855,7 @@ export const useSenso = () => {
     const newActive = !s.active;
     const { error } = await supabase.from("sessions").update({ active: newActive }).eq("id", id);
     if (error) {
-      console.error("Erreur lors de la modification de l'état actif:", error);
-      if (error && typeof error === "object") console.table(error);
+      logDataError("Erreur lors de la modification de l'état actif:", error);
     }
     setSessions(prev => prev.map(x => x.id === id ? { ...x, active: newActive } : x));
   }, []);
@@ -836,8 +871,7 @@ export const useSenso = () => {
     const next = !s.resultsVisible;
     const { error } = await supabase.from("sessions").update({ results_visible: next }).eq("id", id);
     if (error) {
-      console.error("Erreur lors de la modification de la visibilité des résultats:", error);
-      if (error && typeof error === "object") console.table(error);
+      logDataError("Erreur lors de la modification de la visibilité des résultats:", error);
     }
     setSessions(prev => prev.map(x => x.id === id ? { ...x, resultsVisible: next } : x));
   }, []);

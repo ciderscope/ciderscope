@@ -140,18 +140,26 @@ const ScaleInput = React.memo(function ScaleInput({ q, value, onChange }: { q: Q
   // Normalise value → always work as object internally
   const valObj: ScaleAnswer = (() => {
     if (typeof value === "object" && value !== null && !Array.isArray(value)) return value as ScaleAnswer;
-    if (typeof value === "number") return { _: value, _subs: [] };
+    if (typeof value === "number") return { _: value, _subs: [], _touched: true };
     return { _: mid, _subs: [] };
   })();
 
   const mainValue: number = typeof valObj._ === "number" ? valObj._ : mid;
   const activeSubs: string[] = Array.isArray(valObj._subs) ? valObj._subs : [];
+  const touched: boolean = valObj._touched === true;
 
-  // Init on mount: if no value yet, seed with admin-defined suggestions
+  // Init on mount: if no value yet, seed with admin-defined suggestions.
+  // Une valeur numérique brute (ancien format) est considérée comme déjà
+  // validée — on stamp `_touched` pour ne pas redemander au jury de re-tap
+  // une réponse qu'il avait déjà saisie.
   useEffect(() => {
     if (value == null || typeof value === "number") {
       const defaults = q.subCriteria || [];
-      const init: ScaleAnswer = { _: typeof value === "number" ? value : mid, _subs: [...defaults] };
+      const init: ScaleAnswer = {
+        _: typeof value === "number" ? value : mid,
+        _subs: [...defaults],
+      };
+      if (typeof value === "number") init._touched = true;
       defaults.forEach(s => { init[s] = mid; });
       onChange(init);
     }
@@ -159,7 +167,7 @@ const ScaleInput = React.memo(function ScaleInput({ q, value, onChange }: { q: Q
   }, []);
 
   const updateMain = (v: number) => {
-    const next: ScaleAnswer = { ...valObj, _: v };
+    const next: ScaleAnswer = { ...valObj, _: v, _touched: true };
     activeSubs.forEach(label => {
       const current = next[label];
       if (typeof current === "number" && current > v) next[label] = v;
@@ -167,9 +175,14 @@ const ScaleInput = React.memo(function ScaleInput({ q, value, onChange }: { q: Q
     onChange(next);
   };
 
+  const validateMain = () => {
+    if (valObj._touched) return;
+    onChange({ ...valObj, _touched: true });
+  };
+
   const updateSub = (label: string, v: number) => {
     const nextMain = Math.max(valObj._, v);
-    onChange({ ...valObj, _: nextMain, [label]: v });
+    onChange({ ...valObj, _: nextMain, _touched: true, [label]: v });
   };
 
   const removeSub = (label: string) => {
@@ -192,6 +205,8 @@ const ScaleInput = React.memo(function ScaleInput({ q, value, onChange }: { q: Q
             max={mx}
             value={mainValue}
             onChange={updateMain}
+            onTap={validateMain}
+            touched={touched}
             ariaLabel={q.label}
           />
           <span className={monoCls}>{q.labelMax || mx}</span>
@@ -637,7 +652,7 @@ const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
 // `pathPrefix` permet d'insérer des segments de chemin cachés (aplatissement famille→classe unique).
 const RadarTreeNode = React.memo(function RadarTreeNode({
   axis, nodeAnswer, min, max, path, expandedPaths, togglePath, setPathValue, highlightKey,
-  customChildren, onAddCustomChild, familyTouched, onTouchFamily,
+  customChildren, onAddCustomChild,
 }: {
   axis: RadarAxis;
   nodeAnswer: RadarNodeAnswer;
@@ -650,9 +665,6 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
   highlightKey: string | null;
   customChildren: Record<string, string[]>;
   onAddCustomChild: (pathKey: string, label: string) => void;
-  // Renseignés uniquement à la profondeur 0 (famille). Ailleurs : undefined.
-  familyTouched?: boolean;
-  onTouchFamily?: () => void;
 }) {
   const pathKey = path.join("/");
 
@@ -679,7 +691,6 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
   const childrenAreLeaves = hasDisplayChildren && displayChildren.every(d => !d.child.children || d.child.children.length === 0);
   const customForHere = customChildren[pathKey] || [];
 
-  const isFamily = path.length === 1;
   const untouchedFlag = !nodeAnswer._touched;
 
   return (
@@ -797,13 +808,12 @@ function CustomDescriptorAdder({ onAdd }: { onAdd: (label: string) => void }) {
   );
 }
 
-function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched, showSVG = true }: {
+function RadarGroupBlock({ group, min, max, answer, onChange, showSVG = true }: {
   group: { title: string; axes: RadarAxis[] };
   min: number;
   max: number;
   answer: RadarAnswer;
   onChange: (next: RadarAnswer) => void;
-  markFamilyTouched: (label: string) => void;
   showSVG?: boolean;
 }) {
   const familyDefault = min;
@@ -984,7 +994,6 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched,
           ) : (
             visibleAxes.map(ax => {
               const nodeAnswer = answer[ax.label] ?? { _: familyDefault };
-              const touched = !!nodeAnswer._touched;
               return (
                 <RadarTreeNode
                   key={ax.label}
@@ -999,8 +1008,6 @@ function RadarGroupBlock({ group, min, max, answer, onChange, markFamilyTouched,
                   highlightKey={highlightKey}
                   customChildren={customChildren}
                   onAddCustomChild={addCustomChild}
-                  familyTouched={touched}
-                  onTouchFamily={() => markFamilyTouched(ax.label)}
                 />
               );
             })
@@ -1032,10 +1039,6 @@ const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Q
   // chaque axe racine). Une famille est touchée dès qu'on lui pose un drag ou un
   // tap. Sans Set local, le flag survit aux remounts (changement d'étape, retour
   // au formulaire) et est validable côté FormScreen.
-  const markFamilyTouched = (label: string) => {
-    onChange(setFamilyTouched(answer, label));
-  };
-
   // init/seed at mount if no value
   useEffect(() => {
     if (value == null || (typeof value === "object" && Object.keys(value).length === 0)) {
@@ -1075,7 +1078,6 @@ const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Q
             max={mx}
             answer={answer}
             onChange={onChange}
-            markFamilyTouched={markFamilyTouched}
             showSVG={mode === "radar"}
           />
         ))}

@@ -9,19 +9,28 @@ import { SaveIndicator } from "./utils";
 import { ConfirmModal } from "./ConfirmModal";
 import { SessionStep, SessionConfig, JurorAnswers, SaveStatus, Question, RadarAxis, RadarAnswer, Product } from "../../../types";
 
+type SetJa = (updater: JurorAnswers | ((prev: JurorAnswers) => JurorAnswers)) => void;
+
+const getQuestionValue = (answers: JurorAnswers, ctx: string, questionId: string): unknown => {
+  const section = answers[ctx];
+  if (!section || typeof section !== "object" || Array.isArray(section)) return undefined;
+  return (section as Record<string, unknown>)[questionId];
+};
+
 interface FormScreenProps {
-  onHome: () => void;
-  onGoBack: () => void;
+  // "Changer" : retourne sur l'écran d'identification du jury sans repasser
+  // par la liste des séances. Distinct de onGoBack/onHome qui ramènent au
+  // landing.
+  onChangeJury: () => void;
   steps: SessionStep[];
   cs: number;
   completion: boolean[];
-  isStepComplete: (idx: number) => boolean;
   onPrevStep: () => void;
   onNextStep: () => void;
   curSess: SessionConfig;
   cj: string;
   ja: JurorAnswers;
-  onSetJa: (ja: JurorAnswers) => void;
+  onSetJa: SetJa;
   onValidateStep: (idx: number) => void;
   saveStatus: SaveStatus;
   pendingCount: number;
@@ -29,7 +38,7 @@ interface FormScreenProps {
 }
 
 export const FormScreen = ({
-  onGoBack, steps, cs, completion, onPrevStep, onNextStep,
+  onChangeJury, steps, cs, completion, onPrevStep, onNextStep,
   curSess, cj, ja, onSetJa, onValidateStep, saveStatus, pendingCount, validatedSteps
 }: FormScreenProps) => {
   const products: Product[] = curSess.products || [];
@@ -52,7 +61,7 @@ export const FormScreen = ({
     const radarQ: Question | undefined = currentStep.questions.find(q => q.type === "radar");
     if (!radarQ || !radarQ.radarGroups) return null;
     const axes: RadarAxis[] = radarQ.radarGroups.flatMap(g => g.axes);
-    const ans = (ja[currentStep.product.code]?.[radarQ.id]) as RadarAnswer | undefined;
+    const ans = getQuestionValue(ja, currentStep.product.code, radarQ.id) as RadarAnswer | undefined;
     const min = radarQ.min ?? 0;
     return { axes, ans: ans || {}, min };
   })();
@@ -95,7 +104,7 @@ export const FormScreen = ({
             <div className="session-name">{curSess.name}</div>
           </div>
           <div className="form-header-sep"></div>
-          <Button variant="ghost" size="sm" onClick={onGoBack}><FiArrowLeft /> Changer</Button>
+          <Button variant="ghost" size="sm" onClick={onChangeJury}><FiArrowLeft /> Changer</Button>
         </div>
 
         <div className="form-progress-wrap px-4 mt-1">

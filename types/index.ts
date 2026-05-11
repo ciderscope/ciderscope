@@ -74,10 +74,13 @@ export interface SessionListItem {
 
 // ── Answer value shapes ─────────────────────────────────────────────────────
 // Réponse à une échelle avec sous-critères : { _: noteGlobale, _subs: [labels…], [label]: note }
+// `_touched` indique que le jury a explicitement validé la note principale
+// (drag du curseur ou tap sur le pouce), prérequis pour passer à l'étape suivante.
 export interface ScaleAnswer {
   _: number;
   _subs: string[];
-  [subLabel: string]: number | string[];
+  _touched?: boolean;
+  [subLabel: string]: number | string[] | boolean | undefined;
 }
 
 // Nœud de réponse radar récursif : { _: note, children?: { [label]: RadarNodeAnswer } }
@@ -114,11 +117,18 @@ export type AnswerValue =
 // Par produit : Record<questionId, AnswerValue>.
 // Pour "_global" : Record<questionId, AnswerValue>.
 // Pour les autres : structures ad hoc typées plus souplement.
+export type JurorAnswerValue =
+  | AnswerValue
+  | Record<string, AnswerValue>
+  | Record<string, number>
+  | Record<string, string | number>
+  | boolean
+  | undefined;
+
 export type JurorAnswers = {
   _finished?: boolean;
   _poste?: Record<string, string | number>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any;
+  [key: string]: JurorAnswerValue;
 };
 
 // Map globale : nom du jury → ses réponses.

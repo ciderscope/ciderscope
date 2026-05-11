@@ -1,8 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState, useEffect } from "react";
 import { Chart as ChartJS } from "chart.js";
-import type { RadarAnswer } from "../../../types";
+import type { BetLevel, JurorAnswers, Product, Question, RadarAnswer, SessionConfig, SessionStep } from "../../../types";
 
 export const COLORS_LIGHT = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
 export const COLORS_DARK  = ["#ef7a3c", "#5b9cc1", "#5cab73", "#bb7fbb", "#c0a13a", "#a07a5e", "#5b8db1", "#92a35a"];
@@ -39,7 +38,9 @@ export function syncChartDefaults() {
   }
   // Radar (radialLinear) : pas de rectangle gris derrière les ticks ;
   // on simule un halo via textStroke pour garder la lisibilité.
-  const radial = (ChartJS.defaults.scales as any)?.radialLinear;
+  const radial = (ChartJS.defaults.scales as unknown as {
+    radialLinear?: { ticks?: Record<string, unknown> };
+  })?.radialLinear;
   if (radial) {
     radial.ticks = {
       ...(radial.ticks || {}),
@@ -88,12 +89,12 @@ export function flattenRadarAnswers(ans: RadarAnswer, prefix = "", out: Record<s
 }
 
 // Version simplifiée de buildSteps pour l'analyse (sans randomisation/Williams car on veut juste la liste)
-export function getSteps(cfg: any): any[] {
-  const steps: any[] = [];
-  const ppQuestions = cfg.questions.filter((q: any) => q.scope === "per-product");
-  const productMap = new Map<string, any[]>();
-  ppQuestions.forEach((q: any) => {
-    const targetCodes = q.codes?.length ? q.codes : cfg.products.map((p: any) => p.code);
+export function getSteps(cfg: SessionConfig): SessionStep[] {
+  const steps: SessionStep[] = [];
+  const ppQuestions = cfg.questions.filter(q => q.scope === "per-product");
+  const productMap = new Map<string, Question[]>();
+  ppQuestions.forEach(q => {
+    const targetCodes = q.codes?.length ? q.codes : cfg.products.map(p => p.code);
     targetCodes.forEach((code: string) => {
       if (!productMap.has(code)) productMap.set(code, []);
       productMap.get(code)!.push(q);
@@ -102,16 +103,16 @@ export function getSteps(cfg: any): any[] {
   if (productMap.size > 0) {
     const activeCodes = Array.from(productMap.keys());
     activeCodes.forEach(code => {
-      const product = cfg.products.find((p: any) => p.code === code) || { code };
+      const product: Product = cfg.products.find(p => p.code === code) || { code };
       const questions = productMap.get(code) || [];
       steps.push({ type: "product", product, questions });
     });
   }
-  const standaloneQuestions = cfg.questions.filter((q: any) => q.scope !== "per-product");
-  const seriesQuestions = standaloneQuestions.filter((q: any) => q.type !== "text" && q.type !== "qcm" && q.scope !== "global");
-  const globalQuestions = standaloneQuestions.filter((q: any) => q.type === "text" || q.type === "qcm" || q.scope === "global");
+  const standaloneQuestions = cfg.questions.filter(q => q.scope !== "per-product");
+  const seriesQuestions = standaloneQuestions.filter(q => q.type !== "text" && q.type !== "qcm" && q.scope !== "global");
+  const globalQuestions = standaloneQuestions.filter(q => q.type === "text" || q.type === "qcm" || q.scope === "global");
 
-  seriesQuestions.forEach((q: any) => {
+  seriesQuestions.forEach(q => {
     const type = (q.type === "classement" || q.type === "seuil") ? "ranking" : "discrim";
     steps.push({ type, question: q });
   });
@@ -121,15 +122,32 @@ export function getSteps(cfg: any): any[] {
   return steps;
 }
 
-export const checkStepDone = (s: any, jaState: any): boolean => {
+const isScaleAnswered = (v: unknown): boolean => {
+  if (typeof v === "number") return true;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    return (v as { _touched?: boolean })._touched === true;
+  }
+  return false;
+};
+
+const asAnswerBucket = (value: unknown): Record<string, unknown> => {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+};
+
+export const checkStepDone = (s: SessionStep | undefined, jaState: JurorAnswers): boolean => {
   if (!s) return true;
   if (s.type === "product") {
-    const pa = jaState[s.product.code] || {};
-    return s.questions.every((q: any) => q.type === "scale" || (pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null));
+    const pa = asAnswerBucket(jaState[s.product.code]);
+    return s.questions.every(q => {
+      if (q.type === "scale") return isScaleAnswered(pa[q.id]);
+      return pa[q.id] !== undefined && pa[q.id] !== "" && pa[q.id] !== null;
+    });
   }
-  if (s.type === "ranking") return Array.isArray(jaState["_rank"]?.[s.question.id]);
+  if (s.type === "ranking") return Array.isArray(asAnswerBucket(jaState["_rank"])[s.question.id]);
   if (s.type === "discrim") {
-    const v = jaState["_discrim"]?.[s.question.id];
+    const v = asAnswerBucket(jaState["_discrim"])[s.question.id];
     if (s.question.type === "a-non-a") {
       const codes: string[] = s.question.codes || [];
       if (!v || typeof v !== "object" || Array.isArray(v)) return false;
@@ -140,13 +158,16 @@ export const checkStepDone = (s: any, jaState: any): boolean => {
       const levels = s.question.betLevels || [];
       if (!v || typeof v !== "object" || Array.isArray(v)) return false;
       const rec = v as unknown as Record<string, string>;
-      return levels.length > 0 && levels.every((_: any, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
+      return levels.length > 0 && levels.every((_: BetLevel, i: number) => rec[String(i)] != null && rec[String(i)] !== "");
     }
     return v != null && v !== "";
   }
   if (s.type === "global") {
-    const ga = jaState["_global"] || {};
-    return s.questions.every((q: any) => q.type === "scale" || (ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null));
+    const ga = asAnswerBucket(jaState["_global"]);
+    return s.questions.every(q => {
+      if (q.type === "scale") return isScaleAnswered(ga[q.id]);
+      return ga[q.id] !== undefined && ga[q.id] !== "" && ga[q.id] !== null;
+    });
   }
   return true;
 };

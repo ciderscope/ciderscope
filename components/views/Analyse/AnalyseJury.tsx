@@ -55,8 +55,10 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
                   );
                 })}
                 {qs.filter(q => ["classement","seuil","seuil-bet","triangulaire","duo-trio","a-non-a"].includes(q.type)).map(q => {
-                  const section = q.type === "classement" || q.type === "seuil" ? "_rank" : "_discrim";
-                  const answered = ja[section]?.[q.id] != null;
+                  const step = allSteps.find(s =>
+                    (s.type === "ranking" || s.type === "discrim") && s.question.id === q.id
+                  );
+                  const answered = step ? checkStepDone(step, ja) : false;
                   return (
                     <td key={q.id} className={answerStateClass(answered)}>
                       {answered ? "✓" : "✗"}

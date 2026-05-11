@@ -101,7 +101,7 @@ export const OrderScreen = ({
         </>
       )}
 
-      <div className="flex gap-3 justify-between flex-wrap mt-5">
+      <div className="flex gap-3 justify-between flex-wrap mt-10">
         <Button variant="ghost" size="sm" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
         <Button onClick={onStartFromOrder}>J&apos;ai mes échantillons <FiArrowRight /></Button>
       </div>

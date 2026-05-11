@@ -134,7 +134,8 @@ export default function CiderScope() {
         }}
         onGoBack={goHome}
         onHome={goHome}
-        onReviewAnswers={() => handleLoginJury(cj)}
+        onChangeJury={() => setScreen("jury")}
+        onReviewAnswers={() => handleLoginJury(cj, { review: true })}
         onShowSummary={async () => {
           if (!curSessId) return;
           await handleAnSessChange(curSessId);
@@ -145,7 +146,6 @@ export default function CiderScope() {
         steps={currentSteps}
         completion={completion}
         buildSteps={buildSteps}
-        isStepComplete={isStepComplete}
       />
     );
   }

@@ -12,7 +12,8 @@ import {
   OK_TEXT,
   confidenceClass
 } from "../../ui/AnalysisPrimitives";
-import { anovaTwoWay, pca2D, rvCoefficient } from "../../../lib/stats";
+import { anovaTwoWay, pca2D, rvCoefficient, dravnieksScore, cochranQ, pcaCovariance, projectToPCA } from "../../../lib/stats";
+import { analyzeAttributes, getProductAttributeMatrix, runHrataMultidimensional, HrataObservation } from "../../../lib/hrata";
 import type { SessionConfig, AllAnswers, Question, Product, RadarAxis, RadarAnswer } from "../../../types";
 import { getChartColors, pearson, flattenRadarAnswers } from "./utils";
 
@@ -22,6 +23,14 @@ interface AnalyseRadarProps {
   participantMode?: boolean;
   currentJuror?: string;
 }
+
+const getRadarAnswer = (answers: AllAnswers[string] | undefined, productCode: string, questionId: string): RadarAnswer | undefined => {
+  const section = answers?.[productCode];
+  if (!section || typeof section !== "object" || Array.isArray(section)) return undefined;
+  const value = (section as Record<string, unknown>)[questionId];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as RadarAnswer;
+};
 
 export function AnalyseRadar({ config, allAnswers, participantMode, currentJuror }: AnalyseRadarProps) {
   const radarQs = config.questions.filter(q => q.type === "radar");
@@ -67,7 +76,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
     for (const j of jurors) {
       const perProduct: Record<string, Record<string, number>> = {};
       for (const p of products) {
-        const ja = allAnswers[j]?.[p.code]?.[question.id] as RadarAnswer | undefined;
+        const ja = getRadarAnswer(allAnswers[j], p.code, question.id);
         perProduct[p.code] = ja ? flattenRadarAnswers(ja) : {};
       }
       map[j] = perProduct;
@@ -75,27 +84,81 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
     return map;
   }, [jurors, products, question.id, allAnswers]);
 
+  // ── Niveau d'affichage / ACP — types et états (déclarés tôt pour être en scope partout) ──
+  type PcaLevel = "famille" | "classe" | "descripteur";
+  const [displayLevel, setDisplayLevel] = useState<PcaLevel>("famille");
+  const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
+  const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
+  const [adaptiveScale, setAdaptiveScale] = useState<boolean>(false);
+  const [hrataMode, setHrataMode] = useState<boolean>(true);
+  const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
+  const levelLabel: Record<PcaLevel, string> = { famille: "Famille", classe: "Classe", descripteur: "Descripteur" };
+  const depthOf = (c: string) => c.split(" > ").length;
+
+  const hrataAnalyses = useMemo(() => {
+    if (!hrataMode) return null;
+    const obs: HrataObservation[] = [];
+    jurors.forEach(j => {
+      products.forEach(p => {
+        criteria.forEach(c => {
+          const val = noteMap[j]?.[p.code]?.[c];
+          let lvl: "famille" | "classe" | "descripteur" = "descripteur";
+          const depth = depthOf(c);
+          if (depth === 1) lvl = "famille";
+          if (depth === 2) lvl = "classe";
+          obs.push({
+            subjectId: j,
+            productId: p.code,
+            attributeId: c,
+            attributeLevel: lvl,
+            intensity: val ?? null
+          });
+        });
+      });
+    });
+    return analyzeAttributes(obs, {
+      minSubjects: Math.max(2, Math.floor(jurors.length * 0.15)), // 15% of panel, min 2
+      minCoverageRate: 0.15,
+      minPositiveSelections: 2,
+      maxIntensityScale: 10
+    });
+  }, [hrataMode, jurors, products, criteria, noteMap]);
+
+  // Imputation rule HRATA : identifie les juges ayant évalué un attribut au moins une fois
+  const citedAtLeastOnce = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const c of criteria) {
+      map[c] = new Set<string>();
+      for (const j of jurors) {
+        for (const p of products) {
+          if (typeof noteMap[j]?.[p.code]?.[c] === "number") {
+            map[c].add(j);
+            break; // found for this juror
+          }
+        }
+      }
+    }
+    return map;
+  }, [criteria, jurors, products, noteMap]);
+
   const getNote = (j: string, p: string, crit: string): number | null => {
     const v = noteMap[j]?.[p]?.[crit];
-    return v == null ? null : v;
+    if (v != null) return v;
+    if (hrataMode && citedAtLeastOnce[crit]?.has(j)) return 0; // Imputation
+    return null;
   };
 
-  // Stats agrégées pré-calculées (évite des dizaines de filtres dans le rendu).
+  // Stats agrégées pré-calculées
   const productStats = useMemo(() => {
     const stats: Record<string, Record<string, { mean: number; sd: number; n: number }>> = {};
     for (const p of products) {
       const perCrit: Record<string, { mean: number; sd: number; n: number }> = {};
-      for (const j of jurors) {
-        const flat = noteMap[j]?.[p.code] || {};
-        for (const c of Object.keys(flat)) {
-          if (!perCrit[c]) perCrit[c] = { mean: 0, sd: 0, n: 0 };
-        }
-      }
-      for (const c of Object.keys(perCrit)) {
+      for (const c of criteria) {
         const vals: number[] = [];
         for (const j of jurors) {
-          const v = noteMap[j]?.[p.code]?.[c];
-          if (typeof v === "number") vals.push(v);
+          let v = noteMap[j]?.[p.code]?.[c];
+          if (v == null && hrataMode && citedAtLeastOnce[c]?.has(j)) v = 0; // Imputation
+          if (v != null) vals.push(v);
         }
         const n = vals.length;
         const mean = n ? vals.reduce((a, b) => a + b, 0) / n : 0;
@@ -105,23 +168,10 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
       stats[p.code] = perCrit;
     }
     return stats;
-  }, [products, jurors, noteMap]);
+  }, [products, jurors, noteMap, hrataMode, criteria, citedAtLeastOnce]);
 
   const avg = (p: string, crit: string) => productStats[p]?.[crit]?.mean ?? 0;
   const sd = (p: string, crit: string) => productStats[p]?.[crit]?.sd ?? 0;
-
-  // ── Niveau d'affichage / ACP — types et états (déclarés tôt pour être en scope partout) ──
-  type PcaLevel = "famille" | "classe" | "descripteur";
-  const [displayLevel, setDisplayLevel] = useState<PcaLevel>("famille");
-  const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
-  const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
-  const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
-  const levelLabel: Record<PcaLevel, string> = {
-    famille: "Famille",
-    classe: "Classe",
-    descripteur: "Descripteur",
-  };
-  const depthOf = (c: string) => c.split(" > ").length;
 
   // Performance individuelle
   const juryPerf = jurors.map(j => {
@@ -162,9 +212,15 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
     return depthOf(c) === levelDepth[lvl];
   });
   const anovaRows = anovaCriteria.map(crit => {
-    const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p.code, crit) ?? avg(p.code, crit)));
-    const res = anovaTwoWay(mat);
-    return { crit, ...res };
+    if (hrataMode) {
+      const mat = jurors.map(j => products.map(p => (getNote(j, p.code, crit) ?? 0) > 0 ? 1 : 0));
+      const res = cochranQ(mat);
+      return { crit, fProd: res.q, pProd: res.pValue, ok: true };
+    } else {
+      const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p.code, crit) ?? avg(p.code, crit)));
+      const res = anovaTwoWay(mat);
+      return { crit, ...res };
+    }
   });
 
   // ACP — groupe (toile des arômes / profil gustatif / …)
@@ -190,9 +246,27 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   const pcaCriteria = effectiveLevel === "famille"
     ? pcaCriteriaAll
     : [...pcaCriteriaAll].sort((a, b) => overallMean(b) - overallMean(a)).slice(0, TOP_N);
-  const pcaMatrix = products.map(p => pcaCriteria.map(c => avg(p.code, c)));
+    
+  const pcaMatrix = products.map(p => pcaCriteria.map(c => {
+    if (hrataMode) {
+      let freq = 0;
+      let sumInt = 0;
+      const maxSumInt = jurors.length * 10; // Assuming 10 is max scale, could be parameterized
+      jurors.forEach(j => {
+        const v = getNote(j, p.code, c);
+        if (v && v > 0) {
+          freq++;
+          sumInt += v;
+        }
+      });
+      return dravnieksScore(freq, jurors.length, sumInt, maxSumInt);
+    } else {
+      return avg(p.code, c);
+    }
+  }));
+
   const canPca = products.length >= 3 && pcaCriteria.length >= 2;
-  const pcaRes = canPca ? pca2D(pcaMatrix) : null;
+  const pcaRes = canPca ? (hrataMode ? pcaCovariance(pcaMatrix) : pca2D(pcaMatrix)) : null;
 
   // Bornes symétriques pour normaliser les axes de la carte produits
   const scoreBound = pcaRes
@@ -217,6 +291,25 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             </button>
           ))}
         </div>
+        <ToolbarLabel>Échelle</ToolbarLabel>
+        <div className="pca-level-switch">
+          <button
+            type="button"
+            className={`pca-level-btn ${!adaptiveScale ? "active" : ""}`}
+            onClick={() => setAdaptiveScale(false)}
+            title="Axe radial fixe de 0 à 10"
+          >
+            Pleine (0–10)
+          </button>
+          <button
+            type="button"
+            className={`pca-level-btn ${adaptiveScale ? "active" : ""}`}
+            onClick={() => setAdaptiveScale(true)}
+            title="Recadre l'axe sur la plage utile pour mieux voir les faibles intensités"
+          >
+            Zoom adaptatif
+          </button>
+        </div>
       </div>
 
       <div className="grid2">
@@ -238,12 +331,13 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           const displayCriteriaAll = groupCriteria
             .filter(c => depthOf(c) === levelDepth[effectiveDisplayLevel])
             .filter(c => products.some(p => avg(p.code, c) > 0));
-          // Aux niveaux classe / descripteur, la liste peut être très longue : on
-          // ne garde que les 9 critères avec la moyenne globale la plus haute
-          // pour rendre la toile lisible.
-          const displayCriteria = effectiveDisplayLevel === "famille"
-            ? displayCriteriaAll
-            : [...displayCriteriaAll].sort((a, b) => overallMean(b) - overallMean(a)).slice(0, TOP_N);
+          // Quel que soit le niveau, on cape à TOP_N (9) critères en triant
+          // par moyenne globale décroissante : les nuls sont déjà exclus par
+          // le filtre `avg > 0` ci-dessus, donc on n'affiche que les plus
+          // marqués jusqu'à 9 max — radar lisible et homogène entre niveaux.
+          const displayCriteria = [...displayCriteriaAll]
+            .sort((a, b) => overallMean(b) - overallMean(a))
+            .slice(0, TOP_N);
 
           const radarData = {
             labels: displayCriteria.map(c => c.split(" > ").pop()),
@@ -267,11 +361,53 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             }))
           } : null;
 
+          // Borne maximale de l'axe radial : pleine échelle (10) par défaut, ou
+          // recadrée sur la plage utile en mode adaptatif pour révéler les
+          // faibles intensités. On combine moyennes panel + notes individuelles
+          // (mode participant) pour ne jamais tronquer la courbe.
+          const computeMax = (allValues: number[]): number => {
+            if (!adaptiveScale) return 10;
+            const top = allValues.length ? Math.max(...allValues) : 0;
+            if (top <= 0) return 1;
+            return Math.min(10, Math.max(1, Math.ceil(top * 1.2)));
+          };
+          const panelValues = displayCriteria.flatMap(c => products.map(p => avg(p.code, c)));
+          const radarMax = computeMax(panelValues);
+          const jurorValues = jurorRadarData
+            ? displayCriteria.flatMap(c => products.map(p => getNote(currentJuror!, p.code, c) ?? 0))
+            : [];
+          const jurorMax = computeMax(jurorValues);
+          // Options communes : on désactive explicitement le rectangle gris
+          // derrière les graduations (backdrop) pour garantir un rendu
+          // identique entre admin et résumé participant, indépendamment
+          // de l'instant où syncChartDefaults() a été exécuté. Pas de
+          // graduations décimales (i.e. "0,5" en français) — pour les petits
+          // max, step=1 ; au-delà, step=2 pour rester lisible.
+          const buildOpts = (max: number) => {
+            const stepSize = max <= 5 ? 1 : 2;
+            return {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                r: {
+                  beginAtZero: true,
+                  max,
+                  ticks: {
+                    showLabelBackdrop: false,
+                    backdropColor: "transparent" as const,
+                    stepSize,
+                    precision: 0,
+                  },
+                },
+              },
+            };
+          };
+
           return (
             <Fragment key={g.id}>
               <Card title={participantMode ? `${g.title} (Moyenne globale)` : g.title}>
                 <div className="analyse-radar-wrap">
-                  <Radar data={radarData} options={{ responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 10 } } }} />
+                  <Radar data={radarData} options={buildOpts(radarMax)} />
                 </div>
                 {!participantMode && (
                   <div className="mt-5">
@@ -308,7 +444,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
               {jurorRadarData && (
                 <Card title={`${g.title} (Vos réponses)`}>
                   <div className="analyse-radar-wrap">
-                    <Radar data={jurorRadarData} options={{ responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 10 } } }} />
+                    <Radar data={jurorRadarData} options={buildOpts(jurorMax)} />
                   </div>
                 </Card>
               )}
@@ -317,7 +453,46 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
         })}
       </div>
 
-      {!participantMode && (
+      {!participantMode && hrataMode && hrataAnalyses && (
+        <Card title={`Rapport d'Analyse HRATA · ${activeGroup?.title || ""}`}>
+          <table className="data-table text-[11px]">
+            <thead>
+              <tr>
+                <th>Attribut</th>
+                <th title="Sujets ayant utilisé l'attribut / Total Panel">Couverture</th>
+                <th title="Sélections positives / Nb obs. conditionnelles">Fréq. Cond.</th>
+                <th title="Moyenne conditionnelle (incluant les zéros imputés)">Intensité Cond.</th>
+                <th title="Score pondéré par la couverture">Dravnieks (Pond.)</th>
+                <th title="p-value (FDR) de l'effet produit sur la fréquence (Q Cochran)">p (Fréquence)</th>
+                <th title="p-value (FDR) de l'effet produit sur l'intensité positive (ANOVA)">p (Intensité)</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hrataAnalyses.filter(a => scopeCriteria.includes(a.attributeId)).map(a => (
+                <tr key={a.attributeId} className={a.isLowCoverage ? "opacity-50" : ""}>
+                  <td className={a.attributeId.includes(">") ? "font-normal text-[var(--mid)]" : "font-bold"} style={{ paddingLeft: `${(a.attributeId.split(" > ").length - 1) * 12}px` }}>
+                    {a.attributeId.split(" > ").pop()}
+                  </td>
+                  <td className="num">{a.subjectsConsidering}/{a.totalSubjects} ({(a.coverageRate * 100).toFixed(0)}%)</td>
+                  <td className="num">{(a.conditionalFrequency * 100).toFixed(1)}%</td>
+                  <td className="num">{a.conditionalMeanIntensity.toFixed(2)}</td>
+                  <td className="num font-bold">{a.dravnieksWeighted.toFixed(1)}</td>
+                  <td className={`num ${a.pApplicabilityFDR !== undefined && a.pApplicabilityFDR < 0.05 ? OK_TEXT + ' font-bold' : ''}`}>
+                    {a.pApplicabilityFDR !== undefined ? (a.pApplicabilityFDR < 0.001 ? "< 0,001" : a.pApplicabilityFDR.toFixed(3)) : "—"}
+                  </td>
+                  <td className={`num ${a.pIntensityFDR !== undefined && a.pIntensityFDR < 0.05 ? OK_TEXT + ' font-bold' : ''}`}>
+                    {a.pIntensityFDR !== undefined ? (a.pIntensityFDR < 0.001 ? "< 0,001" : a.pIntensityFDR.toFixed(3)) : "—"}
+                  </td>
+                  <td>{a.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {!participantMode && !hrataMode && (
         <Card title="Significativité des descripteurs (ANOVA)">
           <table className="data-table text-xs">
             <thead>
@@ -339,6 +514,25 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
       )}
 
       <div className={ANALYSIS_TOOLBAR}>
+        <ToolbarLabel>Mode Statistiques</ToolbarLabel>
+        <div className="pca-level-switch">
+          <button
+            type="button"
+            className={`pca-level-btn ${!hrataMode ? "active" : ""}`}
+            onClick={() => setHrataMode(false)}
+          >
+            Classique (ANOVA)
+          </button>
+          <button
+            type="button"
+            className={`pca-level-btn ${hrataMode ? "active" : ""}`}
+            onClick={() => setHrataMode(true)}
+            title="Approche HRATA (Dravnieks, Q de Cochran, ACP Covariance)"
+          >
+            HRATA
+          </button>
+        </div>
+
         {groups.length > 1 && (
           <>
             <ToolbarLabel>Toile ACP</ToolbarLabel>

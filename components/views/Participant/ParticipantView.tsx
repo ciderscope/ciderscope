@@ -29,9 +29,10 @@ interface ParticipantViewProps {
   onLoginJury: (name: string) => void;
   onPrevStep: () => void;
   onNextStep: () => void;
-  onSetJa: (ja: JurorAnswers) => void;
+  onSetJa: (updater: JurorAnswers | ((prev: JurorAnswers) => JurorAnswers)) => void;
   onGoBack: () => void;
   onHome: () => void;
+  onChangeJury: () => void;
   onReviewAnswers: () => void;
   onShowSummary: () => void;
   onStartFromOrder: () => void;
@@ -39,7 +40,6 @@ interface ParticipantViewProps {
   steps: SessionStep[];
   completion: boolean[];
   buildSteps: (cfg: SessionConfig, name: string) => SessionStep[];
-  isStepComplete: (idx: number) => boolean;
 }
 
 export const ParticipantView = (props: ParticipantViewProps) => {
@@ -87,12 +87,10 @@ export const ParticipantView = (props: ParticipantViewProps) => {
 
       {screen === "form" && props.curSess && (
         <FormScreen
-          onHome={props.onHome}
-          onGoBack={props.onGoBack}
+          onChangeJury={props.onChangeJury}
           steps={props.steps}
           cs={props.cs}
           completion={props.completion}
-          isStepComplete={props.isStepComplete}
           onPrevStep={props.onPrevStep}
           onNextStep={props.onNextStep}
           curSess={props.curSess}

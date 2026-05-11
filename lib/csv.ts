@@ -1,5 +1,11 @@
-import type { SessionConfig, AllAnswers, CSVRow, Product, RadarAnswer, JurorAnswers } from "../types";
+import type { SessionConfig, AllAnswers, CSVRow, Product, RadarAnswer, JurorAnswers, AnswerValue } from "../types";
 import { formatVal } from "./utils";
+
+const asAnswerBucket = (value: unknown): Record<string, unknown> => {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+};
 
 export const downloadCSV = (rows: CSVRow[], name: string) => {
   if (rows.length === 0) return;
@@ -31,7 +37,7 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
 
   Object.entries(allAnswers).forEach(([j, jans]: [string, JurorAnswers]) => {
     anCfg.products.forEach((p: Product) => {
-      const pa = jans[p.code] || {};
+      const pa = asAnswerBucket(jans[p.code]);
       ppQ.forEach(q => {
         if (q.codes && q.codes.length > 0 && !q.codes.includes(p.code)) return;
 
@@ -50,7 +56,7 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
           });
           return;
         }
-        const val = formatVal(pa[q.id], q.type);
+        const val = formatVal(pa[q.id] as AnswerValue, q.type);
         rows.push({ 
           jury: j, produit: p.code, nom_produit: p.label || "", 
           question: q.label, type: q.type, valeur: val, 
@@ -61,7 +67,7 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
       });
     });
 
-    const ra = (jans["_rank"] || {}) as Record<string, string[] | undefined>;
+    const ra = asAnswerBucket(jans["_rank"]) as Record<string, string[] | undefined>;
     rkQ.forEach(q => {
       const ranked: string[] = Array.isArray(ra[q.id]) ? ra[q.id]! : [];
       const correctOrder: string[] = q.correctOrder || [];
@@ -77,9 +83,9 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
       rows.push(row);
     });
 
-    const da = jans["_discrim"] || {};
+    const da = asAnswerBucket(jans["_discrim"]);
     discQ.forEach(q => {
-      const val = da[q.id];
+      const val = da[q.id] as AnswerValue;
       let valStr = "";
       let score = "0";
 
@@ -112,10 +118,10 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
       });
     });
 
-    const ga = jans["_global"] || {};
+    const ga = asAnswerBucket(jans["_global"]);
     glQ.forEach(q => rows.push({ 
       jury: j, produit: "_global", nom_produit: "", 
-      question: q.label, type: q.type, valeur: formatVal(ga[q.id], q.type), 
+      question: q.label, type: q.type, valeur: formatVal(ga[q.id] as AnswerValue, q.type),
       correct: "", score: "", ...emptyPos 
     }));
   });

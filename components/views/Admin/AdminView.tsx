@@ -281,6 +281,7 @@ export const AdminView = ({
             <div className="admin-grid-single">
               <ParticipantsTab
                 sessionId={editSessId!}
+                config={editCfg!}
                 listJurorsForSession={listJurorsForSession}
                 deleteJury={deleteJury}
               />

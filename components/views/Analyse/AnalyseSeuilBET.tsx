@@ -20,6 +20,14 @@ interface AnalyseSeuilBETProps {
   questionId: string;
 }
 
+const getDiscrimAnswers = (allAnswers: AllAnswers, juror: string, questionId: string): Record<string, string> => {
+  const discrim = allAnswers[juror]?._discrim;
+  if (!discrim || typeof discrim !== "object" || Array.isArray(discrim)) return {};
+  const answers = (discrim as Record<string, unknown>)[questionId];
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return {};
+  return answers as Record<string, string>;
+};
+
 export function AnalyseSeuilBET({ config, allAnswers, questionId }: AnalyseSeuilBETProps) {
   const questions: Question[] = (config?.questions || []).filter((q: Question) => q.type === "seuil-bet" && q.id === questionId);
   const jurors = Object.keys(allAnswers || {});
@@ -68,7 +76,7 @@ export function AnalyseSeuilBET({ config, allAnswers, questionId }: AnalyseSeuil
         }
 
         const perJury = jurors.map(j => {
-          const answers = (allAnswers[j]?._discrim?.[q.id] || {}) as unknown as Record<string, string>;
+          const answers = getDiscrimAnswers(allAnswers, j, q.id);
           const { bet, censored, trace } = computeBET(levels, answers);
           return { jury: j, bet, censored, trace };
         });
