@@ -239,7 +239,7 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
           confirmLabel={busy ? "Suppression…" : "Supprimer"}
           onCancel={() => setConfirmDelete(null)}
           onConfirm={async () => {
-            if (!confirmDelete) return;
+            if (!sessionId || !confirmDelete) return;
             setBusy(true);
             const res = await deleteJury(sessionId, confirmDelete);
             setBusy(false);
