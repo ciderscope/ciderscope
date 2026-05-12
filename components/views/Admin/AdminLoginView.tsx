@@ -7,19 +7,6 @@ interface AdminLoginViewProps {
   onSuccess: () => void;
 }
 
-// SHA-256("IFPC:ifpc") - empêche la divulgation triviale par lecture du bundle.
-const ADMIN_HASH =
-  "c1c0bc5db72a4f46df22bf877e91df1d26578e097728f41bca4fec55058d18c0";
-
-async function sha256Hex(input: string): Promise<string> {
-  const buf = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
   const [login, setLogin] = useState("");
   const [mdp, setMdp] = useState("");
@@ -33,9 +20,7 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
     setBusy(true);
 
     try {
-      const hash = await sha256Hex(`${login.trim().toUpperCase()}:${mdp}`);
-
-      if (hash === ADMIN_HASH) {
+      if (login.trim().toLowerCase() === "ifpc" && mdp === "ifpc") {
         sessionStorage.setItem("admin_auth", "1");
         setError(false);
         onSuccess();
@@ -51,7 +36,7 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex min-h-dvh flex-col justify-center bg-[var(--bg)] px-6 py-12 font-sans text-[var(--ink)] lg:px-8">
+    <div className="flex min-h-[calc(100dvh-52px)] flex-col justify-center bg-[var(--bg)] px-6 py-12 font-sans text-[var(--ink)] sm:min-h-[calc(100dvh-60px)] lg:px-8">
       <div className="mx-auto w-full max-w-sm">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--primary)] shadow-lg shadow-[var(--primary)]/20">
           <FiLock className="text-2xl text-white" />

@@ -27,7 +27,7 @@ const stepKey = (step: SessionStep | undefined, idx: number) => {
   return `s${idx}`;
 };
 
-const productLabelClass = "mb-[22px] inline-flex items-center gap-1.5 rounded-md bg-[var(--ink)] px-4 py-[7px] font-mono text-[13px] font-bold uppercase leading-tight tracking-[1.6px] text-white";
+const productLabelClass = "mb-[22px] inline-flex items-center gap-1.5 rounded-md bg-[var(--ink)] px-4 py-[7px] font-mono text-[13px] font-bold uppercase leading-tight tracking-[1.6px] text-white dark:bg-[var(--paper3)] dark:text-[var(--accent)]";
 
 export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: QuestionnaireProps) => {
   const step = steps[currentStepIdx];

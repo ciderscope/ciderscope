@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Questionnaire } from "../../features/Questionnaire";
@@ -31,12 +31,11 @@ interface FormScreenProps {
   ja: JurorAnswers;
   onSetJa: SetJa;
   onValidateStep: (idx: number) => void;
-  validatedSteps: Set<number>;
 }
 
 export const FormScreen = ({
   onChangeJury, steps, cs, completion, onPrevStep, onNextStep,
-  curSess, cj, ja, onSetJa, onValidateStep, validatedSteps
+  curSess, cj, ja, onSetJa, onValidateStep
 }: FormScreenProps) => {
   const products: Product[] = curSess.products || [];
   const total = steps.length;
@@ -44,11 +43,21 @@ export const FormScreen = ({
   for (const c of completion) if (c) doneCount++;
   const pct = total ? Math.round((doneCount / total) * 100) : 0;
   const canAdvance = completion[cs] ?? true;
-  const prevAlreadyValidated = cs > 0 && validatedSteps.has(cs - 1);
-
   const [confirmNext, setConfirmNext] = useState(false);
   const [confirmPrev, setConfirmPrev] = useState(false);
   const [radarIssues, setRadarIssues] = useState<{ untouched: string[]; emptyChildren: string[] } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const marker = { sensoParticipantFormLock: true };
+    window.history.pushState(marker, "", window.location.href);
+    const handlePopState = () => {
+      setConfirmPrev(true);
+      window.history.pushState(marker, "", window.location.href);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   // Pour l'étape courante : si elle contient une toile d'araignée, on calcule
   // les familles non touchées / non précisées avant de laisser passer.
@@ -81,11 +90,7 @@ export const FormScreen = ({
   };
   const handlePrevClick = () => {
     if (cs === 0) return;
-    if (prevAlreadyValidated) {
-      setConfirmPrev(true);
-    } else {
-      onPrevStep();
-    }
+    setConfirmPrev(true);
   };
   const handleConfirmPrev = () => {
     setConfirmPrev(false);
@@ -186,10 +191,12 @@ export const FormScreen = ({
       )}
       {confirmPrev && (
         <ConfirmModal
-          title="Modifier l'étape précédente ?"
-          message={<>L&apos;étape précédente a déjà été validée. Y retourner pourrait modifier vos réponses.</>}
-          confirmLabel="Modifier"
+          title="Revenir à l'étape précédente ?"
+          message={<>Les réponses sont enregistrées. Ne revenez en arrière qu&apos;en cas d&apos;erreur manifeste.</>}
+          confirmLabel="Revenir"
           cancelLabel="Annuler"
+          confirmVariant="secondary"
+          cancelVariant="primary"
           tone="warn"
           onConfirm={handleConfirmPrev}
           onCancel={() => setConfirmPrev(false)}

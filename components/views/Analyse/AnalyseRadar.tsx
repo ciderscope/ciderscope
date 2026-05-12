@@ -16,7 +16,7 @@ import {
   OK_TEXT,
   confidenceClass
 } from "../../ui/AnalysisPrimitives";
-import { anovaTwoWay, pca2D, rvCoefficient, dravnieksScore, cochranQ, pcaCovariance } from "../../../lib/stats";
+import { rvCoefficient, dravnieksScore, pcaCovariance } from "../../../lib/stats";
 import { analyzeAttributes, HrataObservation } from "../../../lib/hrata";
 import type { SessionConfig, AllAnswers, Question, Product, RadarAxis, RadarAnswer } from "../../../types";
 import { getChartColors, pearson, flattenRadarAnswers } from "./utils";
@@ -103,14 +103,12 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   const [displayLevel, setDisplayLevel] = useState<PcaLevel>("famille");
   const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
   const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
-  const [adaptiveScale, setAdaptiveScale] = useState<boolean>(false);
-  const [hrataMode, setHrataMode] = useState<boolean>(true);
+  const adaptiveScale = true;
   const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
   const levelLabel: Record<PcaLevel, string> = { famille: "Famille", classe: "Classe", descripteur: "Descripteur" };
   const depthOf = (c: string) => c.split(" > ").length;
 
   const hrataAnalyses = useMemo(() => {
-    if (!hrataMode) return null;
     const obs: HrataObservation[] = [];
     jurors.forEach(j => {
       products.forEach(p => {
@@ -136,7 +134,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
       minPositiveSelections: 2,
       maxIntensityScale: 10
     });
-  }, [hrataMode, jurors, products, criteria, noteMap]);
+  }, [jurors, products, criteria, noteMap]);
 
   // Imputation HRATA : seuls les attributs cités (> 0) définissent le sous-panel
   // qui a réellement considéré l'attribut. Les zéros par défaut restent NC.
@@ -160,7 +158,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   const getNote = (j: string, p: string, crit: string): number | null => {
     const v = noteMap[j]?.[p]?.[crit];
     if (v != null) return v;
-    if (hrataMode && citedAtLeastOnce[crit]?.has(j)) return 0; // Imputation
+    if (citedAtLeastOnce[crit]?.has(j)) return 0; // Imputation
     return null;
   };
 
@@ -173,7 +171,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
         const vals: number[] = [];
         for (const j of jurors) {
           let v = noteMap[j]?.[p.code]?.[c];
-          if (v == null && hrataMode && citedAtLeastOnce[c]?.has(j)) v = 0; // Imputation
+          if (v == null && citedAtLeastOnce[c]?.has(j)) v = 0; // Imputation
           if (v != null) vals.push(v);
         }
         const n = vals.length;
@@ -184,7 +182,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
       stats[p.code] = perCrit;
     }
     return stats;
-  }, [products, jurors, noteMap, hrataMode, criteria, citedAtLeastOnce]);
+  }, [products, jurors, noteMap, criteria, citedAtLeastOnce]);
 
   const avg = (p: string, crit: string) => productStats[p]?.[crit]?.mean ?? 0;
   const sd = (p: string, crit: string) => productStats[p]?.[crit]?.sd ?? 0;
@@ -218,27 +216,6 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
     return { jury: j, conf, rv, range, n: selfAll.length };
   }).sort((a, b) => b.conf - a.conf);
 
-  // ANOVA par critère, restreint au niveau d'affichage choisi.
-  const anovaCriteria = criteria.filter(c => {
-    const groupId = groups.find(g => (criteriaByGroup[g.id] || []).includes(c))?.id;
-    if (!groupId) return false;
-    const groupCriteria = criteriaByGroup[groupId] || [];
-    const isFlat = groupCriteria.length > 0 && groupCriteria.every(x => !x.includes(" > "));
-    const lvl: PcaLevel = isFlat ? "famille" : displayLevel;
-    return depthOf(c) === levelDepth[lvl];
-  });
-  const anovaRows = anovaCriteria.map(crit => {
-    if (hrataMode) {
-      const mat = jurors.map(j => products.map(p => (getNote(j, p.code, crit) ?? 0) > 0 ? 1 : 0));
-      const res = cochranQ(mat);
-      return { crit, fProd: res.q, pProd: res.pValue, ok: true };
-    } else {
-      const mat: (number | null)[][] = products.map(p => jurors.map(j => getNote(j, p.code, crit) ?? avg(p.code, crit)));
-      const res = anovaTwoWay(mat);
-      return { crit, ...res };
-    }
-  });
-
   // ACP — groupe (toile des arômes / profil gustatif / …)
   const activeGroup = groups.find(g => g.id === pcaGroupId) || groups[0];
   const scopeCriteria = activeGroup ? (criteriaByGroup[activeGroup.id] || []) : criteria;
@@ -264,25 +241,21 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
     : [...pcaCriteriaAll].sort((a, b) => overallMean(b) - overallMean(a)).slice(0, TOP_N);
     
   const pcaMatrix = products.map(p => pcaCriteria.map(c => {
-    if (hrataMode) {
-      let freq = 0;
-      let sumInt = 0;
-      const maxSumInt = jurors.length * 10; // Assuming 10 is max scale, could be parameterized
-      jurors.forEach(j => {
-        const v = getNote(j, p.code, c);
-        if (v && v > 0) {
-          freq++;
-          sumInt += v;
-        }
-      });
-      return dravnieksScore(freq, jurors.length, sumInt, maxSumInt);
-    } else {
-      return avg(p.code, c);
-    }
+    let freq = 0;
+    let sumInt = 0;
+    const maxSumInt = jurors.length * 10;
+    jurors.forEach(j => {
+      const v = getNote(j, p.code, c);
+      if (v && v > 0) {
+        freq++;
+        sumInt += v;
+      }
+    });
+    return dravnieksScore(freq, jurors.length, sumInt, maxSumInt);
   }));
 
   const canPca = products.length >= 3 && pcaCriteria.length >= 2;
-  const pcaRes = canPca ? (hrataMode ? pcaCovariance(pcaMatrix) : pca2D(pcaMatrix)) : null;
+  const pcaRes = canPca ? pcaCovariance(pcaMatrix) : null;
 
   // Bornes symétriques pour normaliser les axes de la carte produits
   const scoreBound = pcaRes
@@ -306,25 +279,6 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
               {levelLabel[lv]}
             </button>
           ))}
-        </div>
-        <ToolbarLabel>Échelle</ToolbarLabel>
-        <div className={pcaLevelSwitchClass}>
-          <button
-            type="button"
-            className={pcaLevelBtnClass(!adaptiveScale)}
-            onClick={() => setAdaptiveScale(false)}
-            title="Axe radial fixe de 0 à 10"
-          >
-            Pleine (0–10)
-          </button>
-          <button
-            type="button"
-            className={pcaLevelBtnClass(adaptiveScale)}
-            onClick={() => setAdaptiveScale(true)}
-            title="Recadre l'axe sur la plage utile pour mieux voir les faibles intensités"
-          >
-            Zoom adaptatif
-          </button>
         </div>
       </div>
 
@@ -469,7 +423,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
         })}
       </div>
 
-      {!participantMode && hrataMode && hrataAnalyses && (
+      {!participantMode && hrataAnalyses && (
         <Card title={`Rapport d'Analyse HRATA · ${activeGroup?.title || ""}`}>
           <table className={`${ANALYSIS_TABLE_CLASS} text-[11px]`}>
             <thead>
@@ -480,7 +434,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                 <th title="Moyenne conditionnelle (incluant les zéros imputés)">Intensité Cond.</th>
                 <th title="Score pondéré par la couverture">Dravnieks (Pond.)</th>
                 <th title="p-value (FDR) de l'effet produit sur la fréquence (Q Cochran)">p (Fréquence)</th>
-                <th title="p-value (FDR) de l'effet produit sur l'intensité positive (ANOVA)">p (Intensité)</th>
+                <th title="p-value (FDR) de l'effet produit sur l'intensité positive dans le traitement HRATA">p (Intensité)</th>
                 <th>Statut</th>
               </tr>
             </thead>
@@ -508,47 +462,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
         </Card>
       )}
 
-      {!participantMode && !hrataMode && (
-        <Card title="Significativité des descripteurs (ANOVA)">
-          <table className={ANALYSIS_TABLE_CLASS}>
-            <thead>
-              <tr><th>Descripteur</th><th>F-produit</th><th>p-value</th></tr>
-            </thead>
-            <tbody>
-              {anovaRows.filter(r => r.ok).map(r => (
-                <tr key={r.crit}>
-                  <td>{r.crit}</td>
-                  <td className={ANALYSIS_NUM_CELL}>{r.fProd.toFixed(2)}</td>
-                  <td className={`${ANALYSIS_NUM_CELL} ${r.pProd < 0.05 ? `font-bold ${OK_TEXT}` : "font-normal"}`}>
-                    {r.pProd < 0.001 ? "< 0,001" : r.pProd.toFixed(3)} {r.pProd < 0.05 ? "*" : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
-
       <div className={ANALYSIS_TOOLBAR}>
-        <ToolbarLabel>Mode Statistiques</ToolbarLabel>
-        <div className={pcaLevelSwitchClass}>
-          <button
-            type="button"
-            className={pcaLevelBtnClass(!hrataMode)}
-            onClick={() => setHrataMode(false)}
-          >
-            Classique (ANOVA)
-          </button>
-          <button
-            type="button"
-            className={pcaLevelBtnClass(hrataMode)}
-            onClick={() => setHrataMode(true)}
-            title="Approche HRATA (Dravnieks, Q de Cochran, ACP Covariance)"
-          >
-            HRATA
-          </button>
-        </div>
-
         {groups.length > 1 && (
           <>
             <ToolbarLabel>Toile ACP</ToolbarLabel>

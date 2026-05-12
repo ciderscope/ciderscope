@@ -52,9 +52,11 @@ export const DoneScreen = ({ resultsVisible, onReviewAnswers, onShowSummary, onH
           <ConfirmModal
             tone="warn"
             title="Revoir les réponses ?"
-            message="Vous allez retourner sur le questionnaire. Veuillez ne pas modifier vos réponses à moins d'une erreur manifeste."
+            message="La relecture est prévue uniquement pour vérifier une erreur manifeste. Les retours en arrière pendant le questionnaire restent bloqués."
             confirmLabel="Relire"
             cancelLabel="Annuler"
+            confirmVariant="secondary"
+            cancelVariant="primary"
             onCancel={() => setConfirmReview(false)}
             onConfirm={() => {
               setConfirmReview(false);

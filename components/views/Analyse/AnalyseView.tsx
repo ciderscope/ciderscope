@@ -25,6 +25,7 @@ import { AnalyseRadar } from "./AnalyseRadar";
 import { AnalyseWordCloud } from "./AnalyseWordCloud";
 import { AnalyseJury } from "./AnalyseJury";
 import { AnalyseDonnees } from "./AnalyseDonnees";
+import { AnalyseSynthese } from "./AnalyseSynthese";
 import { useDarkMode, syncChartDefaults } from "./utils";
 
 // Enregistrement Chart.js localisé : seul l'admin chargeant l'analyse paye le coût.
@@ -158,7 +159,7 @@ export const AnalyseView = ({
     const all = computeTabs(anCfg);
     // Vue participant : on retire l'onglet "Données" (table brute) — l'utilisateur
     // n'a pas vocation à voir / exporter le détail des autres jurys.
-    return participantMode ? all.filter(t => t.id !== "données") : all;
+    return participantMode ? all.filter(t => t.id !== "données" && t.id !== "jury") : all;
   }, [anCfg, participantMode]);
 
   // Auto-select first valid tab when config changes
@@ -207,7 +208,7 @@ export const AnalyseView = ({
         <div className="mb-5">
           <h2 className="font-extrabold text-[clamp(17px,2.5vw,22px)]">Résumé de la séance</h2>
           <p className="text-[var(--mid)] text-[13px] mt-1">
-            Vue d&apos;ensemble du panel — <strong className="text-[var(--accent)]">{currentJuror || "vous"}</strong> est mis en évidence dans les tableaux par jury.
+            Vue d&apos;ensemble du panel — vos réponses restent enregistrées sans modification.
           </p>
         </div>
       )}
@@ -220,6 +221,8 @@ export const AnalyseView = ({
 
       {anCfg && (
         <>
+          <AnalyseSynthese config={anCfg} allAnswers={allAnswers} />
+
           {/* Dynamic tabs */}
           <ScrollableTabs className={analysisTabsClass} activeKey={activeTab} ariaLabel="Onglets d'analyse">
             {tabs.map(t => (

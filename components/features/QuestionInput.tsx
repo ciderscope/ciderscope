@@ -74,11 +74,6 @@ const anonaBtnClass = (selected: boolean, tone: "ok" | "diff") => [
   selected && tone === "diff" ? "border-[var(--danger)] bg-[var(--danger)] text-white" : "",
   !selected ? "border-[var(--border)]" : "",
 ].filter(Boolean).join(" ");
-const radarModeSwitchClass = "my-2.5 mb-3.5 inline-flex gap-0 rounded-lg border border-[var(--border)] bg-[var(--paper2)] p-[3px]";
-const radarModeBtnClass = (active: boolean) => [
-  "cursor-pointer rounded-md border-0 bg-transparent px-3.5 py-[7px] font-mono text-xs font-semibold text-[var(--mid)] transition-colors duration-150",
-  active ? "bg-[var(--ink)] text-white" : "",
-].join(" ");
 const radarGroupsClass = "flex flex-col gap-[22px]";
 const radarGroupBlockParticipantClass = "rounded-[10px] border-l-[3px] border-[var(--t-scale)] bg-[var(--paper2)] px-3.5 pt-3.5 pb-[18px]";
 const radarGroupHeaderRowClass = "mb-2.5 flex items-center justify-between gap-2.5";
@@ -996,8 +991,6 @@ const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Q
   const groups = useMemo(() => q.radarGroups || [], [q.radarGroups]);
   const allAxes = useMemo(() => groups.flatMap(g => g.axes), [groups]);
 
-  const [mode, setMode] = useState<"radar" | "sliders">("sliders");
-
   // Familles = valeur minimale (0) → toujours visibles au départ.
   // Classes / mots = 0 → visibles dès que la famille parente est dépliée.
   const defaults = useMemo(() => ({ family: mn, child: mn }), [mn]);
@@ -1029,18 +1022,6 @@ const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Q
         {q.label}
         <Badge variant="ns" className={questionTypeBadgeClass}>radar</Badge>
       </span>
-      <div className={radarModeSwitchClass}>
-        <button
-          type="button"
-          className={radarModeBtnClass(mode === "sliders")}
-          onClick={() => setMode("sliders")}
-        >Curseurs</button>
-        <button
-          type="button"
-          className={radarModeBtnClass(mode === "radar")}
-          onClick={() => setMode("radar")}
-        >Toile d&apos;araignée</button>
-      </div>
       <div className={radarGroupsClass}>
         {groups.map(g => (
           <RadarGroupBlock
@@ -1050,7 +1031,7 @@ const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Q
             max={mx}
             answer={answer}
             onChange={onChange}
-            showSVG={mode === "radar"}
+            showSVG={false}
           />
         ))}
       </div>

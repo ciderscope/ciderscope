@@ -169,7 +169,7 @@ export const useSenso = () => {
       const savedAnT = localStorage.getItem("senso_curAnT");
       const savedAdminSection = localStorage.getItem("senso_admin_section");
 
-      // Auth admin local : un flag dans sessionStorage suffit (auth simple par hash).
+      // Auth admin locale de session.
       if (sessionStorage.getItem("admin_auth") === "1") setAdminAuth(true);
 
       if (isStoredChoice(savedMode, APP_MODES)) setMode(savedMode);

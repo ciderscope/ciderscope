@@ -22,7 +22,6 @@ interface ParticipantViewProps {
   saveStatus: SaveStatus;
   pendingCount: number;
   takenPostes: Record<string, string>;
-  validatedSteps: Set<number>;
   onSelectPoste: (day: PosteDay, num: number) => void;
   onValidateStep: (idx: number) => void;
   onSelectSession: (id: string) => void;
@@ -97,7 +96,6 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           ja={props.ja}
           onSetJa={props.onSetJa}
           onValidateStep={props.onValidateStep}
-          validatedSteps={props.validatedSteps}
         />
       )}
 
