@@ -14,10 +14,6 @@ import { ParticipantsTab } from "./ParticipantsTab";
 import { QuestionBuilder } from "./QuestionBuilder";
 
 const adminShellClass = "mx-auto max-w-full overflow-x-clip px-[22px] py-7 pb-[60px] sm:max-w-[95%] supports-[not(overflow-x:clip)]:overflow-x-hidden";
-const adminSectionButtonClass = (active: boolean) => [
-  "flex cursor-pointer items-center gap-[5px] rounded-t-md border-0 border-b-2 border-transparent bg-transparent px-4 py-[7px] text-[13px] font-semibold text-[var(--mid)] transition-[color,border-color,background] duration-100 hover:text-[var(--ink)]",
-  active ? "border-b-[var(--accent)] bg-[var(--paper2)] text-[var(--accent)]" : "",
-].filter(Boolean).join(" ");
 const sessionCardClass = "mb-2.5 flex max-w-full min-w-0 flex-wrap items-center gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] px-5 py-[18px] shadow-[var(--shadow)] transition-[box-shadow,border-color] duration-150 hover:border-[rgba(30,46,46,.18)] hover:shadow-[0_3px_16px_rgba(30,46,46,.09)]";
 const sessionListClass = "grid gap-2 min-[721px]:grid-cols-2 min-[721px]:gap-2.5 min-[901px]:gap-2 xl:grid-cols-3 min-[1600px]:grid-cols-4";
 const adminEditHeaderClass = "sticky top-[60px] z-40 mb-3 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--paper2)] px-0.5 pt-2 pb-3.5 min-[481px]:gap-3.5 min-[481px]:px-1 min-[481px]:pt-2.5 min-[481px]:pb-[18px]";
@@ -76,25 +72,6 @@ export const AdminView = ({
   if (screen === "landing") {
     return (
       <div className={adminShellClass}>
-        {/* Sub-nav */}
-        <div className="mb-5 flex flex-wrap gap-1 border-b border-[var(--border)] pb-0">
-          <button
-            className={adminSectionButtonClass(adminSection === "seances")}
-            onClick={() => setAdminSection("seances")}
-          >
-            <FiList size={13} /> Séances
-          </button>
-          <button
-            className={adminSectionButtonClass(adminSection === "analyse")}
-            onClick={() => {
-              setAdminSection("analyse");
-              if (!anSessId && sessions.length) onAnSessChange(sessions[0].id);
-            }}
-          >
-            <FiBarChart2 size={13} /> Analyse
-          </button>
-        </div>
-
         {adminSection === "analyse" && (
           <AnalyseView
             sessions={sessions}
@@ -105,6 +82,7 @@ export const AdminView = ({
             onAnSessChange={onAnSessChange}
             onAnTabChange={onAnTabChange}
             downloadCSV={downloadCSV}
+            onGoBack={() => setAdminSection("seances")}
           />
         )}
 
@@ -140,6 +118,18 @@ export const AdminView = ({
                         title={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
                       >
                         <FiPieChart /> {s.resultsVisible ? "Résumé visible" : "Partager résumé"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          onAnSessChange(s.id);
+                          setAdminSection("analyse");
+                        }}
+                        title="Voir l'analyse"
+                        aria-label="Voir l'analyse de la séance"
+                      >
+                        <FiBarChart2 /> Analyse
                       </Button>
                       <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier" aria-label="Modifier la séance"><FiEdit2 /></Button>
                       <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer" aria-label="Dupliquer la séance"><FiCopy /></Button>

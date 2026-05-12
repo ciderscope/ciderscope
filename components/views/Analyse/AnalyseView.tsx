@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo } from "react";
+import { FiArrowLeft } from "react-icons/fi";
 import { ScrollableTabs } from "../../ui/ScrollableTabs";
 import {
   Chart as ChartJS,
@@ -98,6 +99,7 @@ interface AnalyseViewProps {
   participantMode?: boolean;
   currentJuror?: string;
   downloadCSV?: (rows: CSVRow[], name: string) => void;
+  onGoBack?: () => void;
 }
 
 const downloadSensoMinerCSV = (data: CSVRow[], name: string) => {
@@ -128,7 +130,7 @@ const downloadSensoMinerCSV = (data: CSVRow[], name: string) => {
 export const AnalyseView = ({
   sessions, anSessId, anCfg, allAnswers, curAnT,
   onAnSessChange, onAnTabChange, downloadCSV,
-  participantMode = false, currentJuror,
+  participantMode = false, currentJuror, onGoBack,
 }: AnalyseViewProps) => {
   const csvData = useMemo(() => buildCsvData(anCfg, allAnswers), [anCfg, allAnswers]);
 
@@ -173,6 +175,15 @@ export const AnalyseView = ({
     >
       {!participantMode && (
         <div className="flex items-center gap-3.5 mb-5 flex-wrap">
+          {onGoBack && (
+            <button
+              onClick={onGoBack}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--paper)] px-3 text-sm font-medium text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              <FiArrowLeft />
+              Retour
+            </button>
+          )}
           <h2 className="font-extrabold text-[clamp(17px,2.5vw,22px)]">Analyse</h2>
           <div className="flex-1" />
           <label className="font-mono text-[11px] text-[var(--mid)]">Séance :</label>
