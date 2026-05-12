@@ -8,6 +8,8 @@ import {
   MetricBlock,
   TableCaption,
   DetailTable,
+  ANALYSIS_NUM_CELL,
+  ANALYSIS_TABLE_CLASS,
   OK_TEXT,
   DANGER_TEXT,
   DIM_TEXT
@@ -105,7 +107,7 @@ export function AnalyseSeuilBET({ config, allAnswers, questionId }: AnalyseSeuil
 
               <div className="min-w-[260px] flex-1">
                 <TableCaption>Réponses correctes par niveau</TableCaption>
-                <table className="data-table">
+                <table className={ANALYSIS_TABLE_CLASS}>
                   <thead>
                     <tr><th>Niveau</th><th>Concentration</th><th>Correctes / N</th><th>%</th></tr>
                   </thead>
@@ -113,9 +115,9 @@ export function AnalyseSeuilBET({ config, allAnswers, questionId }: AnalyseSeuil
                     {levelStats.map((lv, i: number) => (
                       <tr key={i}>
                         <td>{lv.label || `niveau ${i + 1}`}</td>
-                        <td className="num">{lv.concentration}</td>
-                        <td className="num">{lv.correct} / {lv.n}</td>
-                        <td className="num">{lv.n > 0 ? ((lv.correct / lv.n) * 100).toFixed(0) : "—"}%</td>
+                        <td className={ANALYSIS_NUM_CELL}>{lv.concentration}</td>
+                        <td className={ANALYSIS_NUM_CELL}>{lv.correct} / {lv.n}</td>
+                        <td className={ANALYSIS_NUM_CELL}>{lv.n > 0 ? ((lv.correct / lv.n) * 100).toFixed(0) : "—"}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -139,11 +141,11 @@ export function AnalyseSeuilBET({ config, allAnswers, questionId }: AnalyseSeuil
                     <tr key={r.jury}>
                       <td>{r.jury}</td>
                       {r.trace.map((t, i) => (
-                        <td key={i} className={`num font-semibold ${t === "+" ? OK_TEXT : t === "-" ? DANGER_TEXT : DIM_TEXT}`}>
+                        <td key={i} className={`${ANALYSIS_NUM_CELL} font-semibold ${t === "+" ? OK_TEXT : t === "-" ? DANGER_TEXT : DIM_TEXT}`}>
                           {t === "+" ? "✓" : t === "-" ? "✗" : "—"}
                         </td>
                       ))}
-                      <td className="num">
+                      <td className={ANALYSIS_NUM_CELL}>
                         {r.bet != null ? r.bet.toPrecision(3) : "—"}
                         {r.censored === "low" && <span className="text-[10px] text-[var(--mid)]"> (≤)</span>}
                         {r.censored === "high" && <span className="text-[10px] text-[var(--mid)]"> (≥)</span>}

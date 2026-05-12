@@ -4,12 +4,129 @@ import { Badge } from "../ui/Badge";
 import { TouchSafeSlider } from "../ui/TouchSafeSlider";
 import { Question, Product, RadarAxis, AnswerValue, ScaleAnswer, RadarAnswer, RadarNodeAnswer } from "../../types";
 import { FiChevronLeft, FiSearch, FiX, FiPlus, FiMinus } from "react-icons/fi";
+import { Chart as ChartJS, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from "chart.js";
+import type { ChartData, ChartOptions } from "chart.js";
+import { Radar } from "react-chartjs-2";
+import ChartJSDragDataPlugin from "chartjs-plugin-dragdata";
+
+ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend, ChartJSDragDataPlugin);
 interface QuestionInputProps {
   q: Question;
   value: AnswerValue;
   onChange: (val: AnswerValue) => void;
   products?: Product[];
 }
+
+const questionBlockClass = "mb-[26px] last:mb-0";
+const questionLabelClass = "mb-3 block text-base font-semibold leading-[1.4]";
+const questionTypeBadgeClass = "ml-[7px] align-middle font-mono text-[10px] font-normal uppercase tracking-[.5px] text-[var(--mid)]";
+const questionTextClass = "min-h-20 w-full resize-y rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-3 text-sm font-[inherit] outline-none transition-colors duration-100 focus:border-[var(--accent)]";
+const qcmOptionsClass = "flex flex-col gap-2";
+const qcmOptionClass = (selected: boolean) => [
+  "flex min-h-[52px] cursor-pointer items-center gap-3 rounded-[var(--radius)] border bg-[var(--paper)] px-[17px] py-3.5 transition-colors duration-100 hover:border-[rgba(30,46,46,.25)]",
+  selected ? "border-[var(--accent)] bg-[var(--accent-tint)]" : "border-[var(--border)]",
+].join(" ");
+const qcmDotClass = (selected: boolean) => [
+  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all duration-100",
+  selected ? "border-[var(--accent)] bg-[var(--accent)] after:h-[7px] after:w-[7px] after:rounded-full after:bg-white after:content-['']" : "border-[var(--border)]",
+].join(" ");
+const scaleWrapClass = "flex flex-col gap-2";
+const scaleTrackClass = "flex items-center gap-2.5 max-[480px]:gap-2";
+const scaleValueClass = "min-w-7 text-center text-xl font-extrabold text-[var(--accent)]";
+const scaleSubcriteriaClass = "mt-1.5 flex flex-col gap-[7px] rounded-md border-l-2 border-[var(--t-scale)] bg-[var(--paper2)] px-3 py-2.5";
+const scaleSubcriterionClass = "flex items-center gap-[7px] max-[480px]:flex-wrap max-[480px]:gap-x-1.5 max-[480px]:gap-y-1";
+const scaleSubLabelClass = "min-w-[100px] font-mono text-[11px] font-medium text-[var(--ink)] max-[480px]:min-w-0 max-[480px]:flex-auto xl:min-w-[150px]";
+const scaleTrackSubClass = "flex flex-1 items-center gap-2.5 max-[480px]:order-3 max-[480px]:flex-[1_1_100%]";
+const scaleSubValueClass = "min-w-[26px] text-center text-sm font-extrabold text-[var(--accent)]";
+const scaleSubRemoveClass = "flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--border)] bg-transparent text-sm leading-none text-[var(--mid)] transition-all duration-100 hover:border-[var(--danger)] hover:bg-[rgba(168,50,40,.06)] hover:text-[var(--danger)] max-[480px]:order-2";
+const triangleGridClass = "grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-[11px] max-[480px]:grid-cols-2 max-[480px]:gap-2 min-[481px]:max-[720px]:grid-cols-[repeat(auto-fit,minmax(100px,1fr))] min-[721px]:max-[900px]:grid-cols-[repeat(auto-fit,minmax(110px,1fr))]";
+const triangleChoiceClass = (selected: boolean) => [
+  "cursor-pointer rounded-[var(--radius)] border-[1.5px] bg-[var(--paper)] px-4 py-7 text-center transition-[border-color,background,box-shadow] duration-100 hover:border-[rgba(30,46,46,.3)] hover:shadow-[0_3px_12px_rgba(30,46,46,.07)] max-[480px]:px-2.5 max-[480px]:py-5",
+  selected ? "border-[var(--accent)] bg-[var(--accent-tint)]" : "border-[var(--border)]",
+].join(" ");
+const triangleCodeClass = (selected: boolean) => [
+  "font-mono text-2xl font-semibold text-[var(--ink)]",
+  selected ? "text-[var(--accent)]" : "",
+].join(" ");
+const hRankWrapClass = "mt-2";
+const hRankHintClass = "mb-1 text-xs text-[var(--mid)]";
+const hRankHintTouchClass = "hidden text-[11px] text-[var(--mid)] [@media(hover:none)_and_(pointer:coarse)]:inline";
+const hRankListClass = "flex flex-row items-center gap-[5px] overflow-x-auto px-[3px] pt-3 pb-4 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]";
+const hRankItemClass = (dragging: boolean, dragOver: boolean, selected: boolean) => [
+  "h-rank-item flex shrink-0 cursor-grab select-none flex-col items-center justify-center gap-[5px] rounded-lg border bg-[var(--paper)] px-2 py-2.5 transition-[border-color,box-shadow,transform] duration-100 [touch-action:none] active:cursor-grabbing hover:border-[rgba(30,46,46,.28)] hover:shadow-[0_2px_10px_rgba(30,46,46,.08)] max-[480px]:min-h-[82px] max-[480px]:min-w-[72px] max-[480px]:px-2.5 max-[480px]:py-3 [@media(hover:none)_and_(pointer:coarse)]:min-h-24 [@media(hover:none)_and_(pointer:coarse)]:min-w-[72px] [@media(hover:none)_and_(pointer:coarse)]:cursor-pointer",
+  dragging ? "scale-[.93] opacity-[.35]" : "",
+  dragOver ? "scale-[1.04] border-[var(--accent)] bg-[var(--accent-tint)] shadow-[0_0_0_2px_rgba(191,100,8,.15)]" : "border-[var(--border)]",
+  selected ? "border-[var(--accent)] bg-[var(--accent-tint)] shadow-[0_0_0_2px_rgba(191,100,8,.2)]" : "",
+].filter(Boolean).join(" ");
+const hRankPosClass = "font-mono text-[10px] font-medium text-[var(--mid)]";
+const hRankCodeClass = "font-mono text-[15px] font-bold text-[var(--ink)]";
+const hRankNavClass = "mt-1.5 hidden gap-1 [@media(hover:none)_and_(pointer:coarse)]:flex";
+const hRankNavBtnClass = "inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--border)] bg-[var(--paper)] text-xs leading-none text-[var(--ink)] transition-colors duration-100 hover:border-[var(--accent)] hover:bg-[var(--accent-tint)] disabled:cursor-default disabled:opacity-30 disabled:hover:border-[var(--border)] disabled:hover:bg-[var(--paper)]";
+const hRankSepClass = "flex shrink-0 items-center text-base text-[var(--mid)] opacity-40 max-[480px]:hidden";
+const discrimRefClass = "mb-4 rounded-r-md border-l-[3px] border-[var(--accent)] bg-[linear-gradient(to_right,rgba(191,100,8,.06),transparent)] px-4 py-3 text-sm leading-[1.65] text-[var(--ink)] [&_strong]:font-bold [&_strong]:text-[var(--accent)]";
+const anonaGridClass = "mt-2.5 flex flex-col gap-2.5";
+const anonaRowClass = "flex min-h-14 items-center gap-3.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-4 py-3 shadow-[0_1px_3px_rgba(30,46,46,.04)] max-[480px]:flex-wrap max-[480px]:gap-2 max-[480px]:px-3 max-[480px]:py-2.5";
+const anonaCodeClass = "min-w-14 font-mono text-[17px] font-bold text-[var(--ink)] max-[480px]:min-w-12";
+const anonaChoicesClass = "flex gap-2 max-[480px]:flex-wrap max-[480px]:gap-1.5";
+const anonaBtnClass = (selected: boolean, tone: "ok" | "diff") => [
+  "min-h-11 cursor-pointer rounded-full border bg-[var(--paper)] px-[22px] py-2.5 font-mono text-sm font-semibold transition-all duration-100 hover:border-[rgba(30,46,46,.3)] max-[480px]:min-h-10 max-[480px]:flex-auto max-[480px]:px-3.5 max-[480px]:py-2",
+  selected && tone === "ok" ? "border-[var(--ok)] bg-[var(--ok)] text-white" : "",
+  selected && tone === "diff" ? "border-[var(--danger)] bg-[var(--danger)] text-white" : "",
+  !selected ? "border-[var(--border)]" : "",
+].filter(Boolean).join(" ");
+const radarModeSwitchClass = "my-2.5 mb-3.5 inline-flex gap-0 rounded-lg border border-[var(--border)] bg-[var(--paper2)] p-[3px]";
+const radarModeBtnClass = (active: boolean) => [
+  "cursor-pointer rounded-md border-0 bg-transparent px-3.5 py-[7px] font-mono text-xs font-semibold text-[var(--mid)] transition-colors duration-150",
+  active ? "bg-[var(--ink)] text-white" : "",
+].join(" ");
+const radarGroupsClass = "flex flex-col gap-[22px]";
+const radarGroupBlockParticipantClass = "rounded-[10px] border-l-[3px] border-[var(--t-scale)] bg-[var(--paper2)] px-3.5 pt-3.5 pb-[18px]";
+const radarGroupHeaderRowClass = "mb-2.5 flex items-center justify-between gap-2.5";
+const radarGroupTitleClass = "m-0 font-mono text-[13px] font-semibold uppercase tracking-[.5px] text-[var(--ink)]";
+const radarGroupBodyClass = (showSVG: boolean) => [
+  "grid items-start gap-9 max-[720px]:grid-cols-1 max-[480px]:gap-3",
+  showSVG ? "grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)]" : "grid-cols-1",
+].join(" ");
+const radarSearchClass = "relative flex-none";
+const radarSearchToggleClass = "inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-[var(--border)] bg-[var(--paper)] text-[var(--mid)] transition-colors duration-100 hover:border-[var(--accent)] hover:text-[var(--accent)]";
+const radarSearchBoxClass = "inline-flex min-w-[220px] max-w-full items-center gap-1.5 rounded-full border border-[var(--accent)] bg-[var(--paper)] px-2 py-1 max-[480px]:min-w-0 max-[480px]:flex-[1_1_100%]";
+const radarSearchInputClass = "min-w-0 flex-1 border-0 bg-transparent text-xs text-[var(--ink)] outline-none";
+const radarSearchCloseClass = "inline-flex cursor-pointer items-center justify-center border-0 bg-transparent p-0.5 text-[var(--mid)] hover:text-[var(--danger)]";
+const radarSearchResultsClass = "absolute right-0 top-[calc(100%+4px)] z-20 max-h-[260px] min-w-60 max-w-80 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--paper)] p-1 shadow-[0_4px_16px_rgba(0,0,0,.10)] max-[480px]:left-0 max-[480px]:right-0 max-[480px]:max-w-full";
+const radarSearchEmptyClass = `${radarSearchResultsClass} px-3 py-2.5 text-xs italic text-[var(--mid)]`;
+const radarSearchResultClass = "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md border-0 bg-transparent px-2.5 py-1.5 text-left hover:bg-[var(--paper2)] [&_strong]:text-[13px] [&_strong]:font-semibold [&_strong]:text-[var(--ink)] hover:[&_strong]:text-[var(--accent)]";
+const radarSearchCrumbsClass = "font-mono text-[10px] text-[var(--mid)]";
+const radarTreeClass = "flex flex-col gap-2.5";
+const radarTreeEmptyClass = "rounded-lg border border-dashed border-[var(--border)] bg-white/50 px-3.5 py-[18px] text-center text-xs italic text-[var(--mid)]";
+const radarTreeRowClass = "radar-tree-row flex items-center gap-2.5 max-[480px]:flex-wrap max-[480px]:items-center max-[480px]:gap-x-2 max-[480px]:gap-y-1.5";
+const radarTreeLabelClass = (depth: number, custom = false) => [
+  "radar-tree-label min-w-0 flex-[0_0_108px] font-mono text-xs font-semibold uppercase tracking-[.3px] text-[var(--ink)] max-[480px]:flex-[1_1_100%] max-[480px]:text-xs max-[480px]:leading-tight",
+  depth === 1 ? "font-medium normal-case tracking-normal text-[11.5px] text-[var(--ink)] [flex-basis:110px]" : "",
+  depth >= 2 ? "font-normal normal-case tracking-normal text-[11px] text-[var(--mid)] [flex-basis:100px]" : "",
+  custom ? "radar-tree-label-custom italic text-[var(--mid)]" : "",
+].filter(Boolean).join(" ");
+const radarTreeValClass = (depth: number) => [
+  "radar-tree-val min-w-6 text-center text-sm font-bold text-[var(--accent)] max-[480px]:flex-none",
+  depth === 1 ? "text-[13px] text-[var(--ink)]" : "",
+  depth >= 2 ? "text-xs text-[var(--mid)]" : "",
+].filter(Boolean).join(" ");
+const radarTreeNodeClass = (depth: number, isHighlight: boolean, untouchedFlag: boolean) => [
+  `radar-tree-node depth-${depth} flex flex-col gap-1.5`,
+  depth === 0 ? "[&>.radar-tree-row]:border-b [&>.radar-tree-row]:border-[var(--border)] [&>.radar-tree-row]:px-0 [&>.radar-tree-row]:pt-1.5 [&>.radar-tree-row]:pb-1" : "",
+  depth === 1 ? "ml-[22px] rounded-lg border-l-[3px] border-l-[var(--t-scale)] bg-[var(--paper)] px-2.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,.04)] max-[480px]:ml-2 max-[480px]:px-2 max-[480px]:py-1.5" : "",
+  depth >= 2 ? "ml-[18px] rounded-md border-l-2 border-l-[rgba(102,102,102,.25)] bg-[var(--paper)] px-2 py-1 max-[480px]:ml-1.5 max-[480px]:px-1.5" : "",
+  isHighlight ? "[&>.radar-tree-row]:animate-[radar-highlight-fade_1.8s_ease_forwards] [&>.radar-tree-row]:rounded-md [&>.radar-tree-row]:bg-[var(--lime)]" : "",
+  untouchedFlag && depth === 0 ? "radar-tree-node--untouched [&>.radar-tree-row]:rounded-md [&>.radar-tree-row]:border-l-[3px] [&>.radar-tree-row]:border-l-[#c0392b] [&>.radar-tree-row]:bg-[rgba(192,57,43,.08)] [&>.radar-tree-row]:pl-2 [&>.radar-tree-row_.radar-tree-label]:text-[#c0392b]" : "",
+].filter(Boolean).join(" ");
+const radarTreeToggleClass = (placeholder = false) => [
+  "inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-[var(--accent)] bg-[var(--paper)] leading-none text-[var(--accent)] shadow-[0_1px_2px_rgba(238,140,0,.10)] transition-[background,color,transform,box-shadow] duration-100 hover:scale-[1.08] hover:bg-[rgba(238,140,0,.12)] hover:text-[var(--accent2)] hover:shadow-[0_2px_6px_rgba(238,140,0,.20)] active:scale-95 max-[480px]:flex-none",
+  placeholder ? "pointer-events-none cursor-default border-transparent bg-transparent shadow-none hover:scale-100 hover:bg-transparent hover:shadow-none" : "cursor-pointer",
+].join(" ");
+const radarTreeChildrenClass = "mt-1.5 flex flex-col gap-1.5 max-[480px]:mt-1";
+const radarCustomAddClass = "mt-0.5 flex items-center gap-1.5 py-0.5 pl-4 max-[480px]:pl-2";
+const radarCustomInputClass = "min-w-0 flex-1 rounded-md border border-dashed border-[var(--border)] bg-transparent px-2 py-1 text-[11px] text-[var(--mid)] outline-none focus:border-[var(--accent)] focus:border-solid focus:bg-[var(--paper)] focus:text-[var(--ink)]";
+const radarCustomBtnClass = "inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-md border border-dashed border-[var(--border)] bg-transparent text-[var(--mid)] transition-all duration-100 hover:not-disabled:border-[var(--accent)] hover:not-disabled:border-solid hover:not-disabled:bg-[var(--accent)] hover:not-disabled:text-white disabled:cursor-not-allowed disabled:opacity-40";
+const radarWarningClass = "mt-3.5 rounded-md border-l-[3px] border-[#c8820a] bg-[rgba(200,130,10,.10)] px-3.5 py-2.5 text-xs leading-[1.4] text-[var(--ink)] [&_strong]:text-[#8a5a00]";
 
 // Horizontal draggable rank for classement / seuil
 const HorizontalRank = React.memo(function HorizontalRank({ items, value, onChange }: { items: string[]; value: AnswerValue; onChange: (v: string[]) => void }) {
@@ -69,14 +186,14 @@ const HorizontalRank = React.memo(function HorizontalRank({ items, value, onChan
   };
 
   return (
-    <div className="h-rank-wrap">
-      <p className="drag-hint">
+    <div className={hRankWrapClass}>
+      <p className={hRankHintClass}>
         Classez les verres de gauche à droite : le verre le moins intense se place à gauche, le plus intense à droite.
         Chaque verre est <strong>inférieur</strong> (&lt;) à celui qui le suit.
-        <span className="drag-hint-touch"> Sur tablette : glissez les verres ou appuyez pour intervertir.</span>
+        <span className={hRankHintTouchClass}> Sur tablette : glissez les verres ou appuyez pour intervertir.</span>
       </p>
       <div 
-        className="h-rank-list"
+        className={hRankListClass}
         ref={listRef}
         onTouchMove={handleTouchMove}
         onTouchEnd={() => setTouchActive(null)}
@@ -91,27 +208,21 @@ const HorizontalRank = React.memo(function HorizontalRank({ items, value, onChan
               onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
               onTouchStart={() => setTouchActive(i)}
               onClick={() => handleTap(i)}
-              className={[
-                "h-rank-item",
-                dragIdx === i || touchActive === i ? "dragging" : "",
-                overIdx === i && dragIdx !== i ? "drag-over" : "",
-                selectedIdx === i ? "h-rank-selected" : "",
-              ].filter(Boolean).join(" ")}
-              style={{ touchAction: "none" }}
+              className={hRankItemClass(dragIdx === i || touchActive === i, overIdx === i && dragIdx !== i, selectedIdx === i)}
             >
-              <span className="h-rank-pos">{i + 1}</span>
-              <span className="h-rank-code">{code}</span>
-              <div className="h-rank-nav" aria-hidden="true">
+              <span className={hRankPosClass}>{i + 1}</span>
+              <span className={hRankCodeClass}>{code}</span>
+              <div className={hRankNavClass} aria-hidden="true">
                 <button
                   type="button"
-                  className="h-rank-nav-btn"
+                  className={hRankNavBtnClass}
                   onClick={(e) => { e.stopPropagation(); if (i > 0) applyReorder(i, i - 1); }}
                   disabled={i === 0}
                   aria-label="Déplacer à gauche"
                 >◀</button>
                 <button
                   type="button"
-                  className="h-rank-nav-btn"
+                  className={hRankNavBtnClass}
                   onClick={(e) => { e.stopPropagation(); if (i < ordered.length - 1) applyReorder(i, i + 1); }}
                   disabled={i === ordered.length - 1}
                   aria-label="Déplacer à droite"
@@ -119,7 +230,7 @@ const HorizontalRank = React.memo(function HorizontalRank({ items, value, onChan
               </div>
             </div>
             {i < ordered.length - 1 && (
-              <div className="h-rank-sep" aria-hidden="true">
+              <div className={hRankSepClass} aria-hidden="true">
                 <FiChevronLeft size={16} />
               </div>
             )}
@@ -195,10 +306,10 @@ const ScaleInput = React.memo(function ScaleInput({ q, value, onChange }: { q: Q
   const monoCls = "text-[11px] text-[var(--mid)] font-mono";
 
   return (
-    <div className="q-block">
-      <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">échelle</Badge></span>
-      <div className="scale-wrap">
-        <div className="scale-track">
+    <div className={questionBlockClass}>
+      <span className={questionLabelClass}>{q.label}<Badge variant="ns" className={questionTypeBadgeClass}>échelle</Badge></span>
+      <div className={scaleWrapClass}>
+        <div className={scaleTrackClass}>
           <span className={monoCls}>{q.labelMin || mn}</span>
           <TouchSafeSlider
             min={mn}
@@ -210,18 +321,18 @@ const ScaleInput = React.memo(function ScaleInput({ q, value, onChange }: { q: Q
             ariaLabel={q.label}
           />
           <span className={monoCls}>{q.labelMax || mx}</span>
-          <span className="scale-value">{mainValue}</span>
+          <span className={scaleValueClass}>{mainValue}</span>
         </div>
 
         {/* Sub-criteria — jury-driven */}
         {activeSubs.length > 0 && (
-          <div className="scale-subcriteria">
+          <div className={scaleSubcriteriaClass}>
             {activeSubs.map(label => {
               const subVal = typeof valObj[label] === "number" ? valObj[label] : mainValue;
               return (
-                <div key={label} className="scale-subcriterion">
-                  <span className="scale-sub-label">{label}</span>
-                  <div className="scale-track scale-track-sub">
+                <div key={label} className={scaleSubcriterionClass}>
+                  <span className={scaleSubLabelClass}>{label}</span>
+                  <div className={scaleTrackSubClass}>
                     <span className={`${monoCls} min-w-5`}>{mn}</span>
                     <TouchSafeSlider
                       min={mn}
@@ -231,9 +342,9 @@ const ScaleInput = React.memo(function ScaleInput({ q, value, onChange }: { q: Q
                       ariaLabel={label}
                     />
                     <span className={`${monoCls} min-w-5`}>{mx}</span>
-                    <span className="scale-value scale-value-sub">{subVal}</span>
+                    <span className={scaleSubValueClass}>{subVal}</span>
                   </div>
-                  <button className="scale-sub-remove" onClick={() => removeSub(label)} type="button" title="Retirer">×</button>
+                  <button className={scaleSubRemoveClass} onClick={() => removeSub(label)} type="button" title="Retirer">×</button>
                 </div>
               );
             })}
@@ -449,202 +560,63 @@ function collectNodes(axes: RadarAxis[], trail: string[] = []): Array<{ path: st
   return out;
 }
 
-// Délai d'armement tactile : il faut maintenir la poignée appuyée pendant ce
-// temps avant qu'un déplacement ne soit pris en compte. Évite les ajustements
-// involontaires en faisant glisser un doigt sur la toile.
-const TOUCH_HOLD_MS = 220;
-// Tolérance de mouvement pendant le hold tactile : au-delà, on considère que
-// l'utilisateur a "raté" la pression et on annule l'armement.
-const HOLD_MOVE_TOLERANCE_PX = 8;
-
-const RadarSVG = React.memo(function RadarSVG({ axes, values, max, onChange }: {
+const RadarChart = React.memo(function RadarChart({ axes, values, max, onChange }: {
   axes: RadarAxis[];
   values: number[];   // length = axes.length
   max: number;
   onChange: (axisIdx: number, v: number) => void;
 }) {
-  const N = axes.length;
-  const cx = 200, cy = 200, R = 140;
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  // dragIdx === null : aucune poignée n'est en train d'être manipulée
-  // dragIdx >= 0 : la poignée correspondante est armée et suit le pointeur
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  // armingIdx : poignée touchée mais pas encore armée (feedback visuel pendant le hold tactile).
-  const [armingIdx, setArmingIdx] = useState<number | null>(null);
-
-  // État du press en cours. Persistant via ref pour être lisible dans les
-  // setTimeout sans capturer de stale closures.
-  const pressRef = useRef<{
-    axisIdx: number;
-    pointerId: number;
-    isTouch: boolean;
-    armed: boolean;
-    startX: number;
-    startY: number;
-    timer: ReturnType<typeof setTimeout> | null;
-  } | null>(null);
-
-  const angleFor = (i: number) => -Math.PI / 2 + (2 * Math.PI * i) / N;
-  const pointFor = (i: number, v: number) => {
-    const a = angleFor(i);
-    const r = (Math.max(0, Math.min(max, v)) / max) * R;
-    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
-  };
-
-  const gridLevels = 5;
-  const gridPolys = Array.from({ length: gridLevels }, (_, k) => {
-    const lvl = (k + 1) / gridLevels;
-    return axes.map((_, i) => {
-      const a = angleFor(i);
-      return `${cx + lvl * R * Math.cos(a)},${cy + lvl * R * Math.sin(a)}`;
-    }).join(" ");
-  });
-
-  const valuePoly = axes.map((_, i) => {
-    const p = pointFor(i, values[i] ?? 0);
-    return `${p.x},${p.y}`;
-  }).join(" ");
-
-  // Projette les coordonnées SVG d'un pointer sur l'axe i pour obtenir la valeur correspondante
-  const valueFromPointer = (i: number, clientX: number, clientY: number): number => {
-    const svg = svgRef.current;
-    if (!svg) return 0;
-    const pt = svg.createSVGPoint();
-    pt.x = clientX; pt.y = clientY;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return 0;
-    const loc = pt.matrixTransform(ctm.inverse());
-    const a = angleFor(i);
-    const dx = loc.x - cx, dy = loc.y - cy;
-    const proj = dx * Math.cos(a) + dy * Math.sin(a); // projection sur l'axe radial
-    const v = (proj / R) * max;
-    return Math.max(0, Math.min(max, Math.round(v)));
-  };
-
-  const cancelPress = () => {
-    const p = pressRef.current;
-    if (p?.timer) clearTimeout(p.timer);
-    pressRef.current = null;
-    setArmingIdx(null);
-    setDragIdx(null);
-  };
-
-  const handlePointerDown = (i: number) => (e: React.PointerEvent<SVGCircleElement>) => {
-    e.preventDefault();
-    (e.target as SVGCircleElement).setPointerCapture(e.pointerId);
-
-    const isTouch = e.pointerType === "touch" || e.pointerType === "pen";
-    const press = {
-      axisIdx: i,
-      pointerId: e.pointerId,
-      isTouch,
-      armed: !isTouch, // souris : armé immédiatement (mais on ne déplace toujours pas tant que pointermove n'a pas eu lieu)
-      startX: e.clientX,
-      startY: e.clientY,
-      timer: null as ReturnType<typeof setTimeout> | null,
-    };
-    pressRef.current = press;
-
-    if (isTouch) {
-      // Tactile : feedback "armement en cours", puis arm après le hold.
-      setArmingIdx(i);
-      press.timer = setTimeout(() => {
-        if (pressRef.current !== press) return;
-        press.armed = true;
-        setArmingIdx(null);
-        setDragIdx(i);
-        // Vibration courte si supportée — confirme à l'utilisateur que la poignée est saisie.
-        try { navigator.vibrate?.(12); } catch { /* ignore */ }
-      }, TOUCH_HOLD_MS);
-    } else {
-      setDragIdx(i);
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<SVGCircleElement>) => {
-    const p = pressRef.current;
-    if (!p) return;
-    if (!p.armed) {
-      // Pendant le hold tactile : si le doigt bouge trop, on annule l'armement.
-      const dx = e.clientX - p.startX;
-      const dy = e.clientY - p.startY;
-      if (Math.hypot(dx, dy) > HOLD_MOVE_TOLERANCE_PX) {
-        cancelPress();
+  const data = useMemo<ChartData<"radar", number[], string>>(() => ({
+    labels: axes.map(a => a.label),
+    datasets: [
+      {
+        label: "Valeur",
+        data: values.map(v => v ?? 0),
+        backgroundColor: "rgba(238, 140, 0, 0.18)",
+        borderColor: "rgba(238, 140, 0, 1)",
+        borderWidth: 2,
+        pointBackgroundColor: "rgba(255, 255, 255, 1)",
+        pointBorderColor: "rgba(238, 140, 0, 1)",
+        pointBorderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        pointHitRadius: 10,
+        dragData: true,
       }
-      return;
-    }
-    onChange(p.axisIdx, valueFromPointer(p.axisIdx, e.clientX, e.clientY));
-  };
+    ]
+  }), [axes, values]);
 
-  const handlePointerUp = (e: React.PointerEvent<SVGCircleElement>) => {
-    try { (e.target as SVGCircleElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-    cancelPress();
-  };
+  const options = useMemo<ChartOptions<"radar">>(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      r: {
+        min: 0,
+        max: max,
+        beginAtZero: true,
+        ticks: { stepSize: 1, display: false },
+        pointLabels: {
+          font: { size: 11, family: "ui-monospace, monospace" },
+          color: "#2a2a2a",
+        }
+      }
+    },
+    plugins: {
+      legend: { display: false },
+      dragData: {
+        round: 0,
+        showTooltip: true,
+        onDragEnd: (_event, _datasetIndex, index, value) => {
+          if (typeof value === "number") onChange(index, value);
+        }
+      }
+    }
+  }), [max, onChange]);
 
   return (
-    <svg ref={svgRef} viewBox="0 0 400 400" className="radar-svg" role="img">
-      {/* grille concentrique — purement décorative, plus de clic-pour-déplacer */}
-      {gridPolys.map((pts, k) => (
-        <polygon key={k} points={pts} className="radar-grid" />
-      ))}
-      {/* axes — plus de handler de clic : seules les poignées modifient les valeurs */}
-      {axes.map((_, i) => {
-        const a = angleFor(i);
-        const ex = cx + R * Math.cos(a);
-        const ey = cy + R * Math.sin(a);
-        return (
-          <line
-            key={`ax${i}`}
-            x1={cx} y1={cy} x2={ex} y2={ey}
-            className="radar-axis"
-          />
-        );
-      })}
-      {/* polygone valeurs */}
-      <polygon points={valuePoly} className="radar-value" />
-      {/* poignées */}
-      {axes.map((_, i) => {
-        const p = pointFor(i, values[i] ?? 0);
-        const isDragging = dragIdx === i;
-        const isArming = armingIdx === i;
-        return (
-          <circle
-            key={`h${i}`}
-            cx={p.x} cy={p.y} r={9}
-            className={`radar-handle${isDragging ? " dragging" : ""}${isArming ? " arming" : ""}`}
-            onPointerDown={handlePointerDown(i)}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            style={{ touchAction: "none" }}
-          />
-        );
-      })}
-      {/* labels */}
-      {axes.map((ax, i) => {
-        const a = angleFor(i);
-        const lx = cx + (R + 22) * Math.cos(a);
-        const ly = cy + (R + 22) * Math.sin(a);
-        const anchor = Math.abs(Math.cos(a)) < 0.2 ? "middle" : (Math.cos(a) > 0 ? "start" : "end");
-        return (
-          <text key={`l${i}`} x={lx} y={ly} className="radar-label" textAnchor={anchor} dominantBaseline="middle">
-            {ax.label}
-          </text>
-        );
-      })}
-      {/* valeur centrale (texte) */}
-      {axes.map((_, i) => {
-        const p = pointFor(i, values[i] ?? 0);
-        const a = angleFor(i);
-        const tx = p.x + 14 * Math.cos(a);
-        const ty = p.y + 14 * Math.sin(a);
-        return (
-          <text key={`v${i}`} x={tx} y={ty} className="radar-value-text" textAnchor="middle" dominantBaseline="middle">
-            {values[i] ?? 0}
-          </text>
-        );
-      })}
-    </svg>
+    <div className="mx-auto aspect-square w-full max-w-[420px] select-none [touch-action:none]">
+      <Radar data={data} options={options} />
+    </div>
   );
 });
 
@@ -695,11 +667,11 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
 
   return (
     <div
-      className={`radar-tree-node depth-${path.length - 1}${isHighlight ? " highlight" : ""}${untouchedFlag ? " radar-tree-node--untouched" : ""}`}
+      className={radarTreeNodeClass(path.length - 1, isHighlight, untouchedFlag)}
       data-path={pathKey}
     >
-      <div className="radar-tree-row">
-        <span className="radar-tree-label">{axis.label}</span>
+      <div className={radarTreeRowClass}>
+        <span className={radarTreeLabelClass(path.length - 1)}>{axis.label}</span>
         <TouchSafeSlider
           min={min}
           max={max}
@@ -710,11 +682,11 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
           ariaLabel={axis.label}
           thumbOnly
         />
-        <span className="radar-tree-val">{v}</span>
+        <span className={radarTreeValClass(path.length - 1)}>{v}</span>
         {hasDisplayChildren ? (
           <button
             type="button"
-            className="radar-tree-toggle"
+            className={radarTreeToggleClass()}
             onClick={() => togglePath(pathKey)}
             title={expanded ? "Refermer" : "Préciser"}
             aria-expanded={expanded}
@@ -722,11 +694,11 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
             {expanded ? <FiMinus size={12} /> : <FiPlus size={12} />}
           </button>
         ) : (
-          <span className="radar-tree-toggle placeholder" aria-hidden="true" />
+          <span className={radarTreeToggleClass(true)} aria-hidden="true" />
         )}
       </div>
       {expanded && hasDisplayChildren && (
-        <div className="radar-tree-children">
+        <div className={radarTreeChildrenClass}>
           {displayChildren.map(({ child, hiddenMid }) => {
             const midNode = hiddenMid ? nodeAnswer.children?.[hiddenMid] : nodeAnswer;
             const childAnswer = midNode?.children?.[child.label] ?? { _: min };
@@ -754,9 +726,9 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
             const midNode = singleClass ? nodeAnswer.children?.[singleClass.label] : nodeAnswer;
             const childAnswer = midNode?.children?.[label] ?? { _: min };
             return (
-              <div key={`custom:${label}`} className="radar-tree-node depth-custom">
-                <div className="radar-tree-row">
-                  <span className="radar-tree-label radar-tree-label-custom">{label}</span>
+              <div key={`custom:${label}`} className="radar-tree-node depth-custom flex flex-col gap-1.5">
+                <div className={`${radarTreeRowClass} pl-4 max-[480px]:pl-2`}>
+                  <span className={radarTreeLabelClass(path.length, true)}>{label}</span>
                   <TouchSafeSlider
                     min={min}
                     max={max}
@@ -764,8 +736,8 @@ const RadarTreeNode = React.memo(function RadarTreeNode({
                     onChange={(nv) => setPathValue([...realParentPath, label], nv)}
                     ariaLabel={label}
                   />
-                  <span className="radar-tree-val">{childAnswer._}</span>
-                  <span className="radar-tree-toggle placeholder" aria-hidden="true" />
+                  <span className={radarTreeValClass(path.length)}>{childAnswer._}</span>
+                  <span className={radarTreeToggleClass(true)} aria-hidden="true" />
                 </div>
               </div>
             );
@@ -788,10 +760,10 @@ function CustomDescriptorAdder({ onAdd }: { onAdd: (label: string) => void }) {
     setVal("");
   };
   return (
-    <div className="radar-tree-custom-add">
+    <div className={radarCustomAddClass}>
       <input
         type="text"
-        className="radar-tree-custom-input"
+        className={radarCustomInputClass}
         placeholder="Ajouter un terme…"
         value={val}
         onChange={(e) => setVal(e.target.value)}
@@ -799,7 +771,7 @@ function CustomDescriptorAdder({ onAdd }: { onAdd: (label: string) => void }) {
       />
       <button
         type="button"
-        className="radar-tree-custom-btn"
+        className={radarCustomBtnClass}
         onClick={submit}
         disabled={!val.trim()}
         aria-label="Ajouter"
@@ -931,12 +903,12 @@ function RadarGroupBlock({ group, min, max, answer, onChange, showSVG = true }: 
   const visibleAxes = group.axes;
 
   return (
-    <div className="radar-group-block-participant" ref={blockRef}>
-      <div className="radar-group-header-row">
-        <h4 className="radar-group-title">{group.title}</h4>
-        <div className="radar-search">
+    <div className={radarGroupBlockParticipantClass} ref={blockRef}>
+      <div className={radarGroupHeaderRowClass}>
+        <h4 className={radarGroupTitleClass}>{group.title}</h4>
+        <div className={radarSearchClass}>
           {searchOpen ? (
-            <div className="radar-search-box">
+            <div className={radarSearchBoxClass}>
               <FiSearch size={13} />
               <input
                 autoFocus
@@ -944,37 +916,37 @@ function RadarGroupBlock({ group, min, max, answer, onChange, showSVG = true }: 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Rechercher un descripteur…"
-                className="radar-search-input"
+                className={radarSearchInputClass}
               />
               <button
                 type="button"
-                className="radar-search-close"
+                className={radarSearchCloseClass}
                 onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
                 aria-label="Fermer la recherche"
               ><FiX size={13} /></button>
               {results.length > 0 && (
-                <div className="radar-search-results">
+                <div className={radarSearchResultsClass}>
                   {results.map(r => (
                     <button
                       key={r.path.join("/")}
                       type="button"
-                      className="radar-search-result"
+                      className={radarSearchResultClass}
                       onClick={() => revealPath(r.path)}
                     >
                       <strong>{r.label}</strong>
-                      <span className="radar-search-crumbs">{r.path.slice(0, -1).join(" › ")}</span>
+                      <span className={radarSearchCrumbsClass}>{r.path.slice(0, -1).join(" › ")}</span>
                     </button>
                   ))}
                 </div>
               )}
               {searchQuery && results.length === 0 && (
-                <div className="radar-search-results empty">Aucun résultat.</div>
+                <div className={radarSearchEmptyClass}>Aucun résultat.</div>
               )}
             </div>
           ) : (
             <button
               type="button"
-              className="radar-search-toggle"
+              className={radarSearchToggleClass}
               onClick={() => setSearchOpen(true)}
               title="Rechercher un descripteur"
               aria-label="Rechercher"
@@ -982,15 +954,15 @@ function RadarGroupBlock({ group, min, max, answer, onChange, showSVG = true }: 
           )}
         </div>
       </div>
-      <div className={`radar-group-body${showSVG ? "" : " no-svg"}`}>
+      <div className={radarGroupBodyClass(showSVG)}>
         {showSVG && (
-          <div className="radar-svg-wrap">
-            <RadarSVG axes={group.axes} values={values} max={max} onChange={setAxis} />
+          <div className="flex justify-center">
+            <RadarChart axes={group.axes} values={values} max={max} onChange={setAxis} />
           </div>
         )}
-        <div className="radar-tree">
+        <div className={radarTreeClass}>
           {visibleAxes.length === 0 ? (
-            <div className="radar-tree-empty">Aucune famille configurée pour cette toile.</div>
+            <div className={radarTreeEmptyClass}>Aucune famille configurée pour cette toile.</div>
           ) : (
             visibleAxes.map(ax => {
               const nodeAnswer = answer[ax.label] ?? { _: familyDefault };
@@ -1052,24 +1024,24 @@ const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Q
   const untouchedFamilies = allAxes.filter(a => !answer[a.label]?._touched).map(a => a.label);
 
   return (
-    <div className="q-block">
-      <span className="q-label">
+    <div className={questionBlockClass}>
+      <span className={questionLabelClass}>
         {q.label}
-        <Badge variant="ns" className="q-type-badge">radar</Badge>
+        <Badge variant="ns" className={questionTypeBadgeClass}>radar</Badge>
       </span>
-      <div className="radar-mode-switch">
+      <div className={radarModeSwitchClass}>
         <button
           type="button"
-          className={`radar-mode-btn ${mode === "sliders" ? "active" : ""}`}
+          className={radarModeBtnClass(mode === "sliders")}
           onClick={() => setMode("sliders")}
         >Curseurs</button>
         <button
           type="button"
-          className={`radar-mode-btn ${mode === "radar" ? "active" : ""}`}
+          className={radarModeBtnClass(mode === "radar")}
           onClick={() => setMode("radar")}
         >Toile d&apos;araignée</button>
       </div>
-      <div className="radar-groups">
+      <div className={radarGroupsClass}>
         {groups.map(g => (
           <RadarGroupBlock
             key={g.id}
@@ -1084,7 +1056,7 @@ const RadarInput = React.memo(function RadarInput({ q, value, onChange }: { q: Q
       </div>
 
       {untouchedFamilies.length > 0 && (
-        <div className="radar-untouched-warn" role="status">
+        <div className={radarWarningClass} role="status">
           <strong>⚠ Curseurs non déplacés :</strong> pensez à vérifier{" "}
           {untouchedFamilies.map((f, i) => (
             <span key={f}>
@@ -1109,10 +1081,10 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
 
   if (q.type === "text") {
     return (
-      <div className="q-block">
-        <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">texte</Badge></span>
+      <div className={questionBlockClass}>
+        <span className={questionLabelClass}>{q.label}<Badge variant="ns" className={questionTypeBadgeClass}>texte</Badge></span>
         <textarea
-          className="q-text"
+          className={questionTextClass}
           placeholder={q.placeholder}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
@@ -1123,12 +1095,12 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
 
   if (q.type === "qcm") {
     return (
-      <div className="q-block">
-        <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">qcm</Badge></span>
-        <div className="qcm-options">
+      <div className={questionBlockClass}>
+        <span className={questionLabelClass}>{q.label}<Badge variant="ns" className={questionTypeBadgeClass}>qcm</Badge></span>
+        <div className={qcmOptionsClass}>
           {q.options?.map(opt => (
-            <label key={opt} className={`qcm-option ${value === opt ? "selected" : ""}`} onClick={() => onChange(opt)}>
-              <span className="qcm-dot"></span>
+            <label key={opt} className={qcmOptionClass(value === opt)} onClick={() => onChange(opt)}>
+              <span className={qcmDotClass(value === opt)}></span>
               <span>{opt}</span>
             </label>
           ))}
@@ -1141,8 +1113,8 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
     const codes = q.codes?.length ? q.codes : (products?.map(p => p.code) || []);
     const label = q.type === "seuil" ? "seuil" : "classement";
     return (
-      <div className="q-block">
-        <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">{label}</Badge></span>
+      <div className={questionBlockClass}>
+        <span className={questionLabelClass}>{q.label}<Badge variant="ns" className={questionTypeBadgeClass}>{label}</Badge></span>
         {codes.length > 0 ? (
           <HorizontalRank items={codes} value={value} onChange={onChange} />
         ) : (
@@ -1155,12 +1127,12 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
   if (q.type === "triangulaire") {
     const options = q.codes || [];
     return (
-      <div className="q-block">
-        <span className="q-label">{q.label || "Quel échantillon est différent des deux autres ?"}<Badge variant="ns" className="q-type-badge">triangulaire</Badge></span>
-        <div className="triangle-grid">
+      <div className={questionBlockClass}>
+        <span className={questionLabelClass}>{q.label || "Quel échantillon est différent des deux autres ?"}<Badge variant="ns" className={questionTypeBadgeClass}>triangulaire</Badge></span>
+        <div className={triangleGridClass}>
           {options.map(opt => (
-            <div key={opt} className={`triangle-choice ${value === opt ? "selected" : ""}`} onClick={() => onChange(opt)}>
-              <div className="code">{opt}</div>
+            <div key={opt} className={triangleChoiceClass(value === opt)} onClick={() => onChange(opt)}>
+              <div className={triangleCodeClass(value === opt)}>{opt}</div>
             </div>
           ))}
         </div>
@@ -1174,18 +1146,18 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
     const refB = codes[1] || "Y";
     const testCode = codes[2] || "Z";
     return (
-      <div className="q-block">
-        <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">duo-trio</Badge></span>
-        <p className="discrim-ref">
+      <div className={questionBlockClass}>
+        <span className={questionLabelClass}>{q.label}<Badge variant="ns" className={questionTypeBadgeClass}>duo-trio</Badge></span>
+        <p className={discrimRefClass}>
           {q.questionText?.trim()
             ? q.questionText
             : <>Vous avez deux verres de référence <strong>{refA}</strong> et <strong>{refB}</strong>. À quel verre le verre <strong>{testCode}</strong> est-il identique ?</>
           }
         </p>
-        <div className="triangle-grid">
+        <div className={triangleGridClass}>
           {[refA, refB].map(opt => (
-            <div key={opt} className={`triangle-choice ${value === opt ? "selected" : ""}`} onClick={() => onChange(opt)}>
-              <div className="code">{opt}</div>
+            <div key={opt} className={triangleChoiceClass(value === opt)} onClick={() => onChange(opt)}>
+              <div className={triangleCodeClass(value === opt)}>{opt}</div>
             </div>
           ))}
         </div>
@@ -1197,9 +1169,9 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
     const levels = q.betLevels || [];
     const currentVal: Record<string, string> = (typeof value === "object" && value !== null && !Array.isArray(value)) ? (value as unknown as Record<string, string>) : {};
     return (
-      <div className="q-block">
-        <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">seuil 3-AFC</Badge></span>
-        <p className="discrim-ref">
+      <div className={questionBlockClass}>
+        <span className={questionLabelClass}>{q.label}<Badge variant="ns" className={questionTypeBadgeClass}>seuil 3-AFC</Badge></span>
+        <p className={discrimRefClass}>
           Pour chaque niveau, identifiez <strong>le verre différent des deux autres</strong>. Les niveaux sont présentés dans l&apos;ordre.
         </p>
         <div className="flex flex-col gap-3">
@@ -1208,14 +1180,14 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
               <div className="text-[11px] text-[var(--mid)] mb-2">
                 Niveau {idx + 1} · {lv.label}
               </div>
-              <div className="triangle-grid">
+              <div className={triangleGridClass}>
                 {lv.codes.map(code => (
                   <div
                     key={code}
-                    className={`triangle-choice ${currentVal[String(idx)] === code ? "selected" : ""}`}
+                    className={triangleChoiceClass(currentVal[String(idx)] === code)}
                     onClick={() => onChange({ ...currentVal, [String(idx)]: code })}
                   >
-                    <div className="code">{code}</div>
+                    <div className={triangleCodeClass(currentVal[String(idx)] === code)}>{code}</div>
                   </div>
                 ))}
               </div>
@@ -1231,28 +1203,28 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
     const ref = q.refCode || "A";
     const currentVal: Record<string, string> = (typeof value === "object" && value !== null && !Array.isArray(value)) ? (value as unknown as Record<string, string>) : {};
     return (
-      <div className="q-block">
-        <span className="q-label">{q.label}<Badge variant="ns" className="q-type-badge">A / non-A</Badge></span>
-        <p className="discrim-ref">
+      <div className={questionBlockClass}>
+        <span className={questionLabelClass}>{q.label}<Badge variant="ns" className={questionTypeBadgeClass}>A / non-A</Badge></span>
+        <p className={discrimRefClass}>
           {q.questionText?.trim()
             ? q.questionText
             : <>Vous avez un verre de référence <strong>{ref}</strong> devant vous. Dites, pour chacun des verres ci-dessous, s&apos;il est identique ou différent du verre <strong>{ref}</strong>.</>
           }
         </p>
-        <div className="anona-grid">
+        <div className={anonaGridClass}>
           {codes.map(code => (
-            <div key={code} className="anona-row">
-              <span className="anona-code">{code}</span>
-              <div className="anona-choices">
+            <div key={code} className={anonaRowClass}>
+              <span className={anonaCodeClass}>{code}</span>
+              <div className={anonaChoicesClass}>
                 <button
-                  className={`anona-btn ${currentVal[code] === "A" ? "selected ok" : ""}`}
+                  className={anonaBtnClass(currentVal[code] === "A", "ok")}
                   onClick={() => onChange({ ...currentVal, [code]: "A" })}
                   title="Identique à la référence"
                 >
                   <span className="text-lg leading-none">=</span>
                 </button>
                 <button
-                  className={`anona-btn ${currentVal[code] === "non-A" ? "selected diff" : ""}`}
+                  className={anonaBtnClass(currentVal[code] === "non-A", "diff")}
                   onClick={() => onChange({ ...currentVal, [code]: "non-A" })}
                   title="Différent de la référence"
                 >

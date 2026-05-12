@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Card } from "../../ui/Card";
-import { AnalysisEmpty, AnalysisStack } from "../../ui/AnalysisPrimitives";
+import { AnalysisEmpty, AnalysisStack, ANALYSIS_NUM_CELL, ANALYSIS_TABLE_CLASS } from "../../ui/AnalysisPrimitives";
 import type { SessionConfig, CSVRow } from "../../../types";
 
 interface AnalyseProfilProps {
@@ -56,7 +56,7 @@ export function AnalyseProfil({ config, data }: AnalyseProfilProps) {
               <div className="text-[11px] text-[var(--mid)] mb-2 font-mono">
                 Moyenne par échantillon
               </div>
-              <table className="data-table">
+              <table className={ANALYSIS_TABLE_CLASS}>
                 <thead>
                   <tr>
                     <th>Échantillon</th>
@@ -72,9 +72,9 @@ export function AnalyseProfil({ config, data }: AnalyseProfilProps) {
                     return (
                       <tr key={p}>
                         <td>{p}</td>
-                        <td className="num">{s.n}</td>
-                        <td className="num font-semibold">{fmt(s.mean)}</td>
-                        <td className="num">{s.sd == null ? "—" : `±${s.sd.toFixed(2)}`}</td>
+                        <td className={ANALYSIS_NUM_CELL}>{s.n}</td>
+                        <td className={`${ANALYSIS_NUM_CELL} font-semibold`}>{fmt(s.mean)}</td>
+                        <td className={ANALYSIS_NUM_CELL}>{s.sd == null ? "—" : `±${s.sd.toFixed(2)}`}</td>
                       </tr>
                     );
                   })}

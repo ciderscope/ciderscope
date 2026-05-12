@@ -3,6 +3,7 @@ import React from "react";
 import { FiX, FiPlus } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Chip } from "./ClassementBuilder";
+import { adminIconButtonClass, builderSectionLabelClass } from "./utils";
 import type { BetLevel } from "../../../types";
 
 interface SeuilBetBuilderProps {
@@ -23,7 +24,7 @@ export function SeuilBetBuilder({ levels, onChange }: SeuilBetBuilderProps) {
 
   return (
     <div>
-      <div className="builder-section-label">NIVEAUX DE SEUIL (ordre croissant de concentration)</div>
+      <div className={builderSectionLabelClass}>NIVEAUX DE SEUIL (ordre croissant de concentration)</div>
       <p className="text-[11px] text-[var(--mid)] mt-1">
         À chaque niveau, 3 codes (2 identiques + 1 différent). Le jury doit identifier le verre différent (3-AFC).
         Le BET individuel est la moyenne géométrique entre les deux concentrations encadrant le premier passage d&apos;erreur → succès (ASTM E679).
@@ -48,7 +49,7 @@ export function SeuilBetBuilder({ levels, onChange }: SeuilBetBuilderProps) {
               className="w-[90px] px-2.5 py-1.5 rounded-md border border-[var(--border)] text-[13px]"
               title="Valeur numérique (unité cohérente sur toute la série) utilisée pour le calcul BET"
             />
-            <button className="q-del" title="Supprimer le niveau" onClick={() => removeLevel(i)} type="button"><FiX /></button>
+            <button className={adminIconButtonClass} title="Supprimer le niveau" onClick={() => removeLevel(i)} type="button"><FiX /></button>
           </div>
 
           <div className="flex gap-2 items-center">
@@ -75,7 +76,7 @@ export function SeuilBetBuilder({ levels, onChange }: SeuilBetBuilderProps) {
         </div>
       ))}
 
-      <Button variant="secondary" size="sm" onClick={addLevel} className="mt8">
+      <Button variant="secondary" size="sm" onClick={addLevel} className="mt-2">
         <FiPlus /> Ajouter un niveau
       </Button>
     </div>

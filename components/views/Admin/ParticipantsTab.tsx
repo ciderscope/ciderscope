@@ -193,7 +193,7 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
   return (
     <Card title="Participants ayant répondu">
       <div className="mb-4">
-        <Button onClick={handleGenerateFakes} disabled={generating} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Button onClick={handleGenerateFakes} disabled={generating} className="gap-2">
           <FiUserPlus /> {generating ? "Génération..." : "Ajouter participant fictif (Test)"}
         </Button>
       </div>
@@ -204,16 +204,16 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
         <MutedText>Aucun participant n&apos;a encore répondu à cette séance.</MutedText>
       ) : (
         <>
-          <p className="text-[12px] text-[var(--mid)]" style={{ marginBottom: 36 }}>
+          <p className="mb-9 text-[12px] text-[var(--mid)]">
             Cliquez sur la croix pour supprimer définitivement les réponses d&apos;un participant.
           </p>
-          <div className="participants-list">
-            <div className="participants-list-header">
+          <div className="mt-7 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--paper)]">
+            <div className="border-b border-[var(--border)] bg-[var(--paper2)] px-[18px] py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--mid)]">
               <span>{jurors.length} participant{jurors.length > 1 ? "s" : ""}</span>
             </div>
-            <ul className="participants-list-items">
+            <ul className="flex max-h-[520px] list-none flex-col gap-1.5 overflow-y-auto p-2">
               {jurors.map(n => (
-                <li key={n} className="participants-list-row">
+                <li key={n} className="flex items-center gap-3 rounded-[10px] border border-[var(--border)] bg-[var(--paper2)] px-4 py-3 hover:border-[var(--border-strong)]">
                   <span className="flex-1 font-semibold text-[14px]">{n}</span>
                   <button
                     type="button"

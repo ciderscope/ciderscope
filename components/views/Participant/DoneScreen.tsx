@@ -15,17 +15,22 @@ export const DoneScreen = ({ resultsVisible, onReviewAnswers, onShowSummary, onH
   const [confirmReview, setConfirmReview] = useState(false);
 
   return (
-    <div className="done-screen">
-      <div className="done-box">
-        <h2 className="text-[32px] font-extrabold text-[var(--ok)] mb-2">Terminé !</h2>
-        <p className="text-[14px] text-[var(--mid)] mb-8 max-w-[320px] mx-auto leading-relaxed">
+    <div className="mx-auto my-[70px] max-w-[520px] p-7 text-center">
+      <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--paper)] px-7 py-8 text-center shadow-[var(--shadow)] max-[480px]:px-[18px] max-[480px]:py-6">
+        <h2 className="mb-2 text-[32px] font-extrabold text-[var(--ok)]">Terminé !</h2>
+        <p className="mx-auto mb-8 max-w-[320px] text-sm leading-relaxed text-[var(--mid)]">
           Vos réponses ont été enregistrées avec succès. Merci de votre participation.
         </p>
 
         <div className="flex flex-col gap-3">
           <button
             type="button"
-            className={`done-summary-btn ${resultsVisible ? "done-summary-btn--ready" : "done-summary-btn--locked"}`}
+            className={[
+              "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] border-[1.5px] px-[18px] py-[11px] text-[14.5px] font-semibold transition-[background,border-color,color,transform]",
+              resultsVisible
+                ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_14%,var(--paper))] text-[var(--accent)] hover:-translate-y-px hover:bg-[var(--accent)] hover:text-white"
+                : "cursor-not-allowed border-[var(--border)] bg-[var(--paper2)] text-[var(--mid)] opacity-85",
+            ].join(" ")}
             onClick={() => resultsVisible && onShowSummary()}       
             disabled={!resultsVisible}
             aria-disabled={!resultsVisible}
@@ -34,11 +39,11 @@ export const DoneScreen = ({ resultsVisible, onReviewAnswers, onShowSummary, onH
             {resultsVisible ? "Voir les résultats du panel" : "Résultats (en attente de l'animateur)"}
           </button>
           {!resultsVisible && (
-            <p className="done-summary-hint">Le bouton deviendra cliquable dès que l&apos;animateur l&apos;aura autorisé.</p>      
+            <p className="mx-auto mt-2 max-w-[380px] text-[12.5px] text-[var(--mid)]">Le bouton deviendra cliquable dès que l&apos;animateur l&apos;aura autorisé.</p>      
           )}
         </div>
 
-        <div className="flex justify-center gap-4 mt-8 flex-wrap">
+        <div className="mt-8 flex flex-wrap justify-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => setConfirmReview(true)}>Revoir mes réponses</Button>
           <Button variant="secondary" onClick={onHome}><FiArrowLeft /> Retour</Button>
         </div>

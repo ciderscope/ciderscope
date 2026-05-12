@@ -46,26 +46,27 @@ export const ScrollableTabs = ({ className = "", activeKey, children, ariaLabel 
   }, [activeKey]);
 
   const scrollBy = (delta: number) => ref.current?.scrollBy({ left: delta, behavior: "smooth" });
+  const arrowClass = "inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-[var(--border)] bg-[var(--paper)] p-0 text-[var(--ink)] shadow-[0_1px_3px_rgba(0,0,0,.06)] transition-[background,color,border-color,transform] duration-100 hover:not-disabled:bg-[var(--paper2)] active:not-disabled:scale-[.92] disabled:cursor-default disabled:border-transparent disabled:bg-[var(--paper2)] disabled:text-[var(--mid)] disabled:opacity-35 disabled:shadow-none";
 
   return (
-    <div className="scrollable-tabs-wrap">
+    <div className="sticky top-[60px] z-50 mb-6 flex items-center gap-1 rounded-lg bg-[var(--paper2)] p-1">
       <button
         type="button"
         aria-label="Défiler vers la gauche"
-        className="scrollable-tabs-arrow left"
+        className={arrowClass}
         disabled={!canLeft}
         aria-disabled={!canLeft}
         onClick={() => scrollBy(-240)}
       >
         <FiChevronLeft size={16} />
       </button>
-      <div ref={ref} className={className} role="tablist" aria-label={ariaLabel}>
+      <div ref={ref} className={`${className} static mb-0 min-w-0 flex-1 bg-transparent p-0`.trim()} role="tablist" aria-label={ariaLabel}>
         {children}
       </div>
       <button
         type="button"
         aria-label="Défiler vers la droite"
-        className="scrollable-tabs-arrow right"
+        className={arrowClass}
         disabled={!canRight}
         aria-disabled={!canRight}
         onClick={() => scrollBy(240)}

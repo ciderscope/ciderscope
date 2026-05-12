@@ -4,7 +4,7 @@ import { FiPlus } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { AROMA_PRESET } from "../../../lib/aromaPreset";
 import type { SessionConfig, Question, QuestionType, Product } from "../../../types";
-import { nextId, getDefaultLabel } from "./utils";
+import { builderSectionLabelClass, nextId, getDefaultLabel } from "./utils";
 import { QuestionEditor } from "./QuestionEditor";
 
 interface QuestionBuilderProps {
@@ -99,8 +99,8 @@ export function QuestionBuilder({ editCfg, onSetEditCfg }: QuestionBuilderProps)
 
       {/* Add question buttons */}
       <div className="mt-5">
-        <div className="builder-section-label">AJOUTER UNE QUESTION</div>
-        <div className="flex mt8 flex-wrap gap-2">
+        <div className={builderSectionLabelClass}>AJOUTER UNE QUESTION</div>
+        <div className="mt-2 flex flex-wrap gap-2">
           {TYPES.map(t => (
             <Button key={t} variant="secondary" size="sm" onClick={() => addQuestion(t)}>
               <FiPlus /> {TYPE_LABELS[t] || t}

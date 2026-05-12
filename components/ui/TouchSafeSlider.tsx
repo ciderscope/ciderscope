@@ -167,10 +167,23 @@ export function TouchSafeSlider({
     onChange(next);
   };
 
+  const rootClassName = [
+    "ts-slider relative flex h-9 min-w-0 flex-1 cursor-pointer select-none items-center outline-none [-webkit-tap-highlight-color:transparent] [touch-action:pan-y]",
+    "focus-visible:[&_.ts-slider-thumb]:shadow-[0_0_0_4px_rgba(238,140,0,.25)]",
+    className,
+  ].filter(Boolean).join(" ");
+
+  const thumbClassName = [
+    "ts-slider-thumb pointer-events-none absolute top-1/2 h-[22px] w-[22px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--accent)] bg-[var(--paper)] transition-[transform,box-shadow,background] duration-150",
+    arming ? "border-[3px] animate-pulse" : "",
+    dragging ? "bg-[var(--accent)] shadow-[0_0_0_8px_rgba(238,140,0,.18)]" : "",
+    touched ? "border-[var(--ok)] bg-[var(--ok)]" : "",
+  ].filter(Boolean).join(" ");
+
   return (
     <div
       ref={trackRef}
-      className={`ts-slider${dragging ? " dragging" : ""}${arming ? " arming" : ""}${touched ? " touched" : ""}${className ? ` ${className}` : ""}`}
+      className={rootClassName}
       role="slider"
       aria-valuemin={min}
       aria-valuemax={max}
@@ -185,13 +198,12 @@ export function TouchSafeSlider({
       // pan-y : laisse le scroll vertical traverser ce contrôle, on ne capture
       // que les gestes horizontaux. Une fois pointer-capture pris, ce setting
       // n'a plus d'effet (on possède le pointeur).
-      style={{ touchAction: "pan-y" }}
     >
-      <div className="ts-slider-track" ref={innerTrackRef} />
-      <div className="ts-slider-fill" style={{ width: `calc(${ratio} * (100% - 22px))` }} />
-      <div className="ts-slider-thumb" style={{ left: `calc(${ratio * 100}% + ${11 - ratio * 22}px)` }}>
+      <div className="absolute left-[11px] right-[11px] h-1.5 rounded bg-[var(--paper3)] pointer-events-none" ref={innerTrackRef} />
+      <div className="absolute left-[11px] h-1.5 rounded bg-[var(--accent)] pointer-events-none" style={{ width: `calc(${ratio} * (100% - 22px))` }} />
+      <div className={thumbClassName} style={{ left: `calc(${ratio * 100}% + ${11 - ratio * 22}px)` }}>
         {touched && (
-          <svg className="ts-slider-check" viewBox="0 0 16 16" aria-hidden="true">
+          <svg className="pointer-events-none absolute inset-0 m-auto h-3.5 w-3.5 text-white" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M3.5 8.5l3 3 6-6" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}

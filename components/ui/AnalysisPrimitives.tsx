@@ -7,6 +7,10 @@ export const OK_TEXT = "text-[#1a6b3a]";
 export const DANGER_TEXT = "text-[#c0392b]";
 export const WARN_TEXT = "text-[#c8820a]";
 export const DIM_TEXT = "text-[#888]";
+export const ANALYSIS_TABLE_CLASS = "w-full table-auto border-collapse text-xs [&_th]:sticky [&_th]:top-0 [&_th]:whitespace-nowrap [&_th]:border-b [&_th]:border-[var(--border)] [&_th]:bg-[var(--paper2)] [&_th]:px-[11px] [&_th]:py-[9px] [&_th]:text-left [&_th]:font-mono [&_th]:text-[10px] [&_th]:uppercase [&_th]:tracking-[.4px] [&_th]:text-[var(--mid)] [&_td]:whitespace-nowrap [&_td]:border-b [&_td]:border-[var(--border)] [&_td]:px-[11px] [&_td]:py-[9px] [&_td]:text-left [&_tr:hover_td]:bg-[var(--accent-tint)] max-[480px]:text-[11px] max-[480px]:[&_th]:px-2 max-[480px]:[&_th]:py-1.5 max-[480px]:[&_td]:px-2 max-[480px]:[&_td]:py-1.5";
+export const ANALYSIS_NUM_CELL = "font-mono text-right";
+export const ANALYSIS_RADAR_WRAP = "relative mx-auto aspect-square max-h-[60vh] w-full max-w-[460px] [&>canvas]:max-h-full [&>canvas]:max-w-full";
+export const PCA_GROUP_SELECT_CLASS = "cursor-pointer rounded-full border border-[var(--border)] bg-[var(--paper)] px-3 py-1.5 text-xs text-[var(--ink)] outline-none focus:border-[var(--accent)]";
 
 const ANALYSIS_EMPTY = "py-6 text-[var(--text-muted)]";
 const ANALYSIS_STACK = "flex flex-col gap-6";
@@ -18,7 +22,7 @@ const ANALYSIS_META = "text-[13px] text-[var(--text-muted)]";
 const ANALYSIS_TABLE_LABEL = "mb-1 text-xs text-[var(--text-muted)]";
 const ANALYSIS_DETAILS = "mt-3.5";
 const ANALYSIS_SUMMARY = "cursor-pointer text-xs text-[var(--mid)]";
-const ANALYSIS_DETAIL_TABLE = "data-table mt-2";
+const ANALYSIS_DETAIL_TABLE = `${ANALYSIS_TABLE_CLASS} mt-2`;
 const ANALYSIS_TOOLBAR_LABEL = "font-mono text-[11px] uppercase tracking-[0.4px] text-[var(--mid)]";
 
 export const answerStateClass = (ok: boolean) => `text-center font-semibold ${ok ? OK_TEXT : DANGER_TEXT}`;

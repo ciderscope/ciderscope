@@ -4,7 +4,28 @@ import { FiX, FiPlus } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { AROMA_PRESET } from "../../../lib/aromaPreset";
 import type { Question, RadarGroup, RadarAxis } from "../../../types";
-import { nextId, updateAxisAtPath, removeAxisAtPath, addChildAtPath } from "./utils";
+import {
+  adminFieldGridClass,
+  chipRemoveButtonClass,
+  nextId,
+  updateAxisAtPath,
+  removeAxisAtPath,
+  addChildAtPath,
+} from "./utils";
+
+const radarBuilderClass = "flex flex-col gap-2.5";
+const radarGroupBlockClass = "rounded-lg border-l-[3px] border-[var(--t-scale)] bg-[var(--paper2)] px-3 py-2.5";
+const radarGroupHeaderClass = "mb-2 flex items-center gap-2";
+const radarInputClass = "min-w-[120px] flex-[1_1_140px] rounded-[5px] border border-[var(--border)] px-[9px] py-1.5 text-[13px] font-[inherit]";
+const radarAxisNodeClass = (depth: number) => [
+  "flex flex-col gap-1",
+  depth === 1 ? "ml-2 border-l-2 border-[var(--border)] pl-2.5" : "",
+  depth >= 2 ? "ml-2 border-l-2 border-dashed border-[var(--border)] pl-2.5" : "",
+].filter(Boolean).join(" ");
+const radarAxisRowClass = "flex items-center gap-1.5";
+const radarBuilderTreeClass = "mt-1.5 flex flex-col gap-1.5";
+const radarBuilderChildrenClass = "mt-0.5 flex flex-col gap-1";
+const chipAddClass = "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[var(--border)] bg-[var(--paper)] text-[var(--accent)] transition-transform duration-75 hover:bg-[var(--paper2)] hover:scale-105 active:scale-95";
 
 function RadarAxisNodeEditor({
   ax, path, depth, onUpdate, onRemove, onAddChild,
@@ -18,28 +39,28 @@ function RadarAxisNodeEditor({
 }) {
   const hasChildren = !!ax.children && ax.children.length > 0;
   return (
-    <div className={`radar-builder-node depth-${depth}`}>
-      <div className="radar-builder-node-row">
+    <div className={radarAxisNodeClass(depth)}>
+      <div className={radarAxisRowClass}>
         <input
           value={ax.label}
           onChange={(e) => onUpdate(path, { label: e.target.value })}
           placeholder={depth === 0 ? "Catégorie" : depth === 1 ? "Sous-catégorie" : "Descripteur"}
-          className="radar-axis-label-input"
+          className={radarInputClass}
         />
         <button
           type="button"
-          className="chip-add w-6 h-6 rounded-full border border-[var(--border)] bg-[var(--paper)] inline-flex items-center justify-center cursor-pointer text-[var(--accent)]"
+          className={chipAddClass}
           onClick={() => onAddChild(path)}
           title="Ajouter un enfant"
         >
           <FiPlus size={14} />
         </button>
-        <button className="chip-x" onClick={() => onRemove(path)} type="button" title="Supprimer ce nœud">
+        <button className={chipRemoveButtonClass} onClick={() => onRemove(path)} type="button" title="Supprimer ce nœud">
           <FiX size={12} />
         </button>
       </div>
       {hasChildren && (
-        <div className="radar-builder-children">
+        <div className={radarBuilderChildrenClass}>
           {ax.children!.map((child, ci) => (
             <RadarAxisNodeEditor
               key={ci}
@@ -89,8 +110,8 @@ export function RadarBuilder({ q, onUpdate }: RadarBuilderProps) {
   };
 
   return (
-    <div className="radar-builder">
-      <div className="q-fields">
+    <div className={radarBuilderClass}>
+      <div className={adminFieldGridClass}>
         <div className="field-wrap"><label>MIN</label><input type="number" value={q.min ?? 0} onChange={(e) => onUpdate({ min: +e.target.value })} /></div>
         <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
       </div>
@@ -108,19 +129,19 @@ export function RadarBuilder({ q, onUpdate }: RadarBuilderProps) {
           </p>
 
           {groups.map((g, gi) => (
-            <div key={g.id} className="radar-group-block">
-              <div className="radar-group-header">
+            <div key={g.id} className={radarGroupBlockClass}>
+              <div className={radarGroupHeaderClass}>
                 <input
                   value={g.title}
                   onChange={(e) => updateGroup(gi, { title: e.target.value })}
                   placeholder="Titre du radar"
-                  className="font-semibold flex-1"
+                  className="flex-1 rounded-md border border-[var(--border)] bg-[var(--paper)] px-2.5 py-1.5 font-semibold outline-none focus:border-[var(--accent)]"
                 />
-                <button className="chip-x" onClick={() => removeGroup(gi)} type="button" title="Supprimer le groupe">
+                <button className={chipRemoveButtonClass} onClick={() => removeGroup(gi)} type="button" title="Supprimer le groupe">
                   <FiX size={12} />
                 </button>
               </div>
-              <div className="radar-builder-tree">
+              <div className={radarBuilderTreeClass}>
                 {g.axes.map((ax, ai) => (
                   <RadarAxisNodeEditor
                     key={ai}

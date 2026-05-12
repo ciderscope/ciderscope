@@ -27,6 +27,8 @@ const stepKey = (step: SessionStep | undefined, idx: number) => {
   return `s${idx}`;
 };
 
+const productLabelClass = "mb-[22px] inline-flex items-center gap-1.5 rounded-md bg-[var(--ink)] px-4 py-[7px] font-mono text-[13px] font-bold uppercase leading-tight tracking-[1.6px] text-white";
+
 export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: QuestionnaireProps) => {
   const step = steps[currentStepIdx];
   const startRef = useRef<number | null>(null);
@@ -91,10 +93,10 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
   if (!step) return null;
 
   return (
-    <div className="product-card">
+    <div className="product-card mb-4 min-w-0 max-w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] px-3.5 py-4 shadow-[var(--shadow)] animate-[slideUp_.22s_ease] min-[481px]:p-[22px]">
       {step.type === "product" && (
         <>
-          <div className="product-label">ÉCHANTILLON {step.product.code}</div>
+          <div className={productLabelClass}>ÉCHANTILLON {step.product.code}</div>
           {step.questions.map((q: Question) => (
             <QuestionInput
               key={`${step.product.code}:${q.id}`}
@@ -108,7 +110,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
       )}
       {step.type === "ranking" && (
         <>
-          <div className="product-label">{step.question.type === "seuil" ? "SEUIL DE PERCEPTION" : "CLASSEMENT"}</div>
+          <div className={productLabelClass}>{step.question.type === "seuil" ? "SEUIL DE PERCEPTION" : "CLASSEMENT"}</div>
           <QuestionInput
             q={step.question}
             value={getAnswerValue("_rank", step.question.id)}
@@ -119,7 +121,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
       )}
       {step.type === "discrim" && (
         <>
-          <div className="product-label">TEST DISCRIMINATIF</div>
+          <div className={productLabelClass}>TEST DISCRIMINATIF</div>
           <QuestionInput
             q={step.question}
             value={getAnswerValue("_discrim", step.question.id)}
@@ -130,7 +132,7 @@ export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: Qu
       )}
       {step.type === "global" && (
         <>
-          <div className="product-label">QUESTIONS GÉNÉRALES</div>
+          <div className={productLabelClass}>QUESTIONS GÉNÉRALES</div>
           {step.questions.map((q: Question) => (
             <QuestionInput
               key={q.id}

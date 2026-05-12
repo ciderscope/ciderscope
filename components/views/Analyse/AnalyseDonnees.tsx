@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Card } from "../../ui/Card";
-import { AnalysisEmpty, OK_TEXT, DANGER_TEXT } from "../../ui/AnalysisPrimitives";
+import { AnalysisEmpty, ANALYSIS_TABLE_CLASS, OK_TEXT, DANGER_TEXT } from "../../ui/AnalysisPrimitives";
 import type { CSVRow } from "../../../types";
 
 interface AnalyseDonneesProps {
@@ -22,7 +22,7 @@ export function AnalyseDonnees({ data }: AnalyseDonneesProps) {
   return (
     <Card title="Données brutes">
       <div className="max-h-[600px] overflow-auto border border-[var(--border)] rounded-md">
-        <table className="data-table text-[11px] whitespace-nowrap">
+        <table className={`${ANALYSIS_TABLE_CLASS} text-[11px]`}>
           <thead className="sticky top-0 bg-[var(--paper)] shadow-sm z-10">
             <tr>{headers.map(h => <th key={h} className="text-left px-3 py-2 uppercase tracking-wider">{h.replace("_", " ")}</th>)}</tr>
           </thead>

@@ -15,14 +15,14 @@ import { downloadCSV } from "../lib/csv";
 // L'admin n'est jamais chargé côté participant — split du bundle.
 const AdminView = dynamic(() => import("../components/views/Admin/AdminView").then(m => m.AdminView), {
   ssr: false,
-  loading: () => <div style={{ padding: 32, color: "var(--mid)" }}>Chargement…</div>,
+  loading: () => <div className="p-8 text-[var(--mid)]">Chargement...</div>,
 });
 
 // AnalyseView (Chart.js) chargée à la demande aussi côté participant pour
 // le résumé de fin de séance — ne pèse pas sur le bundle initial.
 const AnalyseView = dynamic(() => import("../components/views/Analyse/AnalyseView").then(m => m.AnalyseView), {
   ssr: false,
-  loading: () => <div className="p-8 text-[var(--mid)]">Chargement du résumé…</div>,
+  loading: () => <div className="p-8 text-[var(--mid)]">Chargement du résumé...</div>,
 });
 
 const fingerprint = (cfg: unknown) => hsh(JSON.stringify(cfg));
@@ -63,7 +63,7 @@ export default function CiderScope() {
   } = useApp();
 
   if (!restored) {
-    return <div style={{ padding: 32, textAlign: "center", color: "var(--mid)" }}>Initialisation de l&apos;application…</div>;
+    return <div className="p-8 text-center text-[var(--mid)]">Initialisation de l&apos;application...</div>;
   }
 
   const goHome = () => {

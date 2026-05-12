@@ -7,10 +7,25 @@ import { Card } from "../../ui/Card";
 import { Badge } from "../../ui/Badge";
 import { DangerGhostButton, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { SessionConfig, SessionListItem, AllAnswers, CSVRow, AppScreen } from "../../../types";
+import { adminFieldGridClass, chipRemoveButtonClass } from "./utils";
 
 // Import subcomponents
 import { ParticipantsTab } from "./ParticipantsTab";
 import { QuestionBuilder } from "./QuestionBuilder";
+
+const adminShellClass = "mx-auto max-w-full overflow-x-clip px-[22px] py-7 pb-[60px] sm:max-w-[95%] supports-[not(overflow-x:clip)]:overflow-x-hidden";
+const adminSectionButtonClass = (active: boolean) => [
+  "flex cursor-pointer items-center gap-[5px] rounded-t-md border-0 border-b-2 border-transparent bg-transparent px-4 py-[7px] text-[13px] font-semibold text-[var(--mid)] transition-[color,border-color,background] duration-100 hover:text-[var(--ink)]",
+  active ? "border-b-[var(--accent)] bg-[var(--paper2)] text-[var(--accent)]" : "",
+].filter(Boolean).join(" ");
+const sessionCardClass = "mb-2.5 flex max-w-full min-w-0 flex-wrap items-center gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] px-5 py-[18px] shadow-[var(--shadow)] transition-[box-shadow,border-color] duration-150 hover:border-[rgba(30,46,46,.18)] hover:shadow-[0_3px_16px_rgba(30,46,46,.09)]";
+const sessionListClass = "grid gap-2 min-[721px]:grid-cols-2 min-[721px]:gap-2.5 min-[901px]:gap-2 xl:grid-cols-3 min-[1600px]:grid-cols-4";
+const adminEditHeaderClass = "sticky top-[60px] z-40 mb-3 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--paper2)] px-0.5 pt-2 pb-3.5 min-[481px]:gap-3.5 min-[481px]:px-1 min-[481px]:pt-2.5 min-[481px]:pb-[18px]";
+const editTabsClass = "mb-[22px] flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--paper2)] p-1 min-[481px]:gap-1.5 min-[481px]:p-1.5";
+const editTabClass = (active: boolean) => [
+  "inline-flex min-h-10 flex-1 basis-auto cursor-pointer items-center justify-center gap-2 rounded-lg border border-transparent bg-transparent px-3 py-[9px] text-[13px] font-semibold text-[var(--mid)] transition-[background,color,border-color] duration-100 hover:bg-[var(--paper)] hover:text-[var(--ink)] max-[480px]:min-w-0 max-[480px]:[&>svg]:hidden min-[481px]:min-h-11 min-[481px]:min-w-[140px] min-[481px]:px-4 min-[481px]:py-[11px] min-[481px]:text-sm",
+  active ? "border-[var(--border-strong)] bg-[var(--paper)] text-[var(--ink)] shadow-[0_1px_3px_rgba(0,0,0,.08)] [&>svg]:text-[var(--accent)]" : "",
+].filter(Boolean).join(" ");
 
 // AnalyseView (Chart.js, calculs lourds) chargée à la demande.
 const AnalyseView = dynamic(() => import("../Analyse/AnalyseView").then(m => m.AnalyseView), {
@@ -60,17 +75,17 @@ export const AdminView = ({
 
   if (screen === "landing") {
     return (
-      <div className="admin-shell">
+      <div className={adminShellClass}>
         {/* Sub-nav */}
-        <div className="admin-section-nav">
+        <div className="mb-5 flex flex-wrap gap-1 border-b border-[var(--border)] pb-0">
           <button
-            className={`admin-section-btn${adminSection === "seances" ? " active" : ""}`}
+            className={adminSectionButtonClass(adminSection === "seances")}
             onClick={() => setAdminSection("seances")}
           >
             <FiList size={13} /> Séances
           </button>
           <button
-            className={`admin-section-btn${adminSection === "analyse" ? " active" : ""}`}
+            className={adminSectionButtonClass(adminSection === "analyse")}
             onClick={() => {
               setAdminSection("analyse");
               if (!anSessId && sessions.length) onAnSessChange(sessions[0].id);
@@ -100,21 +115,21 @@ export const AdminView = ({
               <div className="flex-1"></div>
               <Button size="sm" onClick={onNewSession}>+ Nouvelle</Button>
             </div>
-            <div id="sessList">
+            <div id="sessList" className={sessionListClass}>
               {sessions.length === 0 ? (
-                <div className="no-session">Aucune séance.</div>
+                <div className="rounded-[var(--radius)] border-2 border-dashed border-[var(--border)] bg-[var(--paper2)] p-[42px] text-center text-[15px] text-[var(--mid)]">Aucune séance.</div>
               ) : (
                 sessions.map(s => (
-                  <div key={s.id} className="sess-list-card">
-                    <div>
-                      <div className="name">
+                  <div key={s.id} className={sessionCardClass}>
+                    <div className="min-w-0">
+                      <div className="text-base font-bold">
                         {s.name}
                         {s.active ? <Badge variant="active">ACTIVE</Badge> : <Badge variant="inactive">INACTIVE</Badge>}
                       </div>
-                      <div className="info">{s.date} · {s.productCount} éch. · {s.questionCount} Q · {s.jurorCount} jurys</div>
+                      <div className="mt-0.5 font-mono text-[11px] text-[var(--mid)]">{s.date} · {s.productCount} éch. · {s.questionCount} Q · {s.jurorCount} jurys</div>
                     </div>
-                    <div className="spacer"></div>
-                    <div className="actions">
+                    <div className="flex-1"></div>
+                    <div className="flex flex-wrap gap-[5px]">
                       {s.active
                         ? <Button variant="ghost" size="sm" onClick={() => onToggleActive(s.id)}>Désactiver</Button>
                         : <Button variant="ok" size="sm" onClick={() => onToggleActive(s.id)}>Activer</Button>}
@@ -166,20 +181,20 @@ export const AdminView = ({
     ];
 
     return (
-      <div className="admin-shell">
-        <header className="admin-header edit-mode">
-          <button className="back-btn" onClick={onHome}><FiArrowLeft /> Retour</button>
+      <div className={adminShellClass}>
+        <header className={adminEditHeaderClass}>
+          <Button variant="secondary" size="sm" onClick={onHome}><FiArrowLeft /> Retour</Button>
           <div className="flex-1">
-             <h2 className="font-extrabold text-xl truncate">{editCfg.name || "Nouvelle séance"}</h2>
+             <h2 className="truncate text-[17px] font-extrabold leading-[1.2] tracking-[-.2px] min-[481px]:text-xl">{editCfg.name || "Nouvelle séance"}</h2>
           </div>
           <Button onClick={onSaveEdit}>Enregistrer</Button>
         </header>
 
-        <div className="edit-tabs">
+        <div className={editTabsClass}>
           {tabs.map(t => (
             <button
               key={t.id}
-              className={`edit-tab${curEditTab === t.id ? " active" : ""}`}
+              className={editTabClass(curEditTab === t.id)}
               onClick={() => onSetEditTab(t.id)}
             >
               {t.icon} {t.label}
@@ -187,11 +202,11 @@ export const AdminView = ({
           ))}
         </div>
 
-        <div className="edit-content">
+        <div className="flex flex-col gap-[18px] pb-8">
           {curEditTab === "session" && (
-            <div className="admin-grid-single">
+            <div className="flex flex-col gap-[18px]">
               <Card title="Général">
-                <div className="q-fields">
+                <div className={adminFieldGridClass}>
                   <div className="field-wrap full">
                     <label>NOM DE LA SÉANCE</label>
                     <input
@@ -238,7 +253,7 @@ export const AdminView = ({
                         placeholder="Libellé optionnel"
                       />
                       <button
-                        className="chip-x mt-2"
+                        className={`${chipRemoveButtonClass} mt-2`}
                         type="button"
                         title="Retirer cet échantillon"
                         aria-label={`Retirer l'échantillon ${p.code || i + 1}`}
@@ -281,9 +296,8 @@ export const AdminView = ({
               {editSessId && (
                 <div className="py-6">
                   <Button
-                    variant="secondary"
+                    variant="dangerGhost"
                     size="sm"
-                    className="btn-danger-outline"
                     onClick={() => onDeleteSession(editSessId)}
                   >
                     <FiX /> Supprimer définitivement la séance
@@ -294,13 +308,13 @@ export const AdminView = ({
           )}
 
           {curEditTab === "questions" && (
-            <div className="admin-grid-single">
+            <div className="flex flex-col gap-[18px]">
               <QuestionBuilder editCfg={editCfg} onSetEditCfg={onSetEditCfg} />
             </div>
           )}
 
           {curEditTab === "jurors" && (
-            <div className="admin-grid-single">
+            <div className="flex flex-col gap-[18px]">
               <ParticipantsTab
                 sessionId={editSessId!}
                 config={editCfg!}

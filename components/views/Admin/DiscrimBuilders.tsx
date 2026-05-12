@@ -2,6 +2,31 @@
 import React, { useState } from "react";
 import { Chip, SampleToggle, ChipPool, DropSlot } from "./ClassementBuilder";
 import type { Product } from "../../../types";
+import {
+  builderSectionLabelClass,
+  chipPoolClass,
+  chipPoolSectionClass,
+  dropSlotClass,
+  dropSlotHintClass,
+  dropSlotLabelClass,
+  poolHintClass,
+} from "./utils";
+
+const anonaUnassignedClass = (dragOver: boolean) => [
+  "mb-3 rounded-lg border border-dashed border-[var(--border)] bg-[var(--paper)] px-3.5 py-[11px] transition-colors duration-100",
+  dragOver ? "bg-[var(--paper2)]" : "",
+].join(" ");
+const anonaZonesAdminClass = "mt-3 flex flex-wrap gap-3.5 max-[720px]:flex-col max-[480px]:gap-2.5";
+const anonaZoneAdminClass = (zone: "a" | "nona", dragOver: boolean) => [
+  "min-h-[110px] flex-1 rounded-lg border-[1.5px] border-dashed bg-[var(--paper)] p-[17px] transition-all duration-150 max-[480px]:min-w-0",
+  zone === "a" ? "border-[rgba(59,107,51,.3)]" : "border-[rgba(168,50,40,.25)]",
+  dragOver && zone === "a" ? "border-solid border-[var(--ok)] bg-[rgba(59,107,51,.05)]" : "",
+  dragOver && zone === "nona" ? "border-solid border-[var(--danger)] bg-[rgba(168,50,40,.04)]" : "",
+].join(" ");
+const anonaZoneLabelClass = (zone: "a" | "nona") => [
+  "mb-2.5 flex items-center gap-1 font-mono text-[11px] font-bold uppercase tracking-[.4px]",
+  zone === "a" ? "text-[var(--ok)]" : "text-[var(--danger)]",
+].join(" ");
 
 interface BuilderProps {
   products: Product[];
@@ -14,12 +39,12 @@ interface BuilderProps {
 export function TriangulaireBuilder({ products, codes, correctAnswer, onChangeCodes, onChangeCorrect }: BuilderProps) {
   return (
     <div>
-      <div className="builder-section-label">ÉCHANTILLONS DU TEST (exactement 3) — cliquez pour sélectionner</div>
+      <div className={builderSectionLabelClass}>ÉCHANTILLONS DU TEST (exactement 3) — cliquez pour sélectionner</div>
       <SampleToggle products={products} selected={codes} onChange={onChangeCodes} max={3} />
       {codes.length === 3 && (
         <>
-          <div className="builder-section-label mt-4">ÉCHANTILLON DIFFÉRENT (réponse correcte)</div>
-          <div className="chip-pool">
+          <div className={`${builderSectionLabelClass} mt-4`}>ÉCHANTILLON DIFFÉRENT (réponse correcte)</div>
+          <div className={chipPoolClass()}>
             {codes.map(c => (
               <Chip key={c} code={c} active={correctAnswer === c} onClick={() => onChangeCorrect(c)} />
             ))}
@@ -54,15 +79,15 @@ export function DuoTrioBuilder({ products, codes, correctAnswer, onChangeCodes, 
   return (
     <div>
       <ChipPool codes={pool.map(p => p.code)} label="Glissez les échantillons dans les cases ci-dessous" />
-      <div className="duo-trio-zones">
+      <div className="mt-3 flex flex-wrap gap-3 max-[720px]:flex-col max-[480px]:gap-2.5">
         <DropSlot label="Référence A" code={refA} accent="var(--ok)" onDrop={(c) => assign("a", c)} onRemove={() => update(null, refB, test)} />
         <DropSlot label="Référence B" code={refB} accent="var(--ok)" onDrop={(c) => assign("b", c)} onRemove={() => update(refA, null, test)} />
         <DropSlot label="Échantillon test" code={test} accent="var(--accent)" onDrop={(c) => assign("test", c)} onRemove={() => update(refA, refB, null)} />
       </div>
       {refA && refB && (
         <>
-          <div className="builder-section-label mt-4">RÉPONSE CORRECTE — le verre test est identique à :</div>
-          <div className="chip-pool">
+          <div className={`${builderSectionLabelClass} mt-4`}>RÉPONSE CORRECTE — le verre test est identique à :</div>
+          <div className={chipPoolClass()}>
             {[refA, refB].map(ref => (
               <Chip key={ref} code={ref} active={correctAnswer === ref} onClick={() => onChangeCorrect(ref)} />
             ))}
@@ -157,9 +182,9 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
   return (
     <div>
       {/* Reference sample */}
-      <div className="builder-section-label">ÉCHANTILLON DE RÉFÉRENCE (A) — glissez l&apos;échantillon servant de référence</div>
+      <div className={builderSectionLabelClass}>ÉCHANTILLON DE RÉFÉRENCE (A) — glissez l&apos;échantillon servant de référence</div>
       <div
-        className={`drop-slot${overRef ? " drag-over" : ""}${refCode ? " filled" : ""} max-w-[200px] mb-4`}
+        className={dropSlotClass(overRef, !!refCode, "mb-4 max-w-[200px]")}
         onDragOver={(e) => { e.preventDefault(); setOverRef(true); }}
         onDragLeave={() => setOverRef(false)}
         onDrop={(e) => {
@@ -179,21 +204,21 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
           setOverRef(false);
         }}
       >
-        <div className="drop-slot-label text-[var(--accent)]">Référence A</div>
+        <div className={`${dropSlotLabelClass} text-[var(--accent)]`}>Référence A</div>
         {refCode
           ? <Chip code={refCode} active removable onRemove={() => {
               // Put refCode back into codes when removed as reference
               if (!codes.includes(refCode)) onChangeCodes([...codes, refCode]);
               onChangeRef("");
             }} />
-          : <span className="drop-slot-hint">Glisser ici</span>}
+          : <span className={dropSlotHintClass}>Glisser ici</span>}
       </div>
 
       {/* Products pool (not yet in test) */}
       {pool.length > 0 && (
-        <div className="chip-pool-section">
-          <span className="pool-hint">Glissez les échantillons dans les zones A ou non-A pour les inclure dans le test</span>
-          <div className="chip-pool">
+        <div className={chipPoolSectionClass}>
+          <span className={poolHintClass}>Glissez les échantillons dans les zones A ou non-A pour les inclure dans le test</span>
+          <div className={chipPoolClass()}>
             {pool.map(p => (
               <Chip
                 key={p.code}
@@ -208,13 +233,13 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
       {/* Unassigned (in test but not yet classified) */}
       {unassigned.length > 0 && (
         <div
-          className={`anona-unassigned${overPool ? " drag-over" : ""}`}
+          className={anonaUnassignedClass(overPool)}
           onDragOver={(e) => { e.preventDefault(); setOverPool(true); }}
           onDragLeave={() => setOverPool(false)}
           onDrop={handleDropPool}
         >
-          <span className="pool-hint">Non classés — glissez dans A ou non-A</span>
-          <div className="chip-pool">
+          <span className={poolHintClass}>Non classés — glissez dans A ou non-A</span>
+          <div className={chipPoolClass()}>
             {unassigned.map(code => (
               <Chip
                 key={code}
@@ -229,16 +254,16 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
       )}
 
       {/* Two classification zones */}
-      <div className="anona-zones-admin">
+      <div className={anonaZonesAdminClass}>
         {/* Zone A */}
         <div
-          className={`anona-zone-admin zone-a${overA ? " drag-over" : ""}`}
+          className={anonaZoneAdminClass("a", overA)}
           onDragOver={(e) => { e.preventDefault(); setOverA(true); }}
           onDragLeave={() => setOverA(false)}
           onDrop={(e) => handleDropZone(e, "A")}
         >
-          <div className="anona-zone-label">A — identique à la référence</div>
-          <div className="chip-pool">
+          <div className={anonaZoneLabelClass("a")}>A — identique à la référence</div>
+          <div className={chipPoolClass()}>
             {zoneA.map(code => (
               <Chip
                 key={code}
@@ -249,19 +274,19 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
                 onRemove={() => removeFromTest(code)}
               />
             ))}
-            {zoneA.length === 0 && <span className="drop-slot-hint">Glisser ici</span>}
+            {zoneA.length === 0 && <span className={dropSlotHintClass}>Glisser ici</span>}
           </div>
         </div>
 
         {/* Zone non-A */}
         <div
-          className={`anona-zone-admin zone-nona${overNonA ? " drag-over" : ""}`}
+          className={anonaZoneAdminClass("nona", overNonA)}
           onDragOver={(e) => { e.preventDefault(); setOverNonA(true); }}
           onDragLeave={() => setOverNonA(false)}
           onDrop={(e) => handleDropZone(e, "non-A")}
         >
-          <div className="anona-zone-label">non-A — différent de la référence</div>
-          <div className="chip-pool">
+          <div className={anonaZoneLabelClass("nona")}>non-A — différent de la référence</div>
+          <div className={chipPoolClass()}>
             {zoneNonA.map(code => (
               <Chip
                 key={code}
@@ -272,7 +297,7 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
                 onRemove={() => removeFromTest(code)}
               />
             ))}
-            {zoneNonA.length === 0 && <span className="drop-slot-hint">Glisser ici</span>}
+            {zoneNonA.length === 0 && <span className={dropSlotHintClass}>Glisser ici</span>}
           </div>
         </div>
       </div>

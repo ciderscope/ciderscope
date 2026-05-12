@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Card } from "../../ui/Card";
-import { AnalysisEmpty, answerStateClass } from "../../ui/AnalysisPrimitives";
+import { AnalysisEmpty, ANALYSIS_TABLE_CLASS, answerStateClass } from "../../ui/AnalysisPrimitives";
 import type { SessionConfig, AllAnswers, Question, Product } from "../../../types";
 import { checkStepDone, getSteps } from "./utils";
 
@@ -34,7 +34,7 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
 
   return (
     <Card title="Avancement par jury">
-      <table className="data-table">
+      <table className={ANALYSIS_TABLE_CLASS}>
         <thead>
           <tr>
             <th>Jury</th>
@@ -54,7 +54,7 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
 
             const isSelf = !!currentJuror && j === currentJuror;
             return (
-              <tr key={j} className={isSelf ? "self" : ""}>
+              <tr key={j} className={isSelf ? "[&_td]:bg-[color-mix(in_srgb,var(--accent)_14%,var(--paper))] [&_td:first-child]:border-l-[3px] [&_td:first-child]:border-l-[var(--accent)]" : ""}>
                 <td className="font-semibold">{j}{isSelf && <span className="ml-1 text-[var(--accent)]" aria-label="vous">★</span>}</td>
                 {products.map(p => {
                   const step = productStepByCode.get(p.code);

@@ -94,17 +94,17 @@ export const FormScreen = ({
 
   return (
     <>
-      <div className="form-shell">
-        <div className="form-header">
+      <div className="form-shell mx-auto max-w-full overflow-x-clip px-3.5 pt-[18px] pb-[120px] supports-[not(overflow-x:clip)]:overflow-x-hidden min-[481px]:max-w-[min(94%,1280px)] min-[481px]:px-8 min-[481px]:pt-9 min-[481px]:pb-[120px] min-[721px]:pb-[110px]">
+        <div className="mb-7 flex items-center gap-3.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] px-[19px] py-[15px] shadow-[var(--shadow)]">
           <div>
-            <div className="jury-name">{cj}</div>
-            <div className="session-name">{curSess.name}</div>
+            <div className="text-[17px] font-bold leading-[1.2]">{cj}</div>
+            <div className="mt-0.5 font-mono text-[12.5px] text-[var(--mid)]">{curSess.name}</div>
           </div>
-          <div className="form-header-sep"></div>
+          <div className="flex-1"></div>
           <Button variant="ghost" size="sm" onClick={onChangeJury}><FiArrowLeft /> Changer</Button>
         </div>
 
-        <div className="form-progress-wrap px-4 mt-1">
+        <div className="form-progress-wrap mt-1 mb-[18px] px-1 min-[481px]:mb-[26px] min-[481px]:px-4">
           <div className="flex justify-between text-[12.5px] text-[var(--mid)] mb-1.5">
             <span><strong className="text-[var(--ink)] font-bold">Étape {cs + 1}</strong> / {total}</span>
             <span>{doneCount} / {total} complétées · {pct}%</span>
@@ -115,18 +115,20 @@ export const FormScreen = ({
               style={{ width: `${pct}%` }}
             />
           </div>
-          <div className="step-list flex gap-1.5 mt-2.5 overflow-x-auto pb-1">
+          <div className="step-list mt-2.5 flex gap-1 overflow-x-auto pb-1 min-[481px]:gap-1.5">
             {steps.map((s, i) => {
               const complete = completion[i] ?? false;
               const active = i === cs;
-              const bg = active ? "var(--accent)" : complete ? "#1a6b3a22" : "var(--paper2)";
-              const col = active ? "#fff" : complete ? "#1a6b3a" : "var(--mid)";
+
+
               return (
                 <div
                   key={i}
                   title={`Étape ${i + 1}${complete ? " — complète" : ""}`}
-                  className={`step-item flex-none px-2.5 py-1 rounded-full text-[11.5px] whitespace-nowrap ${active ? "active font-bold" : "font-semibold"} ${complete ? "complete" : ""}`}
-                  style={{ background: bg, color: col }}
+                  className={[
+                    "step-item flex-none rounded-full px-2.5 py-1 text-[11.5px] whitespace-nowrap",
+                    active ? "bg-[var(--accent)] font-bold text-white" : complete ? "bg-[#1a6b3a22] font-semibold text-[#1a6b3a]" : "bg-[var(--paper2)] font-semibold text-[var(--mid)]",
+                  ].join(" ")}
                 >
                   {stepShortLabel(s)}{complete && !active ? " ✓" : ""}
                 </div>
@@ -144,8 +146,8 @@ export const FormScreen = ({
         />
       </div>
       
-      <div className="product-nav">
-        <div className="product-nav-info">
+      <div className="product-nav fixed inset-x-0 bottom-0 z-50 flex items-center gap-[7px] border-t border-[var(--border)] bg-[var(--product-nav-bg)] px-2.5 py-[9px] backdrop-blur-[10px] min-[481px]:gap-2.5 min-[481px]:px-5 min-[481px]:py-[13px]">
+        <div className="product-nav-info flex-1 text-[10px] text-[var(--mid)] min-[481px]:text-[12.5px]">
           {!canAdvance && (
             <span className="text-[11px] text-[#c0392b]">Répondez à la question pour continuer.</span>
           )}

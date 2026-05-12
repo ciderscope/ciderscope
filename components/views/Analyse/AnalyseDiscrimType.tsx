@@ -9,6 +9,8 @@ import {
   AnalysisPanel,
   TableCaption,
   DetailTable,
+  ANALYSIS_TABLE_CLASS,
+  ANALYSIS_NUM_CELL,
   OK_TEXT,
   DANGER_TEXT,
   DIM_TEXT,
@@ -137,7 +139,7 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
 
           <div className="min-w-[260px] flex-1">
             <TableCaption>Table 2×2 agrégée</TableCaption>
-            <table className="data-table">
+            <table className={ANALYSIS_TABLE_CLASS}>
               <thead>
                 <tr>
                   <th></th>
@@ -149,14 +151,14 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
               <tbody>
                 <tr>
                   <td><strong>Stimulus A</strong></td>
-                  <td className={`num font-semibold ${OK_TEXT}`}>{hits} <span className="text-[10px] text-[var(--text-muted)]">(hit)</span></td>
-                  <td className={`num ${DANGER_TEXT}`}>{misses} <span className="text-[10px] text-[var(--text-muted)]">(miss)</span></td>
+                  <td className={`${ANALYSIS_NUM_CELL} font-semibold ${OK_TEXT}`}>{hits} <span className="text-[10px] text-[var(--text-muted)]">(hit)</span></td>
+                  <td className={`${ANALYSIS_NUM_CELL} ${DANGER_TEXT}`}>{misses} <span className="text-[10px] text-[var(--text-muted)]">(miss)</span></td>
                   <td className="num">{nA}</td>
                 </tr>
                 <tr>
                   <td><strong>Stimulus non-A</strong></td>
-                  <td className={`num ${DANGER_TEXT}`}>{fa} <span className="text-[10px] text-[var(--text-muted)]">(FA)</span></td>
-                  <td className={`num font-semibold ${OK_TEXT}`}>{cr} <span className="text-[10px] text-[var(--text-muted)]">(CR)</span></td>
+                  <td className={`${ANALYSIS_NUM_CELL} ${DANGER_TEXT}`}>{fa} <span className="text-[10px] text-[var(--text-muted)]">(FA)</span></td>
+                  <td className={`${ANALYSIS_NUM_CELL} font-semibold ${OK_TEXT}`}>{cr} <span className="text-[10px] text-[var(--text-muted)]">(CR)</span></td>
                   <td className="num">{nNonA}</td>
                 </tr>
               </tbody>
@@ -239,7 +241,7 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
             </AnalysisPanel>
 
             <TableCaption className="mt-3">Détail par jury</TableCaption>
-            <table className="data-table">
+            <table className={ANALYSIS_TABLE_CLASS}>
               <thead>
                 <tr><th>Jury</th><th>Réponse</th><th>Résultat</th></tr>
               </thead>

@@ -46,6 +46,14 @@ const STATS_QTYPES: Record<string, string> = {
   "seuil-bet": "Seuil 3-AFC",
 };
 
+const analysisTabsClass = "flex gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+const analysisTabClass = [
+  "flex h-9 min-w-[46px] shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-md border-0 border-b-2 border-transparent bg-transparent px-2 py-[7px] text-center text-[11px] font-semibold text-[var(--mid)] transition-[background,color,box-shadow] duration-100",
+  "sm:min-w-14 sm:text-xs",
+  "md:h-10 md:min-w-[72px] md:px-3.5 md:py-2.5 md:text-[13px]",
+].join(" ");
+const analysisTabActiveClass = "active border-b-[var(--accent)] bg-[var(--paper)] text-[var(--ink)] shadow-[0_1px_4px_rgba(0,0,0,.07)]";
+
 function computeTabs(anCfg: SessionConfig | null): Tab[] {
   if (!anCfg) return [{ id: "données", label: "Données" }];
   const qs: Question[] = anCfg.questions || [];
@@ -159,7 +167,7 @@ export const AnalyseView = ({
 
   return (
     <div
-      className={`analyse-shell ${participantMode ? "analyse-shell--participant" : ""}`}
+      className={`analyse-shell mx-auto max-w-full overflow-x-clip px-2.5 py-3.5 supports-[not(overflow-x:clip)]:overflow-x-hidden min-[481px]:max-w-[min(95%,2200px)] min-[481px]:p-6 max-[480px]:[&_h2]:[overflow-wrap:anywhere] max-[480px]:[&_h3]:[overflow-wrap:anywhere] ${participantMode ? "analyse-shell--participant" : ""}`}
       data-current-juror={currentJuror || undefined}
     >
       {!participantMode && (
@@ -213,13 +221,13 @@ export const AnalyseView = ({
       {anCfg && (
         <>
           {/* Dynamic tabs */}
-          <ScrollableTabs className="analyse-tabs" activeKey={activeTab} ariaLabel="Onglets d'analyse">
+          <ScrollableTabs className={analysisTabsClass} activeKey={activeTab} ariaLabel="Onglets d'analyse">
             {tabs.map(t => (
               <div
                 key={t.id}
                 role="tab"
                 aria-selected={activeTab === t.id}
-                className={`analyse-tab ${activeTab === t.id ? "active" : ""}`}
+                className={`${analysisTabClass} ${activeTab === t.id ? analysisTabActiveClass : ""}`}
                 onClick={() => onAnTabChange(t.id)}
               >
                 {t.label}

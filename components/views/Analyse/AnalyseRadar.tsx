@@ -8,6 +8,10 @@ import {
   AnalysisStack,
   ANALYSIS_TOOLBAR,
   ANALYSIS_CHART_BOX,
+  ANALYSIS_NUM_CELL,
+  ANALYSIS_RADAR_WRAP,
+  ANALYSIS_TABLE_CLASS,
+  PCA_GROUP_SELECT_CLASS,
   ToolbarLabel,
   OK_TEXT,
   confidenceClass
@@ -23,6 +27,13 @@ interface AnalyseRadarProps {
   participantMode?: boolean;
   currentJuror?: string;
 }
+
+const grid2Class = "grid2 grid min-w-0 grid-cols-2 gap-4 [&>*]:min-w-0 max-[900px]:grid-cols-1 max-[480px]:gap-2.5 min-[1600px]:grid-cols-3";
+const pcaLevelSwitchClass = "pca-level-switch inline-flex overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--paper)] max-[480px]:max-w-full max-[480px]:flex-wrap";
+const pcaLevelBtnClass = (active: boolean) => [
+  "pca-level-btn border-0 bg-transparent px-3.5 py-1.5 text-xs font-medium text-[var(--ink)] transition-all duration-100 hover:bg-[var(--paper2)] [&:not(:last-child)]:border-r [&:not(:last-child)]:border-[var(--border)] max-[480px]:min-w-0 max-[480px]:px-2.5 max-[480px]:text-[11.5px]",
+  active ? "active bg-[var(--ink)] text-white hover:bg-[var(--ink)]" : "",
+].filter(Boolean).join(" ");
 
 const getRadarAnswer = (answers: AllAnswers[string] | undefined, productCode: string, questionId: string): RadarAnswer | undefined => {
   const section = answers?.[productCode];
@@ -284,12 +295,12 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
 
       <div className={ANALYSIS_TOOLBAR}>
         <ToolbarLabel>Niveau d&apos;affichage</ToolbarLabel>
-        <div className="pca-level-switch">
+        <div className={pcaLevelSwitchClass}>
           {(["famille", "classe", "descripteur"] as const).map(lv => (
             <button
               key={lv}
               type="button"
-              className={`pca-level-btn ${displayLevel === lv ? "active" : ""}`}
+              className={pcaLevelBtnClass(displayLevel === lv)}
               onClick={() => setDisplayLevel(lv)}
             >
               {levelLabel[lv]}
@@ -297,10 +308,10 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           ))}
         </div>
         <ToolbarLabel>Échelle</ToolbarLabel>
-        <div className="pca-level-switch">
+        <div className={pcaLevelSwitchClass}>
           <button
             type="button"
-            className={`pca-level-btn ${!adaptiveScale ? "active" : ""}`}
+            className={pcaLevelBtnClass(!adaptiveScale)}
             onClick={() => setAdaptiveScale(false)}
             title="Axe radial fixe de 0 à 10"
           >
@@ -308,7 +319,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           </button>
           <button
             type="button"
-            className={`pca-level-btn ${adaptiveScale ? "active" : ""}`}
+            className={pcaLevelBtnClass(adaptiveScale)}
             onClick={() => setAdaptiveScale(true)}
             title="Recadre l'axe sur la plage utile pour mieux voir les faibles intensités"
           >
@@ -317,7 +328,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
         </div>
       </div>
 
-      <div className="grid2">
+      <div className={grid2Class}>
         {(question.radarGroups || []).map((g) => {
           const groupCriteria: string[] = [];
           const walk = (axes: RadarAxis[], prefix = "") => {
@@ -411,12 +422,12 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           return (
             <Fragment key={g.id}>
               <Card title={participantMode ? `${g.title} (Moyenne globale)` : g.title}>
-                <div className="analyse-radar-wrap">
+                <div className={ANALYSIS_RADAR_WRAP}>
                   <Radar data={radarData} options={buildOpts(radarMax)} />
                 </div>
                 {!participantMode && (
                   <div className="mt-5">
-                    <table className="data-table text-[11px]">
+                    <table className={`${ANALYSIS_TABLE_CLASS} text-[11px]`}>
                       <thead>
                         <tr>
                           <th>Critère</th>
@@ -435,7 +446,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                             {products.map(p => {
                               const m = avg(p.code, c);
                               const s = sd(p.code, c);
-                              return <td key={p.code} className={`num ${m > 0 ? "opacity-100" : "opacity-30"}`}>
+                              return <td key={p.code} className={`${ANALYSIS_NUM_CELL} ${m > 0 ? "opacity-100" : "opacity-30"}`}>
                                 {m > 0 ? `${m.toFixed(1)} ±${s.toFixed(1)}` : "—"}
                               </td>;
                             })}
@@ -448,7 +459,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
               </Card>
               {jurorRadarData && (
                 <Card title={`${g.title} (Vos réponses)`}>
-                  <div className="analyse-radar-wrap">
+                  <div className={ANALYSIS_RADAR_WRAP}>
                     <Radar data={jurorRadarData} options={buildOpts(jurorMax)} />
                   </div>
                 </Card>
@@ -460,7 +471,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
 
       {!participantMode && hrataMode && hrataAnalyses && (
         <Card title={`Rapport d'Analyse HRATA · ${activeGroup?.title || ""}`}>
-          <table className="data-table text-[11px]">
+          <table className={`${ANALYSIS_TABLE_CLASS} text-[11px]`}>
             <thead>
               <tr>
                 <th>Attribut</th>
@@ -479,14 +490,14 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                   <td className={a.attributeId.includes(">") ? "font-normal text-[var(--mid)]" : "font-bold"} style={{ paddingLeft: `${(a.attributeId.split(" > ").length - 1) * 12}px` }}>
                     {a.attributeId.split(" > ").pop()}
                   </td>
-                  <td className="num">{a.subjectsConsidering}/{a.totalSubjects} ({(a.coverageRate * 100).toFixed(0)}%)</td>
-                  <td className="num">{(a.conditionalFrequency * 100).toFixed(1)}%</td>
-                  <td className="num">{a.conditionalMeanIntensity.toFixed(2)}</td>
-                  <td className="num font-bold">{a.dravnieksWeighted.toFixed(1)}</td>
-                  <td className={`num ${a.pApplicabilityFDR !== undefined && a.pApplicabilityFDR < 0.05 ? OK_TEXT + ' font-bold' : ''}`}>
+                  <td className={ANALYSIS_NUM_CELL}>{a.subjectsConsidering}/{a.totalSubjects} ({(a.coverageRate * 100).toFixed(0)}%)</td>
+                  <td className={ANALYSIS_NUM_CELL}>{(a.conditionalFrequency * 100).toFixed(1)}%</td>
+                  <td className={ANALYSIS_NUM_CELL}>{a.conditionalMeanIntensity.toFixed(2)}</td>
+                  <td className={`${ANALYSIS_NUM_CELL} font-bold`}>{a.dravnieksWeighted.toFixed(1)}</td>
+                  <td className={`${ANALYSIS_NUM_CELL} ${a.pApplicabilityFDR !== undefined && a.pApplicabilityFDR < 0.05 ? OK_TEXT + ' font-bold' : ''}`}>
                     {a.pApplicabilityFDR !== undefined ? (a.pApplicabilityFDR < 0.001 ? "< 0,001" : a.pApplicabilityFDR.toFixed(3)) : "—"}
                   </td>
-                  <td className={`num ${a.pIntensityFDR !== undefined && a.pIntensityFDR < 0.05 ? OK_TEXT + ' font-bold' : ''}`}>
+                  <td className={`${ANALYSIS_NUM_CELL} ${a.pIntensityFDR !== undefined && a.pIntensityFDR < 0.05 ? OK_TEXT + ' font-bold' : ''}`}>
                     {a.pIntensityFDR !== undefined ? (a.pIntensityFDR < 0.001 ? "< 0,001" : a.pIntensityFDR.toFixed(3)) : "—"}
                   </td>
                   <td>{a.status}</td>
@@ -499,7 +510,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
 
       {!participantMode && !hrataMode && (
         <Card title="Significativité des descripteurs (ANOVA)">
-          <table className="data-table text-xs">
+          <table className={ANALYSIS_TABLE_CLASS}>
             <thead>
               <tr><th>Descripteur</th><th>F-produit</th><th>p-value</th></tr>
             </thead>
@@ -507,8 +518,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
               {anovaRows.filter(r => r.ok).map(r => (
                 <tr key={r.crit}>
                   <td>{r.crit}</td>
-                  <td className="num">{r.fProd.toFixed(2)}</td>
-                  <td className={`num ${r.pProd < 0.05 ? `font-bold ${OK_TEXT}` : "font-normal"}`}>
+                  <td className={ANALYSIS_NUM_CELL}>{r.fProd.toFixed(2)}</td>
+                  <td className={`${ANALYSIS_NUM_CELL} ${r.pProd < 0.05 ? `font-bold ${OK_TEXT}` : "font-normal"}`}>
                     {r.pProd < 0.001 ? "< 0,001" : r.pProd.toFixed(3)} {r.pProd < 0.05 ? "*" : ""}
                   </td>
                 </tr>
@@ -520,17 +531,17 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
 
       <div className={ANALYSIS_TOOLBAR}>
         <ToolbarLabel>Mode Statistiques</ToolbarLabel>
-        <div className="pca-level-switch">
+        <div className={pcaLevelSwitchClass}>
           <button
             type="button"
-            className={`pca-level-btn ${!hrataMode ? "active" : ""}`}
+            className={pcaLevelBtnClass(!hrataMode)}
             onClick={() => setHrataMode(false)}
           >
             Classique (ANOVA)
           </button>
           <button
             type="button"
-            className={`pca-level-btn ${hrataMode ? "active" : ""}`}
+            className={pcaLevelBtnClass(hrataMode)}
             onClick={() => setHrataMode(true)}
             title="Approche HRATA (Dravnieks, Q de Cochran, ACP Covariance)"
           >
@@ -544,7 +555,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             <select
               value={pcaGroupId}
               onChange={(e) => setPcaGroupId(e.target.value)}
-              className="pca-group-select"
+              className={PCA_GROUP_SELECT_CLASS}
             >
               {groups.map(g => (
                 <option key={g.id} value={g.id}>{g.title}</option>
@@ -555,12 +566,12 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
         {!isFlatGroup && (
           <>
             <ToolbarLabel>Niveau ACP</ToolbarLabel>
-            <div className="pca-level-switch">
+            <div className={pcaLevelSwitchClass}>
               {(["famille", "classe", "descripteur"] as const).map(lv => (
                 <button
                   key={lv}
                   type="button"
-                  className={`pca-level-btn ${pcaLevel === lv ? "active" : ""}`}
+                  className={pcaLevelBtnClass(pcaLevel === lv)}
                   onClick={() => setPcaLevel(lv)}
                 >
                   {levelLabel[lv]}
@@ -581,7 +592,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
       )}
 
       {pcaRes && (
-        <div className="grid2">
+        <div className={grid2Class}>
           <Card title={`ACP — Carte des produits · ${activeGroup?.title || ""} (${levelLabel[effectiveLevel].toLowerCase()})`}>
             <div className={ANALYSIS_CHART_BOX}>
               <Scatter
@@ -697,7 +708,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
 
       {!participantMode && (
         <Card title="Performance du jury">
-          <table className="data-table text-xs">
+          <table className={ANALYSIS_TABLE_CLASS}>
             <thead>
               <tr>
                 <th>Jury</th>
@@ -711,10 +722,10 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
               {juryPerf.map(p => (
                 <tr key={p.jury}>
                   <td>{p.jury}</td>
-                  <td className={`num font-bold ${confidenceClass(p.conf)}`}>
+                  <td className={`${ANALYSIS_NUM_CELL} font-bold ${confidenceClass(p.conf)}`}>
                     {p.conf.toFixed(2)}
                   </td>
-                  <td className={`num ${p.rv !== null && p.rv > 0.6 ? OK_TEXT : ""}`}>
+                  <td className={`${ANALYSIS_NUM_CELL} ${p.rv !== null && p.rv > 0.6 ? OK_TEXT : ""}`}>
                     {p.rv !== null ? p.rv.toFixed(2) : "—"}
                   </td>
                   <td className="num">{p.range.toFixed(1)}</td>

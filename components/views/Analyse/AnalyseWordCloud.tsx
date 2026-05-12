@@ -82,7 +82,7 @@ export function AnalyseWordCloud({ data, config }: AnalyseWordCloudProps) {
         if (isPerProduct) {
           return (
             <div key={qLabel}>
-              <div className="builder-section-label !mb-3.5">{qLabel}</div>
+              <div className="mb-3.5 border-b border-[var(--border)] pb-1 font-mono text-[10px] font-bold uppercase tracking-[1px] text-[var(--accent)]">{qLabel}</div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
                 {products.map((p: Product) => {
                   const pRows = qRows.filter(r => r.produit === p.code);

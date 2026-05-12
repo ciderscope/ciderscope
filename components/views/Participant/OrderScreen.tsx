@@ -58,41 +58,41 @@ export const OrderScreen = ({
   const hasMulti = globalOrder.length > 1 || serieOrders.length > 0;
 
   return (
-    <div className="order-screen">
-      <h2>Ordre de service</h2>
-      <p className="hint">{curSess.name} — {cj}</p>
+    <div className="mx-auto my-[30px] max-w-[720px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--paper)] px-[22px] py-[26px] shadow-[var(--shadow)] max-[480px]:mx-2 max-[480px]:my-3.5 max-[480px]:px-3.5 max-[480px]:py-[18px]">
+      <h2 className="mb-1 text-2xl font-bold tracking-normal">Ordre de service</h2>
+      <p className="m-0 text-sm text-[var(--mid)]">{curSess.name} — {cj}</p>
       <p className="text-[13.5px] text-[var(--mid)] mt-1 mb-5">
         Disposez vos échantillons devant vous dans l&apos;ordre indiqué ci-dessous,
         de gauche à droite.
       </p>
 
       {!hasMulti ? (
-        <div className="order-empty">
+        <div className="mt-[18px] mb-7 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--paper2)] p-[22px] text-center text-sm text-[var(--mid)]">
           Aucun échantillon multiple à classer dans cette séance.
         </div>
       ) : (
         <>
           {globalOrder.length > 1 && (
-            <div className="order-block">
-              <div className="order-block-title">Ordre principal</div>
-              <ol className="order-list">
+            <div className="mt-[18px]">
+              <div className="mb-2 text-[13px] font-bold uppercase tracking-[0.06em] text-[var(--primary)]">Ordre principal</div>
+              <ol className="flex list-none flex-wrap gap-2 p-0">
                 {globalOrder.map((c, i) => (
-                  <li key={c} className="order-item">
-                    <span className="order-pos">{i + 1}</span>
-                    <span className="order-code">{c}</span>
+                  <li key={c} className="inline-flex min-h-[46px] items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--paper)] px-3.5 py-[9px]">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">{i + 1}</span>
+                    <span className="font-mono text-lg font-bold tracking-[0.5px] text-[var(--ink)] max-[480px]:text-xl">{c}</span>
                   </li>
                 ))}
               </ol>
             </div>
           )}
           {serieOrders.map((s, idx) => (
-            <div key={idx} className="order-block">
-              <div className="order-block-title">{s.label}</div>
-              <ol className="order-list">
+            <div key={idx} className="mt-[18px]">
+              <div className="mb-2 text-[13px] font-bold uppercase tracking-[0.06em] text-[var(--primary)]">{s.label}</div>
+              <ol className="flex list-none flex-wrap gap-2 p-0">
                 {s.codes.map((c, i) => (
-                  <li key={c + i} className="order-item">
-                    <span className="order-pos">{i + 1}</span>
-                    <span className="order-code">{c}</span>
+                  <li key={c + i} className="inline-flex min-h-[46px] items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--paper)] px-3.5 py-[9px]">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">{i + 1}</span>
+                    <span className="font-mono text-lg font-bold tracking-[0.5px] text-[var(--ink)] max-[480px]:text-xl">{c}</span>
                   </li>
                 ))}
               </ol>

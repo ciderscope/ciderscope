@@ -4,7 +4,16 @@ import { FiX, FiEye, FiEyeOff, FiCopy } from "react-icons/fi";
 import { Badge } from "../../ui/Badge";
 import { QuestionInput } from "../../features/QuestionInput";
 import type { Question, Product, AnswerValue } from "../../../types";
-import { getDefaultLabel } from "./utils";
+import {
+  adminFieldGridClass,
+  adminIconButtonClass,
+  getDefaultLabel,
+  questionBuilderClass,
+  questionBuilderHeaderClass,
+  questionNumberClass,
+  questionTypeBodyClass,
+  scopeButtonClass,
+} from "./utils";
 import { RadarBuilder } from "./RadarBuilder";
 import { ClassementBuilder } from "./ClassementBuilder";
 import { TriangulaireBuilder, DuoTrioBuilder, ANonABuilder } from "./DiscrimBuilders";
@@ -25,29 +34,29 @@ export function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDupl
   const [preview, setPreview] = useState(false);
   const [previewVal, setPreviewVal] = useState<AnswerValue>(undefined);
   return (
-    <div className={`q-builder q-builder-${q.type}`}>
-          <div className="q-builder-header">
-            <span className="q-num">Q{index + 1}</span>
+    <div className={questionBuilderClass(q.type)}>
+          <div className={questionBuilderHeaderClass}>
+            <span className={questionNumberClass}>Q{index + 1}</span>
             <Badge variant="ns">{typeLabel}</Badge>
             <span className="flex-1" />
             <button
               type="button"
-              className={`q-del ${preview ? "!text-[var(--accent)]" : ""}`}
+              className={`${adminIconButtonClass} ${preview ? "text-[var(--accent)] hover:text-[var(--accent)]" : ""}`}
               title={preview ? "Masquer l'aperçu" : "Aperçu participant"}
               onClick={() => setPreview(p => !p)}
             >
               {preview ? <FiEyeOff /> : <FiEye />}
             </button>
-            <button type="button" className="q-del" title="Dupliquer la question" onClick={onDuplicate}>
+            <button type="button" className={adminIconButtonClass} title="Dupliquer la question" onClick={onDuplicate}>
               <FiCopy />
             </button>
-            <button type="button" className="q-del" title="Supprimer" onClick={onDelete}>
+            <button type="button" className={adminIconButtonClass} title="Supprimer" onClick={onDelete}>
               <FiX />
             </button>
           </div>
 
           {/* Libellé — always shown */}
-          <div className="q-fields">
+          <div className={adminFieldGridClass}>
             <div className="field-wrap full">
               <label>LIBELLÉ</label>
               <input
@@ -63,20 +72,20 @@ export function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDupl
 
           {/* Affichage (scope) : pour qcm / texte / échelle */}
           {(q.type === "qcm" || q.type === "text" || q.type === "scale") && (
-            <div className="q-fields">
+            <div className={adminFieldGridClass}>
               <div className="field-wrap full">
                 <label>AFFICHAGE</label>
                 <div className="flex gap-1.5 flex-wrap">
                   <button
                     type="button"
-                    className={`q-scope-btn ${q.scope === "per-product" ? "active" : ""}`}
+                    className={scopeButtonClass(q.scope === "per-product")}
                     onClick={() => onUpdate({ scope: "per-product" })}
                   >
                     Pour chaque échantillon
                   </button>
                   <button
                     type="button"
-                    className={`q-scope-btn ${q.scope !== "per-product" ? "active" : ""}`}
+                    className={scopeButtonClass(q.scope !== "per-product")}
                     onClick={() => onUpdate({ scope: "global" })}
                   >
                     Question seule (une fois)
@@ -87,11 +96,11 @@ export function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDupl
           )}
 
           {/* Type-specific UI */}
-          <div className="q-type-body">
+          <div className={questionTypeBodyClass}>
 
             {q.type === "scale" && (
               <>
-                <div className="q-fields">
+                <div className={adminFieldGridClass}>
                   <div className="field-wrap"><label>MIN</label><input type="number" value={q.min ?? 0} onChange={(e) => onUpdate({ min: +e.target.value })} /></div>
                   <div className="field-wrap"><label>MAX</label><input type="number" value={q.max ?? 10} onChange={(e) => onUpdate({ max: +e.target.value })} /></div>
                   <div className="field-wrap"><label>LABEL MIN</label><input value={q.labelMin || ""} onChange={(e) => onUpdate({ labelMin: e.target.value })} /></div>
@@ -127,7 +136,7 @@ export function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDupl
 
             {q.type === "duo-trio" && (
               <>
-                <div className="q-fields mb-3">
+                <div className={`${adminFieldGridClass} mb-3`}>
                   <div className="field-wrap full">
                     <label>CONSIGNE PERSONNALISÉE (laisser vide pour la consigne par défaut)</label>
                     <input
@@ -149,7 +158,7 @@ export function QuestionEditor({ q, index, products, typeLabel, onUpdate, onDupl
 
             {q.type === "a-non-a" && (
               <>
-                <div className="q-fields mb-3">
+                <div className={`${adminFieldGridClass} mb-3`}>
                   <div className="field-wrap full">
                     <label>CONSIGNE PERSONNALISÉE (laisser vide pour la consigne par défaut)</label>
                     <input

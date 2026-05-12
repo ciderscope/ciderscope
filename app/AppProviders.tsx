@@ -72,7 +72,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
           }}
           onLogout={state.adminAuth ? handleLogout : undefined}
         />
-        <main className="app-main">{children}</main>
+        <main className="max-w-full overflow-x-clip pt-13 sm:pt-15">{children}</main>
       </AppStateContext.Provider>
     </AppActionsContext.Provider>
   );

@@ -2,6 +2,22 @@
 import React, { useState, useRef } from "react";
 import { FiX } from "react-icons/fi";
 import type { Product } from "../../../types";
+import {
+  adminChipClass,
+  builderSectionLabelClass,
+  chipPoolClass,
+  chipPoolSectionClass,
+  chipRemoveButtonClass,
+  dragHandleClass,
+  draggableItemClass,
+  draggableListClass,
+  dropSlotClass,
+  dropSlotHintClass,
+  dropSlotLabelClass,
+  poolHintClass,
+  rankCodeClass,
+  rankPositionClass,
+} from "./utils";
 
 // ─── Primitive Components ──────────────────────────────────────────────────
 
@@ -20,7 +36,7 @@ export function Chip({ code, active, onClick, onDragStart, removable, onRemove }
 
   return (
     <div
-      className={`admin-chip${active ? " active" : ""}${onDragStart ? " draggable" : ""}`}
+      className={adminChipClass(active, !!onDragStart)}
       draggable={!!onDragStart}
       onDragStart={onDragStart ? handleDragStart : undefined}
       onClick={onClick}
@@ -28,7 +44,7 @@ export function Chip({ code, active, onClick, onDragStart, removable, onRemove }
     >
       <span>{code}</span>
       {removable && (
-        <button className="chip-x" onClick={(e) => { e.stopPropagation(); onRemove?.(); }} type="button">
+        <button className={chipRemoveButtonClass} onClick={(e) => { e.stopPropagation(); onRemove?.(); }} type="button">
           <FiX size={10} />
         </button>
       )}
@@ -51,12 +67,12 @@ export function SampleToggle({ products, selected, onChange, max }: {
     }
   };
   return (
-    <div className="chip-pool">
-      {products.length === 0 && <span className="pool-hint">Ajoutez d&apos;abord des échantillons dans l&apos;onglet Session.</span>}
+    <div className={chipPoolClass()}>
+      {products.length === 0 && <span className={poolHintClass}>Ajoutez d&apos;abord des échantillons dans l&apos;onglet Session.</span>}
       {products.map(p => (
         <Chip key={p.code} code={p.code} active={selected.includes(p.code)} onClick={() => toggle(p.code)} />
       ))}
-      {max && <span className="pool-hint">{selected.length}/{max} sélectionnés</span>}
+      {max && <span className={poolHintClass}>{selected.length}/{max} sélectionnés</span>}
     </div>
   );
 }
@@ -69,18 +85,22 @@ export function DropSlot({ label, code, onDrop, onRemove, accent }: {
   accent?: string;
 }) {
   const [over, setOver] = useState(false);
+  const accentClass = accent === "var(--ok)"
+    ? { border: "border-[var(--ok)]", label: "text-[var(--ok)]" }
+    : accent === "var(--accent)"
+      ? { border: "border-[var(--accent)]", label: "text-[var(--accent)]" }
+      : { border: "", label: "" };
   return (
     <div
-      className={`drop-slot${over ? " drag-over" : ""}${code ? " filled" : ""}`}
-      style={accent ? { borderColor: over || code ? accent : undefined } as React.CSSProperties : undefined}
+      className={dropSlotClass(over, !!code, over || code ? accentClass.border : "")}
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); const c = e.dataTransfer.getData("chip-code"); if (c) onDrop(c); setOver(false); }}
     >
-      <div className="drop-slot-label" style={accent ? { color: accent } as React.CSSProperties : undefined}>{label}</div>
+      <div className={`${dropSlotLabelClass} ${accentClass.label}`}>{label}</div>
       {code
         ? <Chip code={code} active removable onRemove={onRemove} />
-        : <span className="drop-slot-hint">Glisser ici</span>}
+        : <span className={dropSlotHintClass}>Glisser ici</span>}
     </div>
   );
 }
@@ -88,9 +108,9 @@ export function DropSlot({ label, code, onDrop, onRemove, accent }: {
 export function ChipPool({ codes, label }: { codes: string[]; label?: string }) {
   if (codes.length === 0) return null;
   return (
-    <div className="chip-pool-section">
-      {label && <span className="pool-hint">{label}</span>}
-      <div className="chip-pool">
+    <div className={chipPoolSectionClass}>
+      {label && <span className={poolHintClass}>{label}</span>}
+      <div className={chipPoolClass()}>
         {codes.map(code => (
           <Chip
             key={code}
@@ -135,7 +155,10 @@ export function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
   if (codes.length === 0) {
     return (
       <div
-        className={`serie-empty${overEmpty ? " drag-over" : ""} border-2 border-dashed border-[var(--border)] rounded-xl p-6 text-center transition-all duration-150`}
+        className={[
+          "rounded-xl border-2 border-dashed border-[var(--border)] p-6 text-center text-xs italic text-[var(--mid)] transition-all duration-150",
+          overEmpty ? "border-[var(--accent)] bg-[var(--accent-tint)]" : "",
+        ].join(" ")}
         onDragOver={(e) => { e.preventDefault(); setOverEmpty(true); }}
         onDragLeave={() => setOverEmpty(false)}
         onDrop={(e) => {
@@ -153,16 +176,16 @@ export function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
   }
 
   return (
-    <div className="draggable-list admin-order-list ">
+    <div className={draggableListClass}>
       {codes.map((code, i) => (
         <div
           key={code}
           onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
           onDrop={(e) => handleDrop(e, i)}
-          className={`draggable-item${dragIdx === i ? " dragging" : ""}${overIdx === i && dragIdx !== i ? " drag-over" : ""}`}
+          className={draggableItemClass(dragIdx === i, overIdx === i && dragIdx !== i)}
         >
           <span
-            className="drag-handle cursor-grab"
+            className={dragHandleClass}
             draggable
             onDragStart={(e) => {
               setDragIdx(i);
@@ -171,10 +194,10 @@ export function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
             }}
             onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
           >&#8942;&#8942;</span>
-          <span className="rank-pos">{i + 1}</span>
-          <span className="rank-code">{code}</span>
+          <span className={rankPositionClass}>{i + 1}</span>
+          <span className={rankCodeClass}>{code}</span>
           <button
-            className="chip-x ml-auto p-1.5 rounded flex items-center justify-center"
+            className={`${chipRemoveButtonClass} ml-auto rounded p-1.5`}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -222,12 +245,12 @@ export function ClassementBuilder({ type, products, codes, correctOrder, onChang
   return (
     <div>
       {/* Pool — available samples, also accepts drag-back from série */}
-      <div className="builder-section-label">
+      <div className={builderSectionLabelClass}>
         DISPONIBLES — cliquez pour ajouter · ou glissez ici depuis la série pour retirer
       </div>
       <div
         ref={poolRef}
-        className={`chip-pool${overPool ? " drag-over" : ""} min-h-[54px] border-[1.5px] border-dashed border-[var(--border)] rounded-[10px] p-2 transition-[border-color,background] duration-150`}
+        className={`${chipPoolClass(overPool)} min-h-[54px] rounded-[10px] border-[1.5px] border-dashed border-[var(--border)] p-2 transition-[border-color,background] duration-150`}
         onDragOver={(e) => { e.preventDefault(); setOverPool(true); }}
         onDragLeave={(e) => {
           if (poolRef.current && !poolRef.current.contains(e.relatedTarget as Node)) {
@@ -243,9 +266,9 @@ export function ClassementBuilder({ type, products, codes, correctOrder, onChang
         }}
       >
         {pool.length === 0 && codes.length > 0
-          ? <span className="pool-hint">Glisser ici pour retirer de la série</span>
+          ? <span className={poolHintClass}>Glisser ici pour retirer de la série</span>
           : pool.length === 0
-            ? <span className="pool-hint">Ajoutez d&apos;abord des échantillons dans l&apos;onglet Session.</span>
+            ? <span className={poolHintClass}>Ajoutez d&apos;abord des échantillons dans l&apos;onglet Session.</span>
             : pool.map(p => (
                 <Chip
                   key={p.code}
@@ -257,7 +280,7 @@ export function ClassementBuilder({ type, products, codes, correctOrder, onChang
         }
       </div>
 
-      <div className="builder-section-label mt-4">
+      <div className={`${builderSectionLabelClass} mt-4`}>
         SÉRIE — {codes.length} échantillon{codes.length > 1 ? "s" : ""} · glissez pour réordonner · × pour retirer
       </div>
       <div className="text-[11px] text-[var(--mid)] italic mb-1.5">
@@ -267,7 +290,7 @@ export function ClassementBuilder({ type, products, codes, correctOrder, onChang
 
       {type === "classement" && codes.length > 1 && (
         <div className="mt-4">
-          <label className="toggle-row">
+          <label className="flex cursor-pointer select-none items-center gap-2">
             <input
               type="checkbox"
               checked={showCorrectOrder}
@@ -276,7 +299,7 @@ export function ClassementBuilder({ type, products, codes, correctOrder, onChang
                 if (!e.target.checked) onChangeOrder([]);
               }}
             />
-            <span className="builder-section-label !m-0">ORDRE ATTENDU (optionnel) — définir la bonne réponse</span>
+            <span className={`${builderSectionLabelClass} m-0`}>ORDRE ATTENDU (optionnel) — définir la bonne réponse</span>
           </label>
           {showCorrectOrder && (
             <>

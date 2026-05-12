@@ -2,7 +2,7 @@
 import React from "react";
 import { Bar } from "react-chartjs-2";
 import { Card } from "../../ui/Card";
-import { AnalysisEmpty, AnalysisStack, OK_TEXT, significanceClass } from "../../ui/AnalysisPrimitives";
+import { AnalysisEmpty, AnalysisStack, ANALYSIS_TABLE_CLASS, OK_TEXT, significanceClass } from "../../ui/AnalysisPrimitives";
 import { chiSquarePValue, getNemenyiCD, computeCLD, kendallTau, kendallW } from "../../../lib/stats";
 import type { SessionConfig, CSVRow, Product } from "../../../types";
 import { getChartColors } from "./utils";
@@ -127,7 +127,7 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
             />
           </div>
           <div className="flex-[1_1_200px]">
-            <table className="data-table">
+            <table className={ANALYSIS_TABLE_CLASS}>
               <thead>
                 <tr><th>Produit</th><th>Rang moyen</th>{pValue < 0.05 && <th>Gr.</th>}</tr>
               </thead>
@@ -163,7 +163,7 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
 
                   <details>
                     <summary className="cursor-pointer text-xs text-[var(--mid)]">Afficher les comparaisons par paires</summary>
-                    <table className="data-table mt-2 text-[11px]">
+                    <table className={`${ANALYSIS_TABLE_CLASS} mt-2 text-[11px]`}>
                       <thead>
                         <tr><th>Paire</th><th>Diff. Σ Rangs</th><th>Signif.</th></tr>
                       </thead>
@@ -218,7 +218,7 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
            <details className="mt-4">
              <summary className="cursor-pointer text-xs text-[var(--mid)]">Afficher la distribution des rangs</summary>
              <div className="mt-2.5 flex gap-5 flex-wrap">
-                <table className="data-table flex-1">
+                <table className={`${ANALYSIS_TABLE_CLASS} flex-1`}>
                   <thead><tr><th>Produit</th>{products.map((_, i) => <th key={i}>R{i + 1}</th>)}</tr></thead>
                   <tbody>
                     {products.map((p: string) => (
