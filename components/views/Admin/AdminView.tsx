@@ -116,8 +116,9 @@ export const AdminView = ({
                         size="sm"
                         onClick={() => onToggleResultsVisible(s.id)}
                         title={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
+                        aria-label={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
                       >
-                        <FiPieChart /> {s.resultsVisible ? "Résumé visible" : "Partager résumé"}
+                        <FiPieChart />
                       </Button>
                       <Button
                         variant="secondary"
@@ -129,7 +130,7 @@ export const AdminView = ({
                         title="Voir l'analyse"
                         aria-label="Voir l'analyse de la séance"
                       >
-                        <FiBarChart2 /> Analyse
+                        <FiBarChart2 />
                       </Button>
                       <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier" aria-label="Modifier la séance"><FiEdit2 /></Button>
                       <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer" aria-label="Dupliquer la séance"><FiCopy /></Button>
