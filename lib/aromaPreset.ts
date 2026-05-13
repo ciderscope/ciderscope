@@ -28,6 +28,8 @@ const axes: RadarAxis[] = [
     children: [
       { label: "Végétal", children: leaves(["Foin", "Paille", "Herbe coupée", "Tige"]) },
       { label: "Plante aromatique", children: leaves(["Laurier", "Menthe", "Thé", "Thym"]) },
+      { label: "Sous-Bois", children: leaves(["Champignon", "Moisi", "Terreux"]) },
+      { label: "Bois Frais", children: leaves(["Chêne", "Liège", "Pin"]) },
     ],
   },
   {
@@ -46,21 +48,19 @@ const axes: RadarAxis[] = [
   {
     label: "Chimique",
     children: [
-      { label: "Chimique", children: leaves(["Alcool", "Colle scotch", "Caoutchouc", "Dissolvant à ongles", "Encre/Gouache", "Vinaigre", "Médicament", "Sparadrap"]) },
+      { label: "Chimique", children: leaves(["Alcool", "Colle scotch", "Caoutchouc", "Dissolvant à ongles", "Encre/Gouache", "Vinaigre", "Médicament", "Sparadrap", "Dentiste"]) },
     ],
   },
   {
-    label: "Soufrée",
+    label: "Soufré",
     children: [
-      { label: "Soufrée", children: leaves(["Ail", "Chou", "Serpillère", "Oeuf pourri"]) },
+      { label: "Soufré", children: leaves(["Ail", "Chou", "Serpillère", "Oeuf pourri"]) },
     ],
   },
   {
-    label: "Sous-bois",
+    label: "Animal",
     children: [
       { label: "Animal", children: leaves(["Cheval", "Cuir", "Sueur"]) },
-      { label: "Terreux", children: leaves(["Champignon", "Moisi"]) },
-      { label: "Bois", children: leaves(["Chêne", "Liège", "Pin"]) },
     ],
   },
   {
