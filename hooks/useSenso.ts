@@ -1,10 +1,9 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { SessionListItem, SessionConfig, Question, JurorAnswers, BetLevel, SessionStep, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
-import { hsh, wlm } from "../lib/utils";
+import { SessionListItem, SessionConfig, JurorAnswers, SessionStep, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
-import { asRecord, isStepDone } from "../lib/sessionSteps";
+import { asRecord, buildSessionSteps, isStepDone } from "../lib/sessionSteps";
 
 // Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
 // et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
@@ -48,8 +47,6 @@ export const useSenso = () => {
   const [poste, setPoste] = useState<Poste | null>(null);
   const [ja, setJa] = useState<JurorAnswers>({});
   const [cs, setCs] = useState<number>(0);
-  // Suivi des étapes déjà validées par le jury : il faudra une autorisation pour y revenir.
-  const [validatedSteps, setValidatedSteps] = useState<Set<number>>(new Set());
   const [editCfg, setEditCfg] = useState<SessionConfig | null>(null);
   const [editSessId, setEditSessId] = useState<string | null>(null);
   const [curEditTab, setCurEditTab] = useState<string>("session");
@@ -69,7 +66,6 @@ export const useSenso = () => {
     curSessId: string | null; curSess: SessionConfig | null;
     jurors: string[]; takenPostes: Record<string, string>;
     cj: string; poste: Poste | null; ja: JurorAnswers; cs: number;
-    validatedSteps: Set<number>;
     editCfg: SessionConfig | null; editSessId: string | null; curEditTab: string;
     anSessId: string | null; anCfg: SessionConfig | null; allAnswers: AllAnswers;
     curAnT: string; adminSection: "seances" | "analyse";
@@ -77,12 +73,12 @@ export const useSenso = () => {
   };
   const stateRef = useRef<SensoStateSnapshot>({
     mode, screen, sessions, curSessId, curSess, jurors, takenPostes,
-    cj, poste, ja, cs, validatedSteps, editCfg, editSessId, curEditTab,
+    cj, poste, ja, cs, editCfg, editSessId, curEditTab,
     anSessId, anCfg, allAnswers, curAnT, adminSection, saveStatus, pendingCount,
   });
   stateRef.current = {
     mode, screen, sessions, curSessId, curSess, jurors, takenPostes,
-    cj, poste, ja, cs, validatedSteps, editCfg, editSessId, curEditTab,
+    cj, poste, ja, cs, editCfg, editSessId, curEditTab,
     anSessId, anCfg, allAnswers, curAnT, adminSection, saveStatus, pendingCount,
   };
 
@@ -326,11 +322,6 @@ export const useSenso = () => {
     }
     return null;
   };
-  const posteToIndex = (p: Poste | null): number | null => {
-    if (!p) return null;
-    return (p.day === "jeudi" ? 10 : 0) + (p.num - 1);
-  };
-
   const loadSessionData = useCallback(async (id: string) => {
     const cfg = await loadSessionConfig(id);
     if (!cfg) return null;
@@ -360,114 +351,10 @@ export const useSenso = () => {
     setScreen("jury");
   }, [loadSessionData]);
 
-  const getJurorIndex = (name: string, jurorList: string[]) => {
-    const idx = jurorList.indexOf(name);
-    return idx >= 0 ? idx : jurorList.length;
-  };
-
-  const getOrderedItems = <T,>(items: T[], mode: string, name: string, jurorList: string[], sessionName: string, posteIdx?: number | null): T[] => {
-    if (!items || items.length === 0) return [];
-    if (mode === "fixed") return [...items];
-
-    // Le numéro de poste, s'il est renseigné, prend le pas sur l'index alphabétique :
-    // l'ordre de service de la feuille papier doit être respecté.
-    const idx = (posteIdx != null) ? posteIdx : getJurorIndex(name, jurorList);
-
-    if (mode === "latin") {
-      const sq = wlm(items.length);
-      return sq[idx % sq.length].map((i: number) => items[i]);
-    }
-
-    // Random mode: use a stable seed based on session + poste|name
-    const a = [...items];
-    const seedKey = (posteIdx != null) ? `poste${posteIdx}` : name;
-    let sd = hsh((sessionName || "") + seedKey);
-    for (let k = a.length - 1; k > 0; k--) {
-      sd = ((sd * 1103515245 + 12345) & 0x7fffffff);
-      [a[k], a[sd % (k + 1)]] = [a[sd % (k + 1)], a[k]];
-    }
-    return a;
-  };
-
   const buildSteps = useCallback((cfg: SessionConfig, jurorName: string, jurorList?: string[], posteOverride?: Poste | null) => {
-    if (!cfg) return [];
     const jl = jurorList || stateRef.current.jurors;
-    const mode = cfg.presMode || "fixed";
     const effectivePoste = (posteOverride !== undefined) ? posteOverride : stateRef.current.poste;
-    const posteIdx = posteToIndex(effectivePoste);
-
-    const steps: SessionStep[] = [];
-    
-    // 1. Per-product questions: organize by product to ensure each product is shown only once
-    const ppQuestions = cfg.questions.filter(q => q.scope === "per-product");
-    
-    // Identify which products need to be evaluated and which questions apply to each
-    const productMap = new Map<string, Question[]>();
-    
-    ppQuestions.forEach(q => {
-      const targetCodes = q.codes?.length ? q.codes : cfg.products.map(p => p.code);
-      targetCodes.forEach(code => {
-        if (!productMap.has(code)) productMap.set(code, []);
-        productMap.get(code)!.push(q);
-      });
-    });
-
-    if (productMap.size > 0) {
-      const activeCodes = Array.from(productMap.keys());
-      // Important: only randomize products that are actually part of the evaluation
-      const orderedCodes = getOrderedItems(activeCodes, mode, jurorName, jl, cfg.name, posteIdx);
-      
-      orderedCodes.forEach(code => {
-        const product = cfg.products.find(p => p.code === code) || { code };
-        const questions = productMap.get(code) || [];
-        steps.push({ type: "product", product, questions });
-      });
-    }
-
-    // 2. Standalone questions (ranking, discrim, global)
-    const standaloneQuestions = cfg.questions.filter(q => q.scope !== "per-product");
-    
-    // Separate globals from series (ranking/discrim)
-    const seriesQuestions = standaloneQuestions.filter(q => q.type !== "text" && q.type !== "qcm" && q.scope !== "global");
-    const globalQuestions = standaloneQuestions.filter(q => q.type === "text" || q.type === "qcm" || q.scope === "global");
-
-    // Randomize the order of the series themselves if requested
-    const orderedSeries = getOrderedItems(seriesQuestions, mode, jurorName, jl, cfg.name + "series", posteIdx);
-
-    orderedSeries.forEach(q => {
-      const type = (q.type === "classement" || q.type === "seuil") ? "ranking" : "discrim";
-
-      let finalCodes = [...(q.codes || [])];
-      if (finalCodes.length === 0 && (q.type === "classement" || q.type === "seuil")) {
-        finalCodes = cfg.products.map(p => p.code);
-      }
-
-      // Randomize the codes for this juror
-      const randomizedCodes = getOrderedItems(finalCodes, mode, jurorName, jl, cfg.name + q.id, posteIdx);
-
-      const finalQ = { ...q, codes: randomizedCodes };
-
-      // Deep randomization for complex types
-      if (q.type === "seuil-bet" && q.betLevels) {
-        finalQ.betLevels = q.betLevels.map((lv: BetLevel, lIdx: number) => ({
-          ...lv,
-          codes: getOrderedItems([...lv.codes], mode, jurorName, jl, cfg.name + q.id + "l" + lIdx, posteIdx) as [string, string, string]
-        }));
-      }
-
-      steps.push({ type, question: finalQ });
-    });
-
-    // 3. Global questions at the very end
-    if (globalQuestions.length > 0) {
-      steps.push({ type: "global", questions: globalQuestions });
-    }
-
-    return steps;
-    // getOrderedItems est une fonction pure des arguments — sa redéfinition à chaque
-    // render ne change pas le résultat de buildSteps. La lecture des states courants
-    // (jurors, poste) passe par stateRef pour garder une référence stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return buildSessionSteps(cfg, { jurorName, jurorList: jl, poste: effectivePoste });
   }, []);
 
   const handleLoginJury = useCallback(async (name: string, opts?: { review?: boolean }) => {
@@ -482,7 +369,6 @@ export const useSenso = () => {
       .maybeSingle();
     const answers = (data?.data || {}) as JurorAnswers;
     setJa(answers);
-    setValidatedSteps(new Set());
 
     // Si le jury a déjà finalisé sa séance, on l'envoie directement sur l'écran
     // "Terminé !" plutôt que sur le dernier échantillon. La relecture ("Revoir
@@ -540,18 +426,8 @@ export const useSenso = () => {
       }
     }
     setCs(0);
-    setValidatedSteps(new Set());
     // L'écran "order" affiche l'ordre de service personnel avant le questionnaire.
     setScreen("order");
-  }, []);
-
-  const validateStep = useCallback((idx: number) => {
-    setValidatedSteps(prev => {
-      if (prev.has(idx)) return prev;
-      const next = new Set(prev);
-      next.add(idx);
-      return next;
-    });
   }, []);
 
   // Upsert différé : on agrège les saisies rapides (sliders, drag) en une seule requête.
@@ -604,7 +480,7 @@ export const useSenso = () => {
   // Accepte soit un objet `JurorAnswers` complet, soit un updater fonctionnel
   // (à la `useState`). Le mode fonctionnel résout une race courante : le
   // cleanup d'un useEffect (par ex. l'enregistrement du `_timing` du step)
-  // s'exécute pendant le commit de démontage avec un `jaRef` figé sur l'état
+  // s'exécute pendant le commit de démontage avec un état précédent figé
   // du render précédent — il écrasait alors `_finished: true` posé juste
   // avant `setScreen("done")`. En lisant `stateRef.current.ja`, on récupère
   // toujours la version la plus récente.
@@ -853,7 +729,7 @@ export const useSenso = () => {
     setAnSessId, setCurAnT, setAdminSection,
     loadSessionConfig, loadSessions,
     handleSelectSession, handleLoginJury, handleSelectPoste,
-    handleSetJa, validateStep, handleAnSessChange,
+    handleSetJa, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
     listJurorsForSession, toggleActive, toggleResultsVisible,
     isStepComplete,
@@ -863,7 +739,7 @@ export const useSenso = () => {
   }), [
     loadSessionConfig, loadSessions,
     handleSelectSession, handleLoginJury, handleSelectPoste,
-    handleSetJa, validateStep, handleAnSessChange,
+    handleSetJa, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
     listJurorsForSession, toggleActive, toggleResultsVisible,
     isStepComplete, flushPending, flushSave,
@@ -876,7 +752,7 @@ export const useSenso = () => {
     mode, screen, sessions, loading, restored, adminAuth, online,
     curSessId, curSess,
     jurors, cj, ja, cs,
-    poste, takenPostes, validatedSteps,
+    poste, takenPostes,
     editCfg, editSessId, curEditTab,
     anSessId, anCfg, allAnswers, curAnT,
     adminSection, saveStatus, pendingCount,
@@ -885,7 +761,7 @@ export const useSenso = () => {
     mode, screen, sessions, loading, restored, adminAuth, online,
     curSessId, curSess,
     jurors, cj, ja, cs,
-    poste, takenPostes, validatedSteps,
+    poste, takenPostes,
     editCfg, editSessId, curEditTab,
     anSessId, anCfg, allAnswers, curAnT,
     adminSection, saveStatus, pendingCount,

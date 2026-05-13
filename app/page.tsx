@@ -35,7 +35,7 @@ export default function CiderScope() {
     sessions,
     curSess, curSessId,
     jurors, cj, ja, cs, setCs,
-    takenPostes, handleSelectPoste, validateStep,
+    takenPostes, handleSelectPoste,
     handleSelectSession, handleLoginJury, handleSetJa,
     editCfg, setEditCfg,
     editSessId, setEditSessId,
@@ -114,7 +114,6 @@ export default function CiderScope() {
         pendingCount={pendingCount}
         takenPostes={takenPostes}
         onSelectPoste={handleSelectPoste}
-        onValidateStep={validateStep}
         onSelectSession={handleSelectSession}
         onLoginJury={handleLoginJury}
         onSetJa={handleSetJa}

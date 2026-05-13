@@ -7,6 +7,8 @@ import { Button } from "../../ui/Button";
 import { supabase } from "../../../lib/supabase";
 import type { SessionConfig, JurorAnswers, RadarAxis, RadarNodeAnswer, BetLevel } from "../../../types";
 
+const ENABLE_TEST_DATA = process.env.NEXT_PUBLIC_ENABLE_TEST_DATA === "1";
+
 interface ParticipantsTabProps {
   sessionId: string | null;
   config: SessionConfig;
@@ -51,6 +53,7 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
   }, [reload, sessionId]);
 
   const handleGenerateFakes = async () => {
+    if (!ENABLE_TEST_DATA) return;
     if (!sessionId) {
       alert("Veuillez d'abord enregistrer la séance pour pouvoir ajouter des participants.");
       return;
@@ -192,11 +195,13 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
 
   return (
     <Card title="Participants ayant répondu">
-      <div className="mb-4">
-        <Button onClick={handleGenerateFakes} disabled={generating} className="gap-2">
-          <FiUserPlus /> {generating ? "Génération..." : "Ajouter participant fictif (Test)"}
-        </Button>
-      </div>
+      {ENABLE_TEST_DATA && (
+        <div className="mb-4">
+          <Button onClick={handleGenerateFakes} disabled={generating} className="gap-2">
+            <FiUserPlus /> {generating ? "Génération..." : "Ajouter participant fictif (Test)"}
+          </Button>
+        </div>
+      )}
 
       {jurors === null ? (
         <MutedText>Chargement…</MutedText>

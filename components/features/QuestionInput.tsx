@@ -479,69 +479,6 @@ function setFamilyTouched(answer: RadarAnswer, axisLabel: string): RadarAnswer {
   return { ...answer, [axisLabel]: { ...node, _touched: true } };
 }
 
-// Validation appelée au passage à l'étape suivante (radar uniquement).
-// Renvoie deux listes pour le modal :
-//   - untouched : familles qui n'ont jamais été interagies (ni drag, ni tap).
-//   - emptyChildren : nœuds (familles ou classes) dont la valeur est > min
-//     mais dont aucun enfant direct n'a été levé au-dessus de min.
-export interface RadarValidationIssues {
-  untouched: string[];
-  emptyChildren: string[];
-}
-export function validateRadarAnswer(
-  answer: RadarAnswer,
-  axes: RadarAxis[],
-  min: number
-): RadarValidationIssues {
-  const out: RadarValidationIssues = { untouched: [], emptyChildren: [] };
-
-  const checkNode = (node: RadarNodeAnswer | undefined, ax: RadarAxis) => {
-    // 1. Check if touched (only for root families)
-    if (!node || !node._touched) {
-      // On ne remonte que les familles racines dans "untouched" pour ne pas
-      // polluer le modal, car les enfants ne sont visibles que si le parent est touché/étendu.
-      return;
-    }
-
-    // 2. Si > min, on vérifie qu'au moins un enfant est aussi > min
-    if (node._ > min) {
-      const childAxes = ax.children && ax.children.length > 0
-        ? ax.children
-        : (ax.subCriteria || []).map(l => ({ label: l } as RadarAxis));
-      
-      if (childAxes.length > 0) {
-        const childrenNodes = childAxes.map(c => ({
-          ax: c,
-          node: node.children?.[c.label]
-        }));
-
-        const anyChildAboveMin = childrenNodes.some(c => (c.node?._ ?? min) > min);
-        
-        if (!anyChildAboveMin) {
-          out.emptyChildren.push(ax.label);
-        } else {
-          // Récursion : on vérifie les enfants qui sont > min
-          for (const c of childrenNodes) {
-            if (c.node && c.node._ > min) {
-              checkNode(c.node, c.ax);
-            }
-          }
-        }
-      }
-    }
-  };
-
-  for (const ax of axes) {
-    const node = answer[ax.label];
-    if (!node || !node._touched) {
-      out.untouched.push(ax.label);
-    } else {
-      checkNode(node, ax);
-    }
-  }
-  return out;
-}
-
 // Récolte tous les nœuds descendants (pour la recherche).
 function collectNodes(axes: RadarAxis[], trail: string[] = []): Array<{ path: string[]; label: string }> {
   const out: Array<{ path: string[]; label: string }> = [];
@@ -1075,13 +1012,26 @@ export const QuestionInput = React.memo(({ q, value, onChange, products }: Quest
   }
 
   if (q.type === "qcm") {
+    const selectedValues = Array.isArray(value) ? value : [];
+    const isSelected = (option: string) => q.multiple ? selectedValues.includes(option) : value === option;
+    const toggleOption = (option: string) => {
+      if (!q.multiple) {
+        onChange(option);
+        return;
+      }
+      const next = selectedValues.includes(option)
+        ? selectedValues.filter(item => item !== option)
+        : [...selectedValues, option];
+      onChange(next);
+    };
+
     return (
       <div className={questionBlockClass}>
         <span className={questionLabelClass}>{q.label}<Badge variant="ns" className={questionTypeBadgeClass}>qcm</Badge></span>
         <div className={qcmOptionsClass}>
           {q.options?.map(opt => (
-            <label key={opt} className={qcmOptionClass(value === opt)} onClick={() => onChange(opt)}>
-              <span className={qcmDotClass(value === opt)}></span>
+            <label key={opt} className={qcmOptionClass(isSelected(opt))} onClick={() => toggleOption(opt)}>
+              <span className={qcmDotClass(isSelected(opt))}></span>
               <span>{opt}</span>
             </label>
           ))}

@@ -32,10 +32,6 @@ const productLabelClass = "mb-[22px] inline-flex items-center gap-1.5 rounded-md
 export const Questionnaire = ({ steps, currentStepIdx, ja, setJa, products }: QuestionnaireProps) => {
   const step = steps[currentStepIdx];
   const startRef = useRef<number | null>(null);
-  const jaRef = useRef(ja);
-  useEffect(() => {
-    jaRef.current = ja;
-  }, [ja]);
 
   useEffect(() => {
     startRef.current = Date.now();

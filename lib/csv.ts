@@ -1,8 +1,15 @@
 import type { SessionConfig, AllAnswers, CSVRow, Product, RadarAnswer, JurorAnswers, AnswerValue } from "../types";
 import { asRecord } from "./sessionSteps";
 import { formatVal } from "./utils";
+import { parseANonAAnswer } from "./answers";
 
 const CSV_SEPARATOR = ";";
+
+const isStringRecord = (value: unknown): value is Record<string, string> =>
+  !!value
+  && typeof value === "object"
+  && !Array.isArray(value)
+  && Object.values(value).every(item => typeof item === "string");
 
 export const csvCell = (value: unknown, separator = CSV_SEPARATOR): string => {
   const text = String(value ?? "");
@@ -114,25 +121,25 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
       let score = "0";
 
       if (q.type === "a-non-a") {
-        try {
-          const vObj = val as Record<string, string>;
-          const cObj = Object.fromEntries(
-            (q.correctAnswer || "")
-              .split(",")
-              .map(part => part.trim().split(":").map(x => x.trim()))
-              .filter(([code, value]) => code && value)
-          );
+        if (isStringRecord(val)) {
+          const vObj = val;
+          const cObj = parseANonAAnswer(q.correctAnswer);
           valStr = Object.entries(vObj).map(([c, v]) => `${c}:${v}`).join(", ");
-          const ok = Object.keys(cObj).every(k => vObj[k] === cObj[k]);
+          const correctCodes = Object.keys(cObj);
+          const ok = correctCodes.length > 0 && correctCodes.every(k => vObj[k] === cObj[k]);
           score = ok ? "1" : "0";
-        } catch { valStr = String(val ?? ""); }
+        } else {
+          valStr = String(val ?? "");
+        }
       } else if (q.type === "seuil-bet") {
-        try {
-          const vObj = val as Record<string, string>;
+        if (isStringRecord(val)) {
+          const vObj = val;
           const levels = q.betLevels || [];
           valStr = levels.map((l, i) => vObj[i] === l.correctAnswer ? "+" : "-").join("");
-          score = valStr.includes("-") ? "0" : "1";
-        } catch { valStr = String(val ?? ""); }
+          score = levels.length > 0 && !valStr.includes("-") ? "1" : "0";
+        } else {
+          valStr = String(val ?? "");
+        }
       } else {
         valStr = String(val ?? "");
         score = valStr === q.correctAnswer ? "1" : "0";

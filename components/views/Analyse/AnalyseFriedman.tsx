@@ -4,6 +4,7 @@ import { Bar } from "react-chartjs-2";
 import { Card } from "../../ui/Card";
 import { AnalysisEmpty, AnalysisStack, ANALYSIS_TABLE_CLASS, OK_TEXT, significanceClass } from "../../ui/AnalysisPrimitives";
 import { chiSquarePValue, getNemenyiCD, computeCLD, kendallTau, kendallW } from "../../../lib/stats";
+import { findPerceptionThreshold } from "../../../lib/ranking";
 import type { SessionConfig, CSVRow, Product } from "../../../types";
 import { getChartColors } from "./utils";
 
@@ -90,12 +91,7 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
   // Identification du seuil (si p < 0.05)
   let thresholdProduct: string | null = null;
   if (type === "seuil" && pValue < 0.05) {
-    const sortedByMeanLocal = [...products].sort((a, b) => rankMeans[a] - rankMeans[b]);
-    const initialGroup = "a";
-    thresholdProduct = sortedByMeanLocal.find(p => {
-      const letters = cld[p] || "";
-      return !letters.includes(initialGroup);
-    }) || null;
+    thresholdProduct = findPerceptionThreshold(products, rankMeans, cld);
   }
 
   // Bar chart data — rank means (lower = better rank)

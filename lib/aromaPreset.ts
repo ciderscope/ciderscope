@@ -46,7 +46,7 @@ const axes: RadarAxis[] = [
   {
     label: "Chimique",
     children: [
-      { label: "Chimique", children: leaves(["Alcool", "Colle scotch", "Caoutchouc", "Dissolvant à ongles", "Encre/Gouache", "Vinaigre"]) },
+      { label: "Chimique", children: leaves(["Alcool", "Colle scotch", "Caoutchouc", "Dissolvant à ongles", "Encre/Gouache", "Vinaigre", "Médicament", "Sparadrap"]) },
     ],
   },
   {

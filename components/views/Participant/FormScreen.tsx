@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Questionnaire } from "../../features/Questionnaire";
-import { validateRadarAnswer } from "../../features/QuestionInput";
+import { validateRadarAnswer } from "../../../lib/radarAnswer";
 import { stepShortLabel } from "./utils";
 import { ConfirmModal } from "./ConfirmModal";
 import { SessionStep, SessionConfig, JurorAnswers, Question, RadarAxis, RadarAnswer, Product } from "../../../types";
@@ -30,12 +30,11 @@ interface FormScreenProps {
   cj: string;
   ja: JurorAnswers;
   onSetJa: SetJa;
-  onValidateStep: (idx: number) => void;
 }
 
 export const FormScreen = ({
   onChangeJury, steps, cs, completion, onPrevStep, onNextStep,
-  curSess, cj, ja, onSetJa, onValidateStep
+  curSess, cj, ja, onSetJa
 }: FormScreenProps) => {
   const products: Product[] = curSess.products || [];
   const total = steps.length;
@@ -84,7 +83,6 @@ export const FormScreen = ({
     setConfirmNext(true);
   };
   const handleConfirmNext = () => {
-    onValidateStep(cs);
     setConfirmNext(false);
     onNextStep();
   };

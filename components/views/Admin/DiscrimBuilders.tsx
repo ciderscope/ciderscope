@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { Chip, SampleToggle, ChipPool, DropSlot } from "./ClassementBuilder";
 import type { Product } from "../../../types";
+import { parseANonAAnswer, serializeANonAAnswer } from "../../../lib/answers";
 import {
   builderSectionLabelClass,
   chipPoolClass,
@@ -107,19 +108,7 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
   onChangeCorrect: (v: string) => void;
   onChangeRef: (v: string) => void;
 }) {
-  // Parse correctAnswer string "X:A,Y:non-A" → {X:'A', Y:'non-A'}
-  const parseAnswer = (s: string): Record<string, string> => {
-    if (!s) return {};
-    return Object.fromEntries(
-      s.split(",")
-        .map(part => part.trim().split(":").map(x => x.trim()))
-        .filter(([code, value]) => code && value)
-    );
-  };
-  const serializeAnswer = (obj: Record<string, string>) =>
-    Object.entries(obj).map(([k, v]) => `${k}:${v}`).join(",");
-
-  const assignment = parseAnswer(correctAnswer);
+  const assignment = parseANonAAnswer(correctAnswer);
   const zoneA = codes.filter(c => assignment[c] === "A");
   const zoneNonA = codes.filter(c => assignment[c] === "non-A");
   const unassigned = codes.filter(c => !assignment[c]);
@@ -141,7 +130,7 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
     const newAss = { ...assignment };
     delete newAss[code];
     onChangeCodes(newCodes);
-    onChangeCorrect(serializeAnswer(newAss));
+    onChangeCorrect(serializeANonAAnswer(newAss));
   };
 
   // Assign to a zone
@@ -152,7 +141,7 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
     if (zone === null) delete newAss[code];
     else newAss[code] = zone;
     onChangeCodes(newCodes);
-    onChangeCorrect(serializeAnswer(newAss));
+    onChangeCorrect(serializeANonAAnswer(newAss));
   };
 
   const handleDropZone = (e: React.DragEvent, zone: "A" | "non-A") => {
@@ -172,7 +161,7 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
       // If it was from the products pool, also add to codes
       const newCodes = codes.includes(code) ? codes : [...codes, code];
       onChangeCodes(newCodes);
-      onChangeCorrect(serializeAnswer(newAss));
+      onChangeCorrect(serializeANonAAnswer(newAss));
     }
     setOverPool(false);
   };
@@ -196,9 +185,9 @@ export function ANonABuilder({ products, codes, correctAnswer, refCode, onChange
             if (refCode && refCode !== c && !newCodes.includes(refCode)) newCodes.push(refCode);
             onChangeCodes(newCodes);
             // Also clean correctAnswer from new ref if needed
-            const parsed = parseAnswer(typeof correctAnswer === "string" ? correctAnswer : "");
+            const parsed = parseANonAAnswer(correctAnswer);
             delete parsed[c];
-            onChangeCorrect(serializeAnswer(parsed));
+            onChangeCorrect(serializeANonAAnswer(parsed));
             onChangeRef(c);
           }
           setOverRef(false);
