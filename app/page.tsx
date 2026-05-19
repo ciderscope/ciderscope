@@ -8,6 +8,7 @@ import { AdminLoginView } from "../components/views/Admin/AdminLoginView";
 import { HomeScreen } from "../components/views/Home/HomeScreen";
 import { validateSession } from "../lib/validation";
 import { hsh } from "../lib/utils";
+import { getStepCompletionKey } from "../lib/sessionSteps";
 import { useApp } from "./AppProviders";
 
 import { downloadCSV } from "../lib/csv";
@@ -57,6 +58,7 @@ export default function CiderScope() {
     isStepComplete,
     currentSteps,
     completion,
+    validatedCompletion,
     flushSave,
     adminAuth, setAdminAuth,
     restored,
@@ -120,11 +122,18 @@ export default function CiderScope() {
         onPrevStep={() => setCs(prev => Math.max(0, prev - 1))}
         onNextStep={() => {
           if (!isStepComplete(cs)) return;
+          const completionKey = getStepCompletionKey(currentSteps[cs]);
+          const markCurrentStepDone = (prev: typeof ja) => {
+            if (!completionKey) return prev;
+            const completed = prev._completedSteps || {};
+            return { ...prev, _completedSteps: { ...completed, [completionKey]: true } };
+          };
           if (cs >= currentSteps.length - 1) {
-            handleSetJa(prev => ({ ...prev, _finished: true }));
+            handleSetJa(prev => ({ ...markCurrentStepDone(prev), _finished: true }));
             void flushSave();
             setScreen("done");
           } else {
+            handleSetJa(markCurrentStepDone);
             void flushSave();
             setCs(prev => Math.min(currentSteps.length - 1, prev + 1));
           }
@@ -142,6 +151,7 @@ export default function CiderScope() {
         summaryView={summaryView}
         steps={currentSteps}
         completion={completion}
+        validatedCompletion={validatedCompletion}
       />
     );
   }

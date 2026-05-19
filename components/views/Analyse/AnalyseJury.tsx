@@ -3,7 +3,7 @@ import React from "react";
 import { Card } from "../../ui/Card";
 import { AnalysisEmpty, ANALYSIS_TABLE_CLASS, answerStateClass } from "../../ui/AnalysisPrimitives";
 import type { SessionConfig, AllAnswers, Question, Product } from "../../../types";
-import { checkStepDone, getSteps } from "./utils";
+import { checkStepValidated, getSteps } from "./utils";
 
 interface AnalyseJuryProps {
   config: SessionConfig;
@@ -58,7 +58,7 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
                 <td className="font-semibold">{j}{isSelf && <span className="ml-1 text-[var(--accent)]" aria-label="vous">★</span>}</td>
                 {products.map(p => {
                   const step = productStepByCode.get(p.code);
-                  const answered = step ? checkStepDone(step, ja) : false;
+                  const answered = step ? checkStepValidated(step, ja) : false;
                   return (
                     <td key={p.code} className={answerStateClass(answered)}>
                       {answered ? "✓" : "✗"}
@@ -67,7 +67,7 @@ export function AnalyseJury({ config, allAnswers, currentJuror }: AnalyseJuryPro
                 })}
                 {trackedQuestions.map(q => {
                   const step = questionStepById.get(q.id);
-                  const answered = step ? checkStepDone(step, ja) : false;
+                  const answered = step ? checkStepValidated(step, ja) : false;
                   return (
                     <td key={q.id} className={answerStateClass(answered)}>
                       {answered ? "✓" : "✗"}

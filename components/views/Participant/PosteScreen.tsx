@@ -19,7 +19,7 @@ export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste, cj }: PosteS
     <div className="mx-auto my-8 max-w-[720px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--paper)] px-5 py-[26px] shadow-[var(--shadow)] max-[480px]:mx-2 max-[480px]:my-3.5 max-[480px]:px-3.5 max-[480px]:py-[18px]">
       <h2 className="mb-1 text-2xl font-bold tracking-normal">Votre poste</h2>
       <p className="m-0 text-sm text-[var(--mid)]">
-        Sélectionnez le numéro indiqué sur votre feuille de service.
+        Sélectionnez le numéro indiqué sur votre poste.
       </p>
       <div className="mt-[18px] grid grid-cols-1 gap-[18px] md:grid-cols-2">
         {days.map(d => (

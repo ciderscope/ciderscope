@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SessionListItem, SessionConfig, JurorAnswers, SessionStep, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
-import { asRecord, buildSessionSteps, isStepDone } from "../lib/sessionSteps";
+import { asRecord, buildSessionSteps, isStepDone, isStepValidated } from "../lib/sessionSteps";
 
 // Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
 // et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
@@ -388,7 +388,7 @@ export const useSenso = () => {
       const steps = buildSteps(curSess, name, jl, existing);
       let firstIncomplete = 0;
       for (let i = 0; i < steps.length; i++) {
-        if (!isStepDone(steps[i], answers)) {
+        if (!isStepValidated(steps[i], answers)) {
           firstIncomplete = i;
           break;
         }
@@ -588,6 +588,10 @@ export const useSenso = () => {
     () => currentSteps.map(s => isStepDone(s, ja)),
     [currentSteps, ja]
   );
+  const validatedCompletion = useMemo<boolean[]>(
+    () => currentSteps.map(s => isStepValidated(s, ja)),
+    [currentSteps, ja]
+  );
 
   // Indique si l'étape courante est complète (gate Suivant). Référence stable :
   // lit completion via une ref synchronisée pour ne pas se rebuilder à chaque render.
@@ -756,7 +760,7 @@ export const useSenso = () => {
     editCfg, editSessId, curEditTab,
     anSessId, anCfg, allAnswers, curAnT,
     adminSection, saveStatus, pendingCount,
-    currentSteps, completion,
+    currentSteps, completion, validatedCompletion,
   }), [
     mode, screen, sessions, loading, restored, adminAuth, online,
     curSessId, curSess,
@@ -765,7 +769,7 @@ export const useSenso = () => {
     editCfg, editSessId, curEditTab,
     anSessId, anCfg, allAnswers, curAnT,
     adminSection, saveStatus, pendingCount,
-    currentSteps, completion,
+    currentSteps, completion, validatedCompletion,
   ]);
 
   return { state, actions };

@@ -24,6 +24,7 @@ interface FormScreenProps {
   steps: SessionStep[];
   cs: number;
   completion: boolean[];
+  validatedCompletion: boolean[];
   onPrevStep: () => void;
   onNextStep: () => void;
   curSess: SessionConfig;
@@ -33,13 +34,13 @@ interface FormScreenProps {
 }
 
 export const FormScreen = ({
-  onChangeJury, steps, cs, completion, onPrevStep, onNextStep,
+  onChangeJury, steps, cs, completion, validatedCompletion, onPrevStep, onNextStep,
   curSess, cj, ja, onSetJa
 }: FormScreenProps) => {
   const products: Product[] = curSess.products || [];
   const total = steps.length;
   let doneCount = 0;
-  for (const c of completion) if (c) doneCount++;
+  for (const c of validatedCompletion) if (c) doneCount++;
   const pct = total ? Math.round((doneCount / total) * 100) : 0;
   const canAdvance = completion[cs] ?? true;
   const [confirmNext, setConfirmNext] = useState(false);
@@ -57,6 +58,13 @@ export const FormScreen = ({
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  }, [cs]);
 
   // Pour l'étape courante : si elle contient une toile d'araignée, on calcule
   // les familles non touchées / non précisées avant de laisser passer.
@@ -120,7 +128,7 @@ export const FormScreen = ({
           </div>
           <div className="step-list mt-2.5 flex gap-1 overflow-x-auto pb-1 min-[481px]:gap-1.5">
             {steps.map((s, i) => {
-              const complete = completion[i] ?? false;
+              const complete = validatedCompletion[i] ?? false;
               const active = i === cs;
 
 

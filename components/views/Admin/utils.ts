@@ -44,7 +44,7 @@ export function addChildAtPath(axes: RadarAxis[], path: number[]): RadarAxis[] {
 // Retourne un libellé par défaut cohérent avec le type de question si le champ est vide.
 export const getDefaultLabel = (type: string): string => {
   switch (type) {
-    case "radar": return "décrivez le profil aromatique et gustatif de cet échantillon";
+    case "radar": return "Décrivez le profil aromatique et gustatif de cet échantillon";
     case "triangulaire": return "Quel échantillon est différent des deux autres ?";
     case "duo-trio": return "Lequel de ces deux échantillons est identique au témoin ?";
     case "a-non-a": return "Cet échantillon présente-t-il le défaut ?";

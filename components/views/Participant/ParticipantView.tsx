@@ -37,6 +37,7 @@ interface ParticipantViewProps {
   summaryView: React.ReactNode | null;
   steps: SessionStep[];
   completion: boolean[];
+  validatedCompletion: boolean[];
 }
 
 export const ParticipantView = (props: ParticipantViewProps) => {
@@ -88,6 +89,7 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           steps={props.steps}
           cs={props.cs}
           completion={props.completion}
+          validatedCompletion={props.validatedCompletion}
           onPrevStep={props.onPrevStep}
           onNextStep={props.onNextStep}
           curSess={props.curSess}

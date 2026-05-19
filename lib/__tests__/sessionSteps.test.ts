@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionConfig } from "../../types";
-import { buildSessionSteps, getOrderedItems, isStepDone, posteToPresentationIndex } from "../sessionSteps";
+import { buildSessionSteps, getOrderedItems, getStepCompletionKey, isStepDone, isStepValidated, posteToPresentationIndex } from "../sessionSteps";
 
 const baseConfig: SessionConfig = {
   name: "Session test",
@@ -65,6 +65,27 @@ describe("sessionSteps", () => {
     expect(isStepDone(rankingStep, { _rank: { q2: ["A", "B"] } })).toBe(false);
     expect(isStepDone(rankingStep, { _rank: { q2: ["A", "B", "B"] } })).toBe(false);
     expect(isStepDone(globalStep, { _global: { q3: "ok" } })).toBe(true);
+  });
+
+  it("separates answered steps from participant-validated steps", () => {
+    const [productStep] = buildSessionSteps(baseConfig);
+    const key = getStepCompletionKey(productStep);
+
+    expect(key).toBe("product:A");
+    expect(isStepDone(productStep, { A: { q1: { _: 5, _subs: [], _touched: true } } })).toBe(true);
+    expect(isStepValidated(productStep, { A: { q1: { _: 5, _subs: [], _touched: true } } })).toBe(false);
+    expect(isStepValidated(productStep, {
+      A: { q1: { _: 5, _subs: [], _touched: true } },
+      _completedSteps: { "product:A": true },
+    })).toBe(true);
+    expect(isStepValidated(productStep, {
+      A: { q1: { _: 5, _subs: [] } },
+      _completedSteps: { "product:A": true },
+    })).toBe(false);
+    expect(isStepValidated(productStep, {
+      A: { q1: { _: 5, _subs: [], _touched: true } },
+      _finished: true,
+    })).toBe(true);
   });
 
   it("checks discriminative answers against allowed values", () => {

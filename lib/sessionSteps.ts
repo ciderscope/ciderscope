@@ -8,6 +8,14 @@ export const asRecord = (value: unknown): Record<string, unknown> => {
     : {};
 };
 
+export const getStepCompletionKey = (step: SessionStep | undefined): string | null => {
+  if (!step) return null;
+  if (step.type === "product") return `product:${step.product.code}`;
+  if (step.type === "ranking" || step.type === "discrim") return `${step.type}:${step.question.id}`;
+  if (step.type === "global") return "global";
+  return null;
+};
+
 const hasAnsweredValue = (value: unknown): boolean => {
   if (typeof value === "string") return value.trim() !== "";
   return value !== undefined && value !== null;
@@ -113,6 +121,16 @@ export const isStepDone = (step: SessionStep | undefined, answers: JurorAnswers)
   }
 
   return true;
+};
+
+export const isStepValidated = (step: SessionStep | undefined, answers: JurorAnswers): boolean => {
+  if (!step) return true;
+  if (!isStepDone(step, answers)) return false;
+  if (answers["_finished"] === true) return true;
+
+  const key = getStepCompletionKey(step);
+  if (!key) return false;
+  return asRecord(answers["_completedSteps"])[key] === true;
 };
 
 export const posteToPresentationIndex = (poste: Poste | null): number | null => {

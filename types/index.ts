@@ -113,7 +113,7 @@ export type AnswerValue =
   | null
   | undefined;
 
-// Les clés "_rank", "_discrim", "_global", "_timing", "_finished", "_poste" sont réservées ; les autres sont des codes échantillon.
+// Les clés "_rank", "_discrim", "_global", "_timing", "_finished", "_poste", "_completedSteps" sont réservées ; les autres sont des codes échantillon.
 // Par produit : Record<questionId, AnswerValue>.
 // Pour "_global" : Record<questionId, AnswerValue>.
 // Pour les autres : structures ad hoc typées plus souplement.
@@ -121,6 +121,7 @@ export type JurorAnswerValue =
   | AnswerValue
   | Record<string, AnswerValue>
   | Record<string, number>
+  | Record<string, boolean>
   | Record<string, string | number>
   | boolean
   | undefined;
@@ -128,6 +129,7 @@ export type JurorAnswerValue =
 export type JurorAnswers = {
   _finished?: boolean;
   _poste?: Record<string, string | number>;
+  _completedSteps?: Record<string, boolean>;
   [key: string]: JurorAnswerValue;
 };
 
