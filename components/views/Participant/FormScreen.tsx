@@ -18,8 +18,7 @@ const getQuestionValue = (answers: JurorAnswers, ctx: string, questionId: string
 
 interface FormScreenProps {
   // "Changer" : retourne sur l'écran d'identification du jury sans repasser
-  // par la liste des séances. Distinct de onGoBack/onHome qui ramènent au
-  // landing.
+  // par la liste des séances.
   onChangeJury: () => void;
   steps: SessionStep[];
   cs: number;

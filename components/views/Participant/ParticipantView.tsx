@@ -29,7 +29,6 @@ interface ParticipantViewProps {
   onNextStep: () => void;
   onSetJa: (updater: JurorAnswers | ((prev: JurorAnswers) => JurorAnswers)) => void;
   onGoBack: () => void;
-  onHome: () => void;
   onChangeJury: () => void;
   onReviewAnswers: () => void;
   onShowSummary: () => void;
@@ -68,7 +67,6 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           curSess={props.curSess}
           jurors={props.jurors}
           onLoginJury={props.onLoginJury}
-          onHome={props.onHome}
           onGoBack={props.onGoBack}
         />
       )}
@@ -104,7 +102,7 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           resultsVisible={props.sessions.find(s => s.id === props.curSessId)?.resultsVisible}
           onReviewAnswers={props.onReviewAnswers}
           onShowSummary={props.onShowSummary}
-          onHome={props.onHome}
+          onGoBack={props.onGoBack}
         />
       )}
 

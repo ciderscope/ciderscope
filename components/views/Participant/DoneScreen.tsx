@@ -8,10 +8,10 @@ interface DoneScreenProps {
   resultsVisible?: boolean;
   onReviewAnswers: () => void;
   onShowSummary: () => void;
-  onHome: () => void;
+  onGoBack: () => void;
 }
 
-export const DoneScreen = ({ resultsVisible, onReviewAnswers, onShowSummary, onHome }: DoneScreenProps) => {
+export const DoneScreen = ({ resultsVisible, onReviewAnswers, onShowSummary, onGoBack }: DoneScreenProps) => {
   const [confirmReview, setConfirmReview] = useState(false);
 
   return (
@@ -45,7 +45,7 @@ export const DoneScreen = ({ resultsVisible, onReviewAnswers, onShowSummary, onH
 
         <div className="mt-8 flex flex-wrap justify-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => setConfirmReview(true)}>Revoir mes réponses</Button>
-          <Button variant="secondary" onClick={onHome}><FiArrowLeft /> Retour</Button>
+          <Button variant="secondary" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
         </div>
 
         {confirmReview && (

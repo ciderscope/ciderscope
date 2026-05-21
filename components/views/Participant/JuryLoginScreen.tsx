@@ -8,11 +8,10 @@ interface JuryLoginScreenProps {
   curSess: SessionConfig | null;
   jurors: string[];
   onLoginJury: (name: string) => void;
-  onHome: () => void;
   onGoBack: () => void;
 }
 
-export const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome, onGoBack }: JuryLoginScreenProps) => {
+export const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onGoBack }: JuryLoginScreenProps) => {
   const [name, setName] = useState("");
   const submit = () => { if (name.trim()) onLoginJury(name.trim()); };
   
@@ -42,7 +41,7 @@ export const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onHome, onGoBack
           </div>
         </div>
       )}
-      <Button variant="ghost" size="sm" className="mt-4" onClick={onGoBack || onHome}><FiArrowLeft /> Retour</Button>
+      <Button variant="ghost" size="sm" className="mt-4" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
     </div>
   );
 };

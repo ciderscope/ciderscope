@@ -46,7 +46,7 @@ interface AdminViewProps {
   onSetEditCfg: Dispatch<SetStateAction<SessionConfig | null>>;
   onSetEditTab: (tab: string) => void;
   onSaveEdit: () => void;
-  onHome: () => void;
+  onGoBack: () => void;
   downloadCSV: (rows: CSVRow[], filename: string) => void;
   listJurorsForSession: (id: string) => Promise<string[]>;
   deleteJury: (sessionId: string, name: string) => Promise<{ success: boolean } | undefined>;
@@ -63,7 +63,7 @@ export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
   adminSection, setAdminSection,
   onNewSession, onEditSession, onToggleActive, onToggleResultsVisible, onDuplicateSession, onDeleteSession,
-  onSetEditCfg, onSetEditTab, onSaveEdit, onHome, downloadCSV,
+  onSetEditCfg, onSetEditTab, onSaveEdit, onGoBack, downloadCSV,
   listJurorsForSession, deleteJury,
   allAnswers, anSessId, anCfg, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
@@ -82,7 +82,7 @@ export const AdminView = ({
             onAnSessChange={onAnSessChange}
             onAnTabChange={onAnTabChange}
             downloadCSV={downloadCSV}
-            onGoBack={() => setAdminSection("seances")}
+            onGoBack={onGoBack}
           />
         )}
 
@@ -174,7 +174,7 @@ export const AdminView = ({
     return (
       <div className={adminShellClass}>
         <header className={adminEditHeaderClass}>
-          <Button variant="secondary" size="sm" onClick={onHome}><FiArrowLeft /> Retour</Button>
+          <Button variant="secondary" size="sm" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
           <div className="flex-1">
              <h2 className="truncate text-[17px] font-extrabold leading-[1.2] tracking-[-.2px] min-[481px]:text-xl">{editCfg.name || "Nouvelle séance"}</h2>
           </div>
