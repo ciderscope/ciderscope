@@ -1,4 +1,4 @@
-import type { SessionConfig, AllAnswers, CSVRow, Product, RadarAnswer, JurorAnswers, AnswerValue, RadarAxis } from "../types";
+import type { SessionConfig, AllAnswers, CSVRow, Product, JurorAnswers, AnswerValue, RadarAxis, RadarNodeAnswer } from "../types";
 import { asRecord } from "./sessionSteps";
 import { formatVal } from "./utils";
 import { parseANonAAnswer } from "./answers";
@@ -71,12 +71,12 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
     produitCode: string, 
     produitNom: string, 
     q: typeof anCfg.questions[0], 
-    ansObj: Record<string, any>
+    ansObj: Record<string, unknown>
   ) => {
     const rawVal = ansObj[q.id];
 
     if (q.type === "radar") {
-      const pushRadarNodes = (axes: RadarAxis[], ansNode: any, parentPath: string = "") => {
+      const pushRadarNodes = (axes: RadarAxis[], ansNode: Record<string, RadarNodeAnswer> | undefined, parentPath: string = "") => {
         axes.forEach(ax => {
           const nodeAns = ansNode?.[ax.label];
           const main = (typeof nodeAns === "object" && nodeAns !== null) ? nodeAns._ : nodeAns;
@@ -90,28 +90,29 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
           });
 
           if (ax.children && ax.children.length > 0) {
-            pushRadarNodes(ax.children, nodeAns?.children, qLabel);
+            pushRadarNodes(ax.children, nodeAns?.children as Record<string, RadarNodeAnswer> | undefined, qLabel);
           }
         });
       };
 
       (q.radarGroups || []).forEach(g => {
-        pushRadarNodes(g.axes || [], rawVal);
+        pushRadarNodes(g.axes || [], rawVal as Record<string, RadarNodeAnswer> | undefined);
       });
       return;
     }
 
     if (q.type === "scale" && typeof rawVal === "object" && rawVal !== null && !Array.isArray(rawVal)) {
+      const typedRawVal = rawVal as Record<string, unknown>;
       rows.push({
         jury: j, produit: produitCode, nom_produit: produitNom, 
-        question: q.label, type: "scale", valeur: String(rawVal._ ?? ""), 
+        question: q.label, type: "scale", valeur: String(typedRawVal._ ?? ""), 
         correct: q.correctAnswer || "", 
         score: "", ...emptyPos 
       });
 
       if (Array.isArray(q.subCriteria)) {
         q.subCriteria.forEach(sub => {
-          const subVal = rawVal[sub];
+          const subVal = typedRawVal[sub];
           let valStr = "";
           if (subVal !== undefined && subVal !== null) {
             if (typeof subVal === "boolean") valStr = subVal ? "Oui" : "Non";
