@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import dynamic from "next/dynamic";
 
 import { ParticipantView } from "../components/views/Participant/ParticipantView";
@@ -35,7 +35,7 @@ const sameNavigationPoint = (a: NavigationPoint, b: NavigationPoint) => (
   a.mode === b.mode && a.screen === b.screen && a.adminSection === b.adminSection
 );
 
-const fallbackBackTarget = ({ mode, screen, adminSection }: NavigationPoint): NavigationPoint => {
+const getHierarchicalBackTarget = ({ mode, screen, adminSection }: NavigationPoint): NavigationPoint => {
   if (mode === "participant") {
     if (screen === "jury") return { mode: "participant", screen: "landing", adminSection };
     if (screen === "poste") return { mode: "participant", screen: "jury", adminSection };
@@ -53,9 +53,6 @@ const fallbackBackTarget = ({ mode, screen, adminSection }: NavigationPoint): Na
 
 export default function CiderScope() {
   const editFingerprintRef = useRef<number | null>(null);
-  const navigationStackRef = useRef<NavigationPoint[]>([]);
-  const currentNavigationRef = useRef<NavigationPoint | null>(null);
-  const isBackNavigationRef = useRef(false);
 
   const {
     mode, setMode, screen, setScreen,
@@ -92,36 +89,13 @@ export default function CiderScope() {
 
   const currentNavigation: NavigationPoint = { mode, screen, adminSection };
 
-  useEffect(() => {
-    if (!restored) return;
-    const nextNavigation: NavigationPoint = { mode, screen, adminSection };
-
-    const previous = currentNavigationRef.current;
-    if (!previous) {
-      currentNavigationRef.current = nextNavigation;
-      return;
-    }
-
-    if (sameNavigationPoint(previous, nextNavigation)) return;
-
-    if (isBackNavigationRef.current) {
-      isBackNavigationRef.current = false;
-      currentNavigationRef.current = nextNavigation;
-      return;
-    }
-
-    navigationStackRef.current = [...navigationStackRef.current, previous].slice(-30);
-    currentNavigationRef.current = nextNavigation;
-  }, [restored, mode, screen, adminSection]);
-
   if (!restored) {
     return <div className="p-8 text-center text-[var(--mid)]">Initialisation de l&apos;application...</div>;
   }
 
   const goBack = () => {
-    const target = navigationStackRef.current.pop() ?? fallbackBackTarget(currentNavigation);
+    const target = getHierarchicalBackTarget(currentNavigation);
     if (sameNavigationPoint(currentNavigation, target)) return;
-    isBackNavigationRef.current = true;
     setMode(target.mode);
     setScreen(target.screen);
     setAdminSection(target.adminSection);
