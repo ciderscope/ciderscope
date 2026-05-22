@@ -11,7 +11,7 @@ SensoPlatform (CiderScope) est un outil d'analyse sensorielle minimaliste mais s
 
 ## Logique Métier Critique
 ### Analyse des Seuils & Classements
-- **Friedman :** Alpha = 0.05.
+- **Friedman :** Alpha = 0.20.
 - **Nemenyi :** Alpha = 0.10.
 - **Conclusion Seuil :** Le seuil est défini par le **premier échantillon qui n'appartient plus au groupe initial 'a'**. 
     - Un échantillon 'ab' appartient encore au groupe 'a'. 

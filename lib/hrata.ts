@@ -110,7 +110,7 @@ export function analyzeAttributes(
           sumPositiveIntensity += val;
         }
       });
-      if (considered) consideringSubjects.add(sub);
+      if (considered || level !== "descripteur") consideringSubjects.add(sub);
     });
 
     const subjectsConsidering = consideringSubjects.size;
@@ -214,8 +214,8 @@ export function analyzeAttributes(
   analyses.forEach(a => {
     if (a.isLowCoverage) return; // Status already set
 
-    const isAppDiscrim = a.pApplicabilityFDR !== undefined && a.pApplicabilityFDR < 0.05;
-    const isIntDiscrim = a.pIntensityFDR !== undefined && a.pIntensityFDR < 0.05;
+    const isAppDiscrim = a.pApplicabilityFDR !== undefined && a.pApplicabilityFDR < 0.20;
+    const isIntDiscrim = a.pIntensityFDR !== undefined && a.pIntensityFDR < 0.20;
 
     if (a.pApplicabilityRaw === undefined && a.pIntensityRaw === undefined) {
       a.status = "Modèle échoué";

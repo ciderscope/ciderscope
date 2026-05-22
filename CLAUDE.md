@@ -15,7 +15,7 @@
 - **Labels :** Utiliser "échelle" pour le type de question `scale`.
 
 ## Logique de l'Analyse Sensorielle
-1. **Friedman (α=0.05)** : Calculé sur les rangs des jurys pour les classements et seuils.
+1. **Friedman (α=0.20)** : Calculé sur les rangs des jurys pour les classements et seuils.
 2. **Nemenyi (α=0.10)** : Test post-hoc pour générer les lettres de significativité (CLD).
 3. **Identification du Seuil** :
     - Rechercher dans l'ordre croissant des rangs moyens.

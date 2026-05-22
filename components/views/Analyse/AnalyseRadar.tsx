@@ -158,7 +158,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   const getNote = (j: string, p: string, crit: string): number | null => {
     const v = noteMap[j]?.[p]?.[crit];
     if (v != null) return v;
-    if (citedAtLeastOnce[crit]?.has(j)) return 0; // Imputation
+    if (depthOf(crit) !== 3 || citedAtLeastOnce[crit]?.has(j)) return 0; // Imputation
     return null;
   };
 
@@ -448,10 +448,10 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                   <td className={ANALYSIS_NUM_CELL}>{(a.conditionalFrequency * 100).toFixed(1)}%</td>
                   <td className={ANALYSIS_NUM_CELL}>{a.conditionalMeanIntensity.toFixed(2)}</td>
                   <td className={`${ANALYSIS_NUM_CELL} font-bold`}>{a.dravnieksWeighted.toFixed(1)}</td>
-                  <td className={`${ANALYSIS_NUM_CELL} ${a.pApplicabilityFDR !== undefined && a.pApplicabilityFDR < 0.05 ? OK_TEXT + ' font-bold' : ''}`}>
+                  <td className={`${ANALYSIS_NUM_CELL} ${a.pApplicabilityFDR !== undefined && a.pApplicabilityFDR < 0.20 ? OK_TEXT + ' font-bold' : ''}`}>
                     {a.pApplicabilityFDR !== undefined ? (a.pApplicabilityFDR < 0.001 ? "< 0,001" : a.pApplicabilityFDR.toFixed(3)) : "—"}
                   </td>
-                  <td className={`${ANALYSIS_NUM_CELL} ${a.pIntensityFDR !== undefined && a.pIntensityFDR < 0.05 ? OK_TEXT + ' font-bold' : ''}`}>
+                  <td className={`${ANALYSIS_NUM_CELL} ${a.pIntensityFDR !== undefined && a.pIntensityFDR < 0.20 ? OK_TEXT + ' font-bold' : ''}`}>
                     {a.pIntensityFDR !== undefined ? (a.pIntensityFDR < 0.001 ? "< 0,001" : a.pIntensityFDR.toFixed(3)) : "—"}
                   </td>
                   <td>{a.status}</td>
@@ -461,6 +461,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           </table>
         </Card>
       )}
+
 
       <div className={ANALYSIS_TOOLBAR}>
         {groups.length > 1 && (

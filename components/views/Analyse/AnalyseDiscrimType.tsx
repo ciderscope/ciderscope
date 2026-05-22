@@ -69,10 +69,10 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
   // P(X >= k | n, p_chance) where p_chance = 1/3 for triangulaire, 1/2 for duo-trio, varies for a-non-a
   const pChance = type === "triangulaire" ? 1 / 3 : type === "duo-trio" ? 1 / 2 : 0.5;
 
-  // Minimum correct answers for significance (p<0.05, one-sided)
+  // Minimum correct answers for significance (p<0.20, one-sided)
   const minCorrect = (n: number, p: number): number => {
     for (let k = n; k >= 0; k--) {
-      if (binomialPValue(n, k, p) >= 0.05) return k + 1;
+      if (binomialPValue(n, k, p) >= 0.20) return k + 1;
     }
     return 0;
   };
@@ -120,7 +120,7 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
       cells.forEach(c => { chi2 += Math.pow(Math.abs(c.o - c.e) - 0.5, 2) / c.e; });
     }
     const pVal = total > 0 ? chiSquarePValue(chi2, 1) : 1;
-    const sig = pVal < 0.001 ? "***" : pVal < 0.01 ? "**" : pVal < 0.05 ? "*" : "ns";
+    const sig = pVal < 0.001 ? "***" : pVal < 0.01 ? "**" : pVal < 0.20 ? "*" : "ns";
 
     // Interprétation pédagogique de d' (Green & Swets, Macmillan & Creelman)
     const dInterp = Math.abs(dPrime) < 0.5 ? "très faible" : Math.abs(dPrime) < 1 ? "faible" : Math.abs(dPrime) < 1.5 ? "modérée" : Math.abs(dPrime) < 2.5 ? "forte" : "très forte";
@@ -133,8 +133,8 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
             value={<>d&apos; = {dPrime.toFixed(2)}</>}
             label="indice de discrimination"
             note={dInterp}
-            valueClassName={`text-[clamp(36px,5vw,52px)] font-extrabold ${pVal < 0.05 ? OK_TEXT : DIM_TEXT}`}
-            noteClassName={`mt-1 text-[13px] italic ${pVal < 0.05 ? OK_TEXT : DIM_TEXT}`}
+            valueClassName={`text-[clamp(36px,5vw,52px)] font-extrabold ${pVal < 0.20 ? OK_TEXT : DIM_TEXT}`}
+            noteClassName={`mt-1 text-[13px] italic ${pVal < 0.20 ? OK_TEXT : DIM_TEXT}`}
           />
 
           <div className="min-w-[260px] flex-1">
@@ -166,10 +166,10 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
             <AnalysisPanel className="mt-2.5">
               <div>Taux de détection (hit rate) : <strong>{(H * 100).toFixed(1)}%</strong></div>
               <div>Taux de fausse alarme : <strong>{(F * 100).toFixed(1)}%</strong></div>
-              <div>χ² (Yates, ddl=1) = {chi2.toFixed(2)} &middot; p = {pVal < 0.001 ? "< 0,001" : pVal.toFixed(3)} <span className={significanceClass(pVal < 0.05)}>{sig}</span></div>
-              {pVal < 0.05
-                ? <div className={`mt-1 font-semibold ${OK_TEXT}`}>Discrimination significative entre A et non-A (α=0,05)</div>
-                : <div className={`mt-1 ${DANGER_TEXT}`}>Pas de différence détectée (α=0,05)</div>}
+              <div>χ² (Yates, ddl=1) = {chi2.toFixed(2)} &middot; p = {pVal < 0.001 ? "< 0,001" : pVal.toFixed(3)} <span className={significanceClass(pVal < 0.20)}>{sig}</span></div>
+              {pVal < 0.20
+                ? <div className={`mt-1 font-semibold ${OK_TEXT}`}>Discrimination significative entre A et non-A (α=0,20)</div>
+                : <div className={`mt-1 ${DANGER_TEXT}`}>Pas de différence détectée (α=0,20)</div>}
             </AnalysisPanel>
           </div>
         </MetricLayout>
@@ -204,7 +204,7 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
   const nc = qd.filter(r => r.valeur === r.correct).length;
 
   const pVal = binomialPValue(n, nc, pChance);
-  const sig = pVal < 0.001 ? "***" : pVal < 0.01 ? "**" : pVal < 0.05 ? "*" : "ns";
+  const sig = pVal < 0.001 ? "***" : pVal < 0.01 ? "**" : pVal < 0.20 ? "*" : "ns";
   const minC = minCorrect(n, pChance);
   const pct = n ? (nc / n * 100).toFixed(0) : 0;
 
@@ -217,25 +217,25 @@ export function AnalyseDiscrimType({ data, type, label, questionLabel }: Analyse
             label="réponses correctes"
             note={`${pct}%`}
             valueClassName={`text-[clamp(36px,5vw,52px)] font-extrabold ${nc >= minC ? OK_TEXT : DIM_TEXT}`}
-            noteClassName={`mt-1.5 text-[22px] font-bold not-italic ${pVal < 0.05 ? OK_TEXT : DIM_TEXT}`}
+            noteClassName={`mt-1.5 text-[22px] font-bold not-italic ${pVal < 0.20 ? OK_TEXT : DIM_TEXT}`}
           />
 
           <div className="min-w-[200px] flex-1">
             <AnalysisPanel loose>
               <div><strong>Test binomial</strong> (unilatéral)</div>
               <div>Probabilité chance : {(pChance * 100).toFixed(0)}%</div>
-              <div>Seuil de signification (p&lt;0,05) : ≥ {minC} bonnes réponses</div>
+              <div>Seuil de signification (p&lt;0,20) : ≥ {minC} bonnes réponses</div>
               <div>
                 p = {pVal < 0.001 ? "< 0,001" : pVal.toFixed(3)}
                 {" "}
-                <span className={significanceClass(pVal < 0.05)}>{sig}</span>
+                <span className={significanceClass(pVal < 0.20)}>{sig}</span>
               </div>
-              {pVal < 0.05
+              {pVal < 0.20
                 ? <div className={`mt-1 font-semibold ${OK_TEXT}`}>
-                    Le panel discrimine significativement les produits (α=0,05)
+                    Le panel discrimine significativement les produits (α=0,20)
                   </div>
                 : <div className={`mt-1 ${DANGER_TEXT}`}>
-                    Pas de différence détectée (α=0,05)
+                    Pas de différence détectée (α=0,20)
                   </div>
               }
             </AnalysisPanel>

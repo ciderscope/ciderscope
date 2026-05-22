@@ -62,7 +62,7 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
   const df = k - 1;
   const pValue = chiSquarePValue(chi2, df);
 
-  const sig = pValue < 0.001 ? "***" : pValue < 0.01 ? "**" : pValue < 0.05 ? "*" : "ns";
+  const sig = pValue < 0.001 ? "***" : pValue < 0.01 ? "**" : pValue < 0.20 ? "*" : "ns";
 
   // Correct order comparison — Kendall τ vs ordre attendu
   const correctStr = qRows[0]?.correct || "";
@@ -86,11 +86,11 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
 
   // Nemenyi Post-hoc & CLD
   const nemenyiCD = getNemenyiCD(k, n);
-  const cld = pValue < 0.05 ? computeCLD(products, rankMeans, nemenyiCD) : {};
+  const cld = pValue < 0.20 ? computeCLD(products, rankMeans, nemenyiCD) : {};
 
-  // Identification du seuil (si p < 0.05)
+  // Identification du seuil (si p < 0.20)
   let thresholdProduct: string | null = null;
-  if (type === "seuil" && pValue < 0.05) {
+  if (type === "seuil" && pValue < 0.20) {
     thresholdProduct = findPerceptionThreshold(products, rankMeans, cld);
   }
 
@@ -125,23 +125,23 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
           <div className="flex-[1_1_200px]">
             <table className={ANALYSIS_TABLE_CLASS}>
               <thead>
-                <tr><th>Produit</th><th>Rang moyen</th>{pValue < 0.05 && <th>Gr.</th>}</tr>
+                <tr><th>Produit</th><th>Rang moyen</th>{pValue < 0.20 && <th>Gr.</th>}</tr>
               </thead>
               <tbody>
                 {sortedByMean.map(p => (
                   <tr key={p}>
                     <td className="font-mono">{p}</td>
                     <td className="num">{rankMeans[p].toFixed(2)}</td>
-                    {pValue < 0.05 && <td className="text-center font-bold text-[var(--accent)]">{cld[p]}</td>}
+                    {pValue < 0.20 && <td className="text-center font-bold text-[var(--accent)]">{cld[p]}</td>}
                   </tr>
                 ))}
               </tbody>
             </table>
 
             <div className="mt-4 px-3.5 py-3 bg-[var(--bg)] rounded-lg text-[13px] leading-[1.8]">
-              <div><strong>Test de Friedman</strong> (α=0,05)</div>
+              <div><strong>Test de Friedman</strong> (α=0,20)</div>
               <div>n = {n} jurys · k = {k} produits</div>
-              <div>χ² = {chi2.toFixed(3)} · p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)} <span className={significanceClass(pValue < 0.05)}>{sig}</span></div>
+              <div>χ² = {chi2.toFixed(3)} · p = {pValue < 0.001 ? "< 0,001" : pValue.toFixed(3)} <span className={significanceClass(pValue < 0.20)}>{sig}</span></div>
               <div title="Coefficient de concordance de Kendall — cohérence inter-jurys du panel. 1 = accord parfait, 0 = désaccord total.">
                 <span className="text-[var(--text-muted)]">W de Kendall (concordance panel) = </span>
                 <span className={`font-semibold ${panelW >= 0.7 ? OK_TEXT : panelW >= 0.4 ? "text-[#8a6d00]" : "text-[var(--danger)]"}`}>
@@ -149,7 +149,7 @@ export function AnalyseFriedman({ config, data, type, questionLabel }: AnalyseFr
                 </span>
               </div>
 
-              {pValue < 0.05 && (
+              {pValue < 0.20 && (
                 <div className="mt-3">
                   <strong>Post-hoc de Nemenyi</strong> (α=0,10)
                   <div className="text-[11px] text-[var(--text-muted)]">Différence Critique (CD) = {nemenyiCD.toFixed(2)}</div>
