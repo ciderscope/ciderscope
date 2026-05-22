@@ -1,4 +1,4 @@
-import type { SessionConfig, AllAnswers, CSVRow, Product, RadarAnswer, JurorAnswers, AnswerValue } from "../types";
+import type { SessionConfig, AllAnswers, CSVRow, Product, RadarAnswer, JurorAnswers, AnswerValue, RadarAxis } from "../types";
 import { asRecord } from "./sessionSteps";
 import { formatVal } from "./utils";
 import { parseANonAAnswer } from "./answers";
@@ -66,35 +66,84 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
   for (const k of posKeys) emptyPos[k] = "";
   for (const k of corPosKeys) emptyPos[k] = "";
 
+  const pushAnswers = (
+    j: string, 
+    produitCode: string, 
+    produitNom: string, 
+    q: typeof anCfg.questions[0], 
+    ansObj: Record<string, any>
+  ) => {
+    const rawVal = ansObj[q.id];
+
+    if (q.type === "radar") {
+      const pushRadarNodes = (axes: RadarAxis[], ansNode: any, parentPath: string = "") => {
+        axes.forEach(ax => {
+          const nodeAns = ansNode?.[ax.label];
+          const main = (typeof nodeAns === "object" && nodeAns !== null) ? nodeAns._ : nodeAns;
+          const qLabel = parentPath ? `${parentPath} - ${ax.label}` : ax.label;
+          
+          rows.push({
+            jury: j, produit: produitCode, nom_produit: produitNom, 
+            question: qLabel, type: "scale",
+            valeur: typeof main === "number" ? String(main) : "",
+            correct: "", score: "", ...emptyPos,
+          });
+
+          if (ax.children && ax.children.length > 0) {
+            pushRadarNodes(ax.children, nodeAns?.children, qLabel);
+          }
+        });
+      };
+
+      (q.radarGroups || []).forEach(g => {
+        pushRadarNodes(g.axes || [], rawVal);
+      });
+      return;
+    }
+
+    if (q.type === "scale" && typeof rawVal === "object" && rawVal !== null && !Array.isArray(rawVal)) {
+      rows.push({
+        jury: j, produit: produitCode, nom_produit: produitNom, 
+        question: q.label, type: "scale", valeur: String(rawVal._ ?? ""), 
+        correct: q.correctAnswer || "", 
+        score: "", ...emptyPos 
+      });
+
+      if (Array.isArray(q.subCriteria)) {
+        q.subCriteria.forEach(sub => {
+          const subVal = rawVal[sub];
+          let valStr = "";
+          if (subVal !== undefined && subVal !== null) {
+            if (typeof subVal === "boolean") valStr = subVal ? "Oui" : "Non";
+            else if (Array.isArray(subVal)) valStr = subVal.join("|");
+            else valStr = String(subVal);
+          }
+          rows.push({
+            jury: j, produit: produitCode, nom_produit: produitNom, 
+            question: `${q.label} - ${sub}`, type: "scale-sub", valeur: valStr, 
+            correct: "", score: "", ...emptyPos 
+          });
+        });
+      }
+      return;
+    }
+
+    const val = formatVal(rawVal as AnswerValue, q.type);
+    rows.push({ 
+      jury: j, produit: produitCode, nom_produit: produitNom, 
+      question: q.label, type: q.type, valeur: val, 
+      correct: q.correctAnswer || "", 
+      score: (q.correctAnswer && val === q.correctAnswer) ? "1" : "0",
+      ...emptyPos 
+    });
+  };
+
   Object.entries(allAnswers).forEach(([j, jans]: [string, JurorAnswers]) => {
     anCfg.products.forEach((p: Product) => {
       const pa = asRecord(jans[p.code]);
       ppQ.forEach(q => {
         if (q.codes && q.codes.length > 0 && !q.codes.includes(p.code)) return;
-
-        if (q.type === "radar") {
-          (q.radarGroups || []).forEach(g => {
-            (g.axes || []).forEach(ax => {
-              const axAns = (pa[q.id] as RadarAnswer)?.[ax.label];
-              const main = (typeof axAns === "object" && axAns !== null) ? axAns._ : axAns;
-              rows.push({
-                jury: j, produit: p.code, nom_produit: p.label || "", 
-                question: ax.label, type: "scale",
-                valeur: typeof main === "number" ? String(main) : "",
-                correct: "", score: "", ...emptyPos,
-              });
-            });
-          });
-          return;
-        }
-        const val = formatVal(pa[q.id] as AnswerValue, q.type);
-        rows.push({ 
-          jury: j, produit: p.code, nom_produit: p.label || "", 
-          question: q.label, type: q.type, valeur: val, 
-          correct: q.correctAnswer || "", 
-          score: (q.correctAnswer && val === q.correctAnswer) ? "1" : "0",
-          ...emptyPos 
-        });
+        pushAnswers(j, p.code, p.label || "", q, pa);
       });
     });
 
@@ -155,11 +204,9 @@ export function buildCsvData(anCfg: SessionConfig | null, allAnswers: AllAnswers
     });
 
     const ga = asRecord(jans["_global"]);
-    glQ.forEach(q => rows.push({ 
-      jury: j, produit: "_global", nom_produit: "", 
-      question: q.label, type: q.type, valeur: formatVal(ga[q.id] as AnswerValue, q.type),
-      correct: "", score: "", ...emptyPos 
-    }));
+    glQ.forEach(q => {
+      pushAnswers(j, "_global", "", q, ga);
+    });
   });
   return rows;
 }
