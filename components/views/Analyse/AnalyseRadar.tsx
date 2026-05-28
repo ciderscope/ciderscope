@@ -37,11 +37,11 @@ const pcaLevelBtnClass = (active: boolean) => [
 const radarLegendClass = "mt-3 flex flex-wrap items-center justify-center gap-2";
 const radarLegendItemClass = "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--paper2)] px-2 text-xs text-[var(--ink)] transition-colors hover:border-[var(--accent)]";
 const radarLegendCheckClass = "h-4 w-4 cursor-pointer accent-[var(--accent)]";
-const radarLegendSwatchClass = "inline-flex h-6 min-w-8 max-w-20 items-center justify-center overflow-hidden rounded px-2 font-mono text-[11px] font-bold leading-none shadow-sm";
+const radarLegendSwatchClass = "inline-flex h-6 min-w-8 max-w-44 items-center justify-center overflow-hidden rounded px-2 font-mono text-[11px] font-bold leading-none shadow-sm";
 const radarLegendAllLabelClass = `${radarLegendItemClass} bg-[var(--paper)] font-mono text-[10px] font-semibold uppercase tracking-[0.3px] text-[var(--mid)]`;
 
-type HiddenProductMap = Record<string, Record<string, boolean>>;
-type RadarLegendItem = { code: string; color: string; visible: boolean };
+type HiddenLegendMap = Record<string, Record<string, boolean>>;
+type ChartLegendItem = { id: string; label: string; color: string; visible: boolean };
 
 function getSwatchTextColor(color: string): string {
   const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
@@ -70,32 +70,46 @@ function ToggleAllCheckbox({ checked, indeterminate, onChange, ariaLabel }: { ch
   );
 }
 
-function RadarSampleLegend({ items, onToggle, onToggleAll }: { items: RadarLegendItem[]; onToggle: (code: string, visible: boolean) => void; onToggleAll: (visible: boolean) => void }) {
+function ChartToggleLegend({
+  items,
+  ariaLabel,
+  allAriaLabel,
+  itemAriaLabel,
+  onToggle,
+  onToggleAll,
+}: {
+  items: ChartLegendItem[];
+  ariaLabel: string;
+  allAriaLabel: string;
+  itemAriaLabel: (label: string) => string;
+  onToggle: (id: string, visible: boolean) => void;
+  onToggleAll: (visible: boolean) => void;
+}) {
   const allVisible = items.length > 0 && items.every(item => item.visible);
   const someVisible = items.some(item => item.visible);
 
   return (
-    <div className={radarLegendClass} aria-label="Légende des échantillons">
-      <label className={radarLegendAllLabelClass} title="Afficher ou masquer tous les échantillons">
+    <div className={radarLegendClass} aria-label={ariaLabel}>
+      <label className={radarLegendAllLabelClass} title={allAriaLabel}>
         <ToggleAllCheckbox
           checked={allVisible}
           indeterminate={someVisible && !allVisible}
-          ariaLabel="Afficher ou masquer tous les échantillons"
+          ariaLabel={allAriaLabel}
           onChange={onToggleAll}
         />
         Tous
       </label>
       {items.map(item => (
-        <label key={item.code} className={`${radarLegendItemClass} ${item.visible ? "" : "opacity-50"}`} title={`Afficher ou masquer l'échantillon ${item.code}`}>
+        <label key={item.id} className={`${radarLegendItemClass} ${item.visible ? "" : "opacity-50"}`} title={itemAriaLabel(item.label)}>
           <input
             type="checkbox"
             className={radarLegendCheckClass}
             checked={item.visible}
-            aria-label={`Afficher ou masquer l'échantillon ${item.code}`}
-            onChange={(e) => onToggle(item.code, e.currentTarget.checked)}
+            aria-label={itemAriaLabel(item.label)}
+            onChange={(e) => onToggle(item.id, e.currentTarget.checked)}
           />
           <span className={radarLegendSwatchClass} style={{ backgroundColor: item.color, color: getSwatchTextColor(item.color) }}>
-            <span className="truncate">{item.code}</span>
+            <span className="truncate">{item.label}</span>
           </span>
         </label>
       ))}
@@ -171,35 +185,66 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   const [displayLevel, setDisplayLevel] = useState<PcaLevel>("famille");
   const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
   const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
-  const [hiddenProductsByRadar, setHiddenProductsByRadar] = useState<HiddenProductMap>({});
+  const [hiddenProductsByChart, setHiddenProductsByChart] = useState<HiddenLegendMap>({});
+  const [hiddenCriteriaByChart, setHiddenCriteriaByChart] = useState<HiddenLegendMap>({});
   const adaptiveScale = true;
   const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
   const levelLabel: Record<PcaLevel, string> = { famille: "Famille", classe: "Classe", descripteur: "Descripteur" };
   const depthOf = (c: string) => c.split(" > ").length;
-  const isProductVisible = (radarKey: string, productCode: string) => hiddenProductsByRadar[radarKey]?.[productCode] !== true;
-  const legendItemsFor = (radarKey: string): RadarLegendItem[] => products.map((p, pi) => ({
-    code: p.code,
+  const isProductVisible = (chartKey: string, productCode: string) => hiddenProductsByChart[chartKey]?.[productCode] !== true;
+  const isCriteriaVisible = (chartKey: string, criteriaId: string) => hiddenCriteriaByChart[chartKey]?.[criteriaId] !== true;
+  const legendItemsFor = (chartKey: string): ChartLegendItem[] => products.map((p, pi) => ({
+    id: p.code,
+    label: p.code,
     color: chartColors[pi % chartColors.length],
-    visible: isProductVisible(radarKey, p.code),
+    visible: isProductVisible(chartKey, p.code),
   }));
-  const setProductVisible = (radarKey: string, productCode: string, visible: boolean) => {
-    setHiddenProductsByRadar(prev => {
-      const nextForRadar = { ...(prev[radarKey] || {}) };
-      if (visible) delete nextForRadar[productCode];
-      else nextForRadar[productCode] = true;
-      return { ...prev, [radarKey]: nextForRadar };
+  const criteriaLegendItemsFor = (chartKey: string, criteriaList: string[]): ChartLegendItem[] => criteriaList.map((c, i) => ({
+    id: c,
+    label: c.split(" > ").pop() || c,
+    color: chartColors[i % chartColors.length],
+    visible: isCriteriaVisible(chartKey, c),
+  }));
+  const setLegendItemVisible = (
+    setHiddenMap: React.Dispatch<React.SetStateAction<HiddenLegendMap>>,
+    chartKey: string,
+    itemId: string,
+    visible: boolean
+  ) => {
+    setHiddenMap(prev => {
+      const nextForChart = { ...(prev[chartKey] || {}) };
+      if (visible) delete nextForChart[itemId];
+      else nextForChart[itemId] = true;
+      return { ...prev, [chartKey]: nextForChart };
     });
   };
-  const setAllProductsVisible = (radarKey: string, visible: boolean) => {
-    setHiddenProductsByRadar(prev => ({
+  const setAllLegendItemsVisible = (
+    setHiddenMap: React.Dispatch<React.SetStateAction<HiddenLegendMap>>,
+    chartKey: string,
+    itemIds: string[],
+    visible: boolean
+  ) => {
+    setHiddenMap(prev => ({
       ...prev,
-      [radarKey]: visible
+      [chartKey]: visible
         ? {}
-        : products.reduce<Record<string, boolean>>((acc, product) => {
-            acc[product.code] = true;
+        : itemIds.reduce<Record<string, boolean>>((acc, itemId) => {
+            acc[itemId] = true;
             return acc;
           }, {}),
     }));
+  };
+  const setProductVisible = (chartKey: string, productCode: string, visible: boolean) => {
+    setLegendItemVisible(setHiddenProductsByChart, chartKey, productCode, visible);
+  };
+  const setAllProductsVisible = (chartKey: string, visible: boolean) => {
+    setAllLegendItemsVisible(setHiddenProductsByChart, chartKey, products.map(product => product.code), visible);
+  };
+  const setCriteriaVisible = (chartKey: string, criteriaId: string, visible: boolean) => {
+    setLegendItemVisible(setHiddenCriteriaByChart, chartKey, criteriaId, visible);
+  };
+  const setAllCriteriaVisible = (chartKey: string, criteriaIds: string[], visible: boolean) => {
+    setAllLegendItemsVisible(setHiddenCriteriaByChart, chartKey, criteriaIds, visible);
   };
 
   const hrataAnalyses = useMemo(() => {
@@ -355,6 +400,9 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   const scoreBound = pcaRes
     ? Math.max(0.5, ...pcaRes.scores.flatMap(s => [Math.abs(s[0]), Math.abs(s[1] ?? 0)])) * 1.1
     : 1;
+  const pcaLegendScope = `${question.id}:${activeGroup?.id || "all"}:${effectiveLevel}`;
+  const pcaProductLegendKey = `${pcaLegendScope}:pca-products`;
+  const pcaCriteriaLegendKey = `${pcaLegendScope}:pca-criteria`;
 
   return (
     <AnalysisStack>
@@ -480,8 +528,11 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                 <div className={ANALYSIS_RADAR_WRAP}>
                   <Radar data={radarData} options={buildOpts(radarMax)} />
                 </div>
-                <RadarSampleLegend
+                <ChartToggleLegend
                   items={legendItemsFor(panelRadarKey)}
+                  ariaLabel="Légende des échantillons"
+                  allAriaLabel="Afficher ou masquer tous les échantillons"
+                  itemAriaLabel={(label) => `Afficher ou masquer l'échantillon ${label}`}
                   onToggle={(code, visible) => setProductVisible(panelRadarKey, code, visible)}
                   onToggleAll={(visible) => setAllProductsVisible(panelRadarKey, visible)}
                 />
@@ -522,8 +573,11 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                   <div className={ANALYSIS_RADAR_WRAP}>
                     <Radar data={jurorRadarData} options={buildOpts(jurorMax)} />
                   </div>
-                  <RadarSampleLegend
+                  <ChartToggleLegend
                     items={legendItemsFor(jurorRadarKey)}
+                    ariaLabel="Légende des échantillons"
+                    allAriaLabel="Afficher ou masquer tous les échantillons"
+                    itemAriaLabel={(label) => `Afficher ou masquer l'échantillon ${label}`}
                     onToggle={(code, visible) => setProductVisible(jurorRadarKey, code, visible)}
                     onToggleAll={(visible) => setAllProductsVisible(jurorRadarKey, visible)}
                   />
@@ -630,6 +684,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                     borderColor: chartColors[i % chartColors.length],
                     pointRadius: 7,
                     pointHoverRadius: 10,
+                    hidden: !isProductVisible(pcaProductLegendKey, p.code),
                   }))
                 }}
                 options={{
@@ -639,7 +694,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                     y: { title: { display: true, text: `CP2 (${((pcaRes.explained[1]||0)*100).toFixed(1)}%)` }, min: -scoreBound, max: scoreBound },
                   },
                   plugins: {
-                    legend: { display: true, position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                    legend: { display: false },
                     tooltip: { callbacks: { label: (ctx: TooltipItem<"scatter">) => {
                       const d = ctx.raw as { x: number; y: number; label: string };
                       return `${d.label}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`;
@@ -648,6 +703,14 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                 }}
               />
             </div>
+            <ChartToggleLegend
+              items={legendItemsFor(pcaProductLegendKey)}
+              ariaLabel="Légende ACP des échantillons"
+              allAriaLabel="Afficher ou masquer tous les échantillons ACP"
+              itemAriaLabel={(label) => `Afficher ou masquer l'échantillon ACP ${label}`}
+              onToggle={(code, visible) => setProductVisible(pcaProductLegendKey, code, visible)}
+              onToggleAll={(visible) => setAllProductsVisible(pcaProductLegendKey, visible)}
+            />
             <div className="mt-2.5 text-[11px] text-[var(--mid)]">
               CP1+CP2 : {((pcaRes.explained[0] + (pcaRes.explained[1]||0))*100).toFixed(1)}% de variance expliquée.
             </div>
@@ -693,6 +756,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                         pointRotation: [0, rot],
                         showLine: true,
                         fill: false,
+                        hidden: !isCriteriaVisible(pcaCriteriaLegendKey, c),
                       };
                     }),
                   ],
@@ -704,13 +768,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                     y: { title: { display: true, text: `CP2 (${((pcaRes.explained[1]||0)*100).toFixed(1)}%)` }, min: -1.1, max: 1.1 },
                   },
                   plugins: {
-                    legend: {
-                      display: true, position: "bottom",
-                      labels: {
-                        boxWidth: 12, font: { size: 10 },
-                        filter: (item) => item.text !== "_circle",
-                      },
-                    },
+                    legend: { display: false },
                     tooltip: {
                       filter: (ctx) => ctx.dataset.label !== "_circle" && ctx.dataIndex === 1,
                       callbacks: {
@@ -725,6 +783,14 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                 }}
               />
             </div>
+            <ChartToggleLegend
+              items={criteriaLegendItemsFor(pcaCriteriaLegendKey, pcaCriteria)}
+              ariaLabel="Légende ACP des critères"
+              allAriaLabel="Afficher ou masquer tous les critères ACP"
+              itemAriaLabel={(label) => `Afficher ou masquer le critère ACP ${label}`}
+              onToggle={(criteriaId, visible) => setCriteriaVisible(pcaCriteriaLegendKey, criteriaId, visible)}
+              onToggleAll={(visible) => setAllCriteriaVisible(pcaCriteriaLegendKey, pcaCriteria, visible)}
+            />
             <div className="mt-2.5 text-[11px] text-[var(--mid)]">
               Longueur de la flèche ≈ importance du critère sur le plan CP1-CP2 ; direction ≈ corrélation entre critères.
             </div>
