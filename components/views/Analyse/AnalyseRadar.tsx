@@ -34,6 +34,74 @@ const pcaLevelBtnClass = (active: boolean) => [
   "pca-level-btn border-0 bg-transparent px-3.5 py-1.5 text-xs font-medium text-[var(--ink)] transition-all duration-100 hover:bg-[var(--paper2)] [&:not(:last-child)]:border-r [&:not(:last-child)]:border-[var(--border)] max-[480px]:min-w-0 max-[480px]:px-2.5 max-[480px]:text-[11.5px]",
   active ? "active bg-[var(--ink)] text-white hover:bg-[var(--ink)]" : "",
 ].filter(Boolean).join(" ");
+const radarLegendClass = "mt-3 flex flex-wrap items-center justify-center gap-2";
+const radarLegendItemClass = "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--paper2)] px-2 text-xs text-[var(--ink)] transition-colors hover:border-[var(--accent)]";
+const radarLegendCheckClass = "h-4 w-4 cursor-pointer accent-[var(--accent)]";
+const radarLegendSwatchClass = "inline-flex h-6 min-w-8 max-w-20 items-center justify-center overflow-hidden rounded px-2 font-mono text-[11px] font-bold leading-none shadow-sm";
+const radarLegendAllLabelClass = `${radarLegendItemClass} bg-[var(--paper)] font-mono text-[10px] font-semibold uppercase tracking-[0.3px] text-[var(--mid)]`;
+
+type HiddenProductMap = Record<string, Record<string, boolean>>;
+type RadarLegendItem = { code: string; color: string; visible: boolean };
+
+function getSwatchTextColor(color: string): string {
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+  if (!match) return "#ffffff";
+  const [, r, g, b] = match;
+  const luminance = (0.299 * parseInt(r, 16) + 0.587 * parseInt(g, 16) + 0.114 * parseInt(b, 16)) / 255;
+  return luminance > 0.58 ? "#1a1a1a" : "#ffffff";
+}
+
+function ToggleAllCheckbox({ checked, indeterminate, onChange, ariaLabel }: { checked: boolean; indeterminate: boolean; onChange: (checked: boolean) => void; ariaLabel: string }) {
+  const ref = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className={radarLegendCheckClass}
+      checked={checked}
+      aria-label={ariaLabel}
+      onChange={(e) => onChange(e.currentTarget.checked)}
+    />
+  );
+}
+
+function RadarSampleLegend({ items, onToggle, onToggleAll }: { items: RadarLegendItem[]; onToggle: (code: string, visible: boolean) => void; onToggleAll: (visible: boolean) => void }) {
+  const allVisible = items.length > 0 && items.every(item => item.visible);
+  const someVisible = items.some(item => item.visible);
+
+  return (
+    <div className={radarLegendClass} aria-label="Légende des échantillons">
+      <label className={radarLegendAllLabelClass} title="Afficher ou masquer tous les échantillons">
+        <ToggleAllCheckbox
+          checked={allVisible}
+          indeterminate={someVisible && !allVisible}
+          ariaLabel="Afficher ou masquer tous les échantillons"
+          onChange={onToggleAll}
+        />
+        Tous
+      </label>
+      {items.map(item => (
+        <label key={item.code} className={`${radarLegendItemClass} ${item.visible ? "" : "opacity-50"}`} title={`Afficher ou masquer l'échantillon ${item.code}`}>
+          <input
+            type="checkbox"
+            className={radarLegendCheckClass}
+            checked={item.visible}
+            aria-label={`Afficher ou masquer l'échantillon ${item.code}`}
+            onChange={(e) => onToggle(item.code, e.currentTarget.checked)}
+          />
+          <span className={radarLegendSwatchClass} style={{ backgroundColor: item.color, color: getSwatchTextColor(item.color) }}>
+            <span className="truncate">{item.code}</span>
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
 
 const getRadarAnswer = (answers: AllAnswers[string] | undefined, productCode: string, questionId: string): RadarAnswer | undefined => {
   const section = answers?.[productCode];
@@ -103,10 +171,36 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   const [displayLevel, setDisplayLevel] = useState<PcaLevel>("famille");
   const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
   const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
+  const [hiddenProductsByRadar, setHiddenProductsByRadar] = useState<HiddenProductMap>({});
   const adaptiveScale = true;
   const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
   const levelLabel: Record<PcaLevel, string> = { famille: "Famille", classe: "Classe", descripteur: "Descripteur" };
   const depthOf = (c: string) => c.split(" > ").length;
+  const isProductVisible = (radarKey: string, productCode: string) => hiddenProductsByRadar[radarKey]?.[productCode] !== true;
+  const legendItemsFor = (radarKey: string): RadarLegendItem[] => products.map((p, pi) => ({
+    code: p.code,
+    color: chartColors[pi % chartColors.length],
+    visible: isProductVisible(radarKey, p.code),
+  }));
+  const setProductVisible = (radarKey: string, productCode: string, visible: boolean) => {
+    setHiddenProductsByRadar(prev => {
+      const nextForRadar = { ...(prev[radarKey] || {}) };
+      if (visible) delete nextForRadar[productCode];
+      else nextForRadar[productCode] = true;
+      return { ...prev, [radarKey]: nextForRadar };
+    });
+  };
+  const setAllProductsVisible = (radarKey: string, visible: boolean) => {
+    setHiddenProductsByRadar(prev => ({
+      ...prev,
+      [radarKey]: visible
+        ? {}
+        : products.reduce<Record<string, boolean>>((acc, product) => {
+            acc[product.code] = true;
+            return acc;
+          }, {}),
+    }));
+  };
 
   const hrataAnalyses = useMemo(() => {
     const obs: HrataObservation[] = [];
@@ -308,6 +402,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           const displayCriteria = [...displayCriteriaAll]
             .sort((a, b) => overallMean(b) - overallMean(a))
             .slice(0, TOP_N);
+          const panelRadarKey = `${question.id}:${g.id}:panel`;
+          const jurorRadarKey = `${question.id}:${g.id}:juror`;
 
           const radarData = {
             labels: displayCriteria.map(c => c.split(" > ").pop()),
@@ -317,6 +413,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
               borderColor: chartColors[pi % chartColors.length],
               backgroundColor: chartColors[pi % chartColors.length] + "22",
               pointBackgroundColor: chartColors[pi % chartColors.length],
+              hidden: !isProductVisible(panelRadarKey, p.code),
             }))
           };
 
@@ -328,6 +425,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
               borderColor: chartColors[pi % chartColors.length],
               backgroundColor: chartColors[pi % chartColors.length] + "22",
               pointBackgroundColor: chartColors[pi % chartColors.length],
+              hidden: !isProductVisible(jurorRadarKey, p.code),
             }))
           } : null;
 
@@ -370,6 +468,9 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                   },
                 },
               },
+              plugins: {
+                legend: { display: false },
+              },
             };
           };
 
@@ -379,6 +480,11 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                 <div className={ANALYSIS_RADAR_WRAP}>
                   <Radar data={radarData} options={buildOpts(radarMax)} />
                 </div>
+                <RadarSampleLegend
+                  items={legendItemsFor(panelRadarKey)}
+                  onToggle={(code, visible) => setProductVisible(panelRadarKey, code, visible)}
+                  onToggleAll={(visible) => setAllProductsVisible(panelRadarKey, visible)}
+                />
                 {!participantMode && (
                   <div className="mt-5">
                     <table className={`${ANALYSIS_TABLE_CLASS} text-[11px]`}>
@@ -416,6 +522,11 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                   <div className={ANALYSIS_RADAR_WRAP}>
                     <Radar data={jurorRadarData} options={buildOpts(jurorMax)} />
                   </div>
+                  <RadarSampleLegend
+                    items={legendItemsFor(jurorRadarKey)}
+                    onToggle={(code, visible) => setProductVisible(jurorRadarKey, code, visible)}
+                    onToggleAll={(visible) => setAllProductsVisible(jurorRadarKey, visible)}
+                  />
                 </Card>
               )}
             </Fragment>
