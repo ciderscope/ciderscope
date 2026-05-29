@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/ciderscope/ciderscope/actions/workflows/ci.yml/badge.svg)](https://github.com/ciderscope/ciderscope/actions/workflows/ci.yml)
 
-CiderScope est une application web Next.js pour creer des seances d'analyse sensorielle, guider les jurys pendant la degustation, collecter leurs reponses et consulter les analyses du panel.
+CiderScope est une application web pour creer des seances d'analyse sensorielle, guider les jurys pendant la degustation, collecter leurs reponses et analyser les reponses d'un panel.
 
 Le projet est associe a une plateforme d'analyse sensorielle IFPC. Il expose deux parcours principaux : un parcours participant pour rejoindre une seance active et repondre au questionnaire, et un parcours administration pour configurer les seances, suivre les jurys et exploiter les resultats.
 
