@@ -5,8 +5,7 @@ import { Topbar } from "../components/ui/Topbar";
 import { useSenso, type SensoState, type SensoActions } from "../hooks/useSenso";
 
 // Contexte d'actions : référence stable, ne se ré-émet jamais après le premier render
-// (toutes les actions sont useCallback à deps vides). Les composants qui appellent
-// uniquement useAppActions() ne se ré-rendent pas sur les changements d'état.
+// (toutes les actions sont useCallback à deps vides).
 type AppActions = SensoActions & { handleLogout: () => void };
 const AppActionsContext = createContext<AppActions | null>(null);
 
@@ -14,21 +13,20 @@ const AppActionsContext = createContext<AppActions | null>(null);
 // Les composants qui lisent l'état doivent passer par useAppState().
 const AppStateContext = createContext<SensoState | null>(null);
 
-export const useAppActions = (): AppActions => {
+const useAppActions = (): AppActions => {
   const ctx = useContext(AppActionsContext);
   if (!ctx) throw new Error("useAppActions() must be used inside <AppProviders>");
   return ctx;
 };
 
-export const useAppState = (): SensoState => {
+const useAppState = (): SensoState => {
   const ctx = useContext(AppStateContext);
   if (!ctx) throw new Error("useAppState() must be used inside <AppProviders>");
   return ctx;
 };
 
-// Vue agrégée rétrocompatible. Note : tout consommateur de useApp() se ré-rend sur
-// chaque changement d'état (à cause de l'abonnement au contexte d'état). Pour une
-// granularité fine, préférer useAppActions() / useAppState().
+// Vue agrégée rétrocompatible. Tout consommateur de useApp() se ré-rend sur
+// chaque changement d'état à cause de l'abonnement au contexte d'état.
 export type AppContextValue = SensoState & AppActions;
 
 export const useApp = (): AppContextValue => {

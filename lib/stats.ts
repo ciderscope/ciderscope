@@ -9,7 +9,7 @@
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-export function logGamma(x: number): number {
+function logGamma(x: number): number {
   if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
   const g = 7;
   const c = [
@@ -53,7 +53,7 @@ function gammaQFrac(a: number, x: number): number {
   return h * Math.exp(-x + a * Math.log(x) - logGamma(a));
 }
 
-export function regularizedGammaP(a: number, x: number): number {
+function regularizedGammaP(a: number, x: number): number {
   if (x <= 0 || a <= 0) return 0;
   return x < a + 1 ? gammaPSeries(a, x) : 1 - gammaQFrac(a, x);
 }
@@ -90,7 +90,7 @@ function betaCF(x: number, a: number, b: number): number {
   return h;
 }
 
-export function regularizedBetaI(x: number, a: number, b: number): number {
+function regularizedBetaI(x: number, a: number, b: number): number {
   if (x <= 0) return 0;
   if (x >= 1) return 1;
   const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
@@ -100,64 +100,9 @@ export function regularizedBetaI(x: number, a: number, b: number): number {
 }
 
 /** F-distribution p-value (one-sided) */
-export function fPValue(F: number, df1: number, df2: number): number {
+function fPValue(F: number, df1: number, df2: number): number {
   if (F <= 0 || df1 <= 0 || df2 <= 0) return 1;
   return regularizedBetaI(df2 / (df2 + df1 * F), df2 / 2, df1 / 2);
-}
-
-/** 
- * Two-way ANOVA (Mixed Model: Product as fixed effect, Judge as random effect)
- * Returns F and p-values for Product and Judge.
- * Note: Interaction Judge x Product is the error term in a standard session (no replicates).
- */
-export function anovaTwoWay(
-  matrix: (number | null)[][] // matrix[prodIdx][judgeIdx]
-): { 
-  fProd: number; pProd: number; 
-  fJury: number; pJury: number;
-  ok: boolean;
-} {
-  const pN = matrix.length;
-  const jN = matrix[0]?.length ?? 0;
-  const isComplete = pN >= 2
-    && jN >= 2
-    && matrix.every(row => row.length === jN && row.every(isFiniteNumber));
-  
-  if (!isComplete) return { fProd: 0, pProd: 1, fJury: 0, pJury: 1, ok: false };
-
-  const flat = matrix.flat() as number[];
-  
-  const grand = flat.reduce((a, b) => a + b, 0) / flat.length;
-  const prodMeans = matrix.map(row => {
-    const v = row.filter(isFiniteNumber);
-    return v.reduce((a, b) => a + b, 0) / v.length;
-  });
-  const juryMeans = Array.from({ length: jN }, (_, j) => {
-    const col = matrix.map(row => row[j]).filter(isFiniteNumber);
-    return col.reduce((a, b) => a + b, 0) / col.length;
-  });
-
-  let ssProd = 0, ssJury = 0, ssTot = 0;
-  for (let i = 0; i < pN; i++) ssProd += jN * (prodMeans[i] - grand) ** 2;
-  for (let j = 0; j < jN; j++) ssJury += pN * (juryMeans[j] - grand) ** 2;
-  for (let i = 0; i < pN; i++) for (let j = 0; j < jN; j++) {
-    const v = matrix[i][j] as number;
-    ssTot += (v - grand) ** 2;
-  }
-
-  const ssErr = Math.max(0, ssTot - ssProd - ssJury);
-  const dfProd = pN - 1, dfJury = jN - 1, dfErr = (pN - 1) * (jN - 1);
-  
-  const msProd = ssProd / dfProd;
-  const msJury = ssJury / dfJury;
-  const msErr = ssErr / dfErr;
-
-  const fProd = msErr > 0 ? msProd / msErr : 0;
-  const pProd = msErr > 0 ? fPValue(fProd, dfProd, dfErr) : 1;
-  const fJury = msErr > 0 ? msJury / msErr : 0;
-  const pJury = msErr > 0 ? fPValue(fJury, dfJury, dfErr) : 1;
-
-  return { fProd, pProd, fJury, pJury, ok: true };
 }
 
 /**
@@ -266,7 +211,7 @@ export function rvCoefficient(X: number[][], Y: number[][]): number {
 // --- PCA & Matrix Operations ---
 
 /** Diagonalize a symmetric matrix using Jacobi rotations */
-export function jacobiEigen(A: number[][]): { values: number[]; vectors: number[][] } {
+function jacobiEigen(A: number[][]): { values: number[]; vectors: number[][] } {
   const n = A.length;
   const D = A.map(r => [...r]);
   const V: number[][] = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
@@ -303,46 +248,6 @@ export function jacobiEigen(A: number[][]): { values: number[]; vectors: number[
     values: order.map(i => values[i]),
     vectors: V.map(row => order.map(i => row[i])),
   };
-}
-
-/** 2D PCA on Correlation Matrix */
-export function pca2D(X: number[][]): { scores: number[][]; explained: number[]; loadings: number[][] } {
-  const p = X.length, m = X[0]?.length ?? 0;
-  if (p < 2 || m < 2) return { scores: X.map(() => [0, 0]), explained: [0, 0], loadings: [] };
-  const means = Array(m).fill(0).map((_, j) => X.reduce((s, r) => s + r[j], 0) / p);
-  const sds = Array(m).fill(0).map((_, j) => {
-    const v = X.reduce((s, r) => s + (r[j] - means[j]) ** 2, 0) / (p - 1);
-    return Math.sqrt(v) || 1;
-  });
-  const Z: number[][] = X.map(r => r.map((v, j) => (v - means[j]) / sds[j]));
-  const C: number[][] = Array.from({ length: m }, () => Array(m).fill(0));
-  for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) {
-    let s = 0;
-    for (let k = 0; k < p; k++) s += Z[k][i] * Z[k][j];
-    C[i][j] = s / (p - 1);
-  }
-  const { values, vectors } = jacobiEigen(C);
-  const totalVar = values.reduce((a, b) => a + Math.max(0, b), 0) || 1;
-  const explained = [Math.max(0, values[0]) / totalVar, Math.max(0, values[1] ?? 0) / totalVar];
-  const scores: number[][] = Z.map(row => {
-    const s1 = row.reduce((s, v, i) => s + v * vectors[i][0], 0);
-    const s2 = row.reduce((s, v, i) => s + v * (vectors[i][1] ?? 0), 0);
-    return [s1, s2];
-  });
-  
-  const scoreSds = [
-    Math.sqrt(Math.max(0, values[0])),
-    Math.sqrt(Math.max(0, values[1] ?? 0))
-  ];
-  
-  const loadings = vectors.map(row => {
-    return [
-      row[0] * scoreSds[0],
-      (row[1] ?? 0) * scoreSds[1]
-    ];
-  });
-  
-  return { scores, explained, loadings };
 }
 
 // --- Post-hoc & CLD ---
@@ -414,7 +319,7 @@ export function computeCLD(products: string[], rankMeans: Record<string, number>
 
 // --- Discrimination Helper ---
 
-export function binomCoeff(n: number, k: number): number {
+function binomCoeff(n: number, k: number): number {
   if (k > n) return 0;
   if (k === 0 || k === n) return 1;
   let c = 1;
@@ -564,134 +469,4 @@ export function pcaCovariance(X: number[][]): { scores: number[][]; explained: n
   });
 
   return { scores, explained, loadings };
-}
-
-/**
- * Projects new (illustrative/supplementary) variables onto an existing PCA space.
- * @param X_new Matrix of new variables [observations x new_vars]
- * @param pcaScores Existing PCA scores for the observations [observations x 2]
- * @returns Projected coordinates for the new variables [new_vars x 2]
- */
-export function projectToPCA(X_new: number[][], pcaScores: number[][]): number[][] {
-  const n = X_new.length;
-  const m_new = X_new[0]?.length ?? 0;
-  if (n < 2 || m_new === 0 || pcaScores.length !== n) return [];
-
-  // Normalize new variables
-  const means = Array(m_new).fill(0).map((_, j) => X_new.reduce((s, r) => s + r[j], 0) / n);
-  const sds = Array(m_new).fill(0).map((_, j) => {
-    const v = X_new.reduce((s, r) => s + (r[j] - means[j]) ** 2, 0) / (n - 1);
-    return Math.sqrt(v) || 1;
-  });
-  const Z_new = X_new.map(r => r.map((v, j) => (v - means[j]) / sds[j]));
-
-  // Standardize PCA scores
-  const scoreMeans = [0, 0];
-  for (let i = 0; i < n; i++) { scoreMeans[0] += pcaScores[i][0]; scoreMeans[1] += pcaScores[i][1]; }
-  scoreMeans[0] /= n; scoreMeans[1] /= n;
-  
-  const scoreSds = [0, 0];
-  for (let i = 0; i < n; i++) {
-    scoreSds[0] += (pcaScores[i][0] - scoreMeans[0]) ** 2;
-    scoreSds[1] += (pcaScores[i][1] - scoreMeans[1]) ** 2;
-  }
-  scoreSds[0] = Math.sqrt(scoreSds[0] / (n - 1)) || 1;
-  scoreSds[1] = Math.sqrt(scoreSds[1] / (n - 1)) || 1;
-
-  const Z_scores = pcaScores.map(r => [
-    (r[0] - scoreMeans[0]) / scoreSds[0],
-    (r[1] - scoreMeans[1]) / scoreSds[1]
-  ]);
-
-  // Project (correlation)
-  const projectedLoadings: number[][] = Array.from({ length: m_new }, () => [0, 0]);
-  for (let j = 0; j < m_new; j++) {
-    let sum1 = 0, sum2 = 0;
-    for (let i = 0; i < n; i++) {
-      sum1 += Z_new[i][j] * Z_scores[i][0];
-      sum2 += Z_new[i][j] * Z_scores[i][1];
-    }
-    projectedLoadings[j][0] = sum1 / (n - 1);
-    projectedLoadings[j][1] = sum2 / (n - 1);
-  }
-
-  return projectedLoadings;
-}
-
-/**
- * Orthogonal Procrustes Analysis
- * Finds an optimal rotation matrix to align matrix Y to matrix X.
- * @returns The rotated Y matrix (Y_rot) superimposed onto X.
- */
-export function procrustes2D(X: number[][], Y: number[][]): { Y_rot: number[][] } {
-  const n = X.length;
-  if (n === 0 || Y.length !== n) return { Y_rot: Y };
-
-  // Center X and Y
-  const cX = [0, 0]; const cY = [0, 0];
-  for (let i = 0; i < n; i++) {
-    cX[0] += X[i][0]; cX[1] += X[i][1];
-    cY[0] += Y[i][0]; cY[1] += Y[i][1];
-  }
-  cX[0] /= n; cX[1] /= n; cY[0] /= n; cY[1] /= n;
-
-  const Xc = X.map(r => [r[0] - cX[0], r[1] - cX[1]]);
-  const Yc = Y.map(r => [r[0] - cY[0], r[1] - cY[1]]);
-
-  // Compute scale
-  let normX = 0, normY = 0;
-  for (let i = 0; i < n; i++) {
-    normX += Xc[i][0] ** 2 + Xc[i][1] ** 2;
-    normY += Yc[i][0] ** 2 + Yc[i][1] ** 2;
-  }
-  normX = Math.sqrt(normX); normY = Math.sqrt(normY);
-  
-  if (normY === 0) return { Y_rot: Yc };
-  
-  // Scale Y to match X's scale
-  const scale = normX / normY;
-  const Ys = Yc.map(r => [r[0] * scale, r[1] * scale]);
-
-  // Compute A = Ys^T * X
-  const A = [[0, 0], [0, 0]];
-  for (let i = 0; i < n; i++) {
-    A[0][0] += Ys[i][0] * Xc[i][0];
-    A[0][1] += Ys[i][0] * Xc[i][1];
-    A[1][0] += Ys[i][1] * Xc[i][0];
-    A[1][1] += Ys[i][1] * Xc[i][1];
-  }
-
-  // A^T A
-  const ATA = [
-    [A[0][0]*A[0][0] + A[1][0]*A[1][0], A[0][0]*A[0][1] + A[1][0]*A[1][1]],
-    [A[0][1]*A[0][0] + A[1][1]*A[1][0], A[0][1]*A[0][1] + A[1][1]*A[1][1]]
-  ];
-  
-  const { values, vectors } = jacobiEigen(ATA);
-  
-  const D_inv_sqrt = [
-    values[0] > 1e-10 ? 1/Math.sqrt(values[0]) : 0,
-    values[1] > 1e-10 ? 1/Math.sqrt(values[1]) : 0
-  ];
-  
-  const invSqrt = [
-    [vectors[0][0]*D_inv_sqrt[0]*vectors[0][0] + vectors[0][1]*D_inv_sqrt[1]*vectors[0][1],
-     vectors[0][0]*D_inv_sqrt[0]*vectors[1][0] + vectors[0][1]*D_inv_sqrt[1]*vectors[1][1]],
-    [vectors[1][0]*D_inv_sqrt[0]*vectors[0][0] + vectors[1][1]*D_inv_sqrt[1]*vectors[0][1],
-     vectors[1][0]*D_inv_sqrt[0]*vectors[1][0] + vectors[1][1]*D_inv_sqrt[1]*vectors[1][1]]
-  ];
-  
-  // R = A * (A^T A)^{-1/2}
-  const R = [
-    [A[0][0]*invSqrt[0][0] + A[0][1]*invSqrt[1][0], A[0][0]*invSqrt[0][1] + A[0][1]*invSqrt[1][1]],
-    [A[1][0]*invSqrt[0][0] + A[1][1]*invSqrt[1][0], A[1][0]*invSqrt[0][1] + A[1][1]*invSqrt[1][1]]
-  ];
-
-  // Apply rotation
-  const Y_rot = Ys.map(row => [
-    row[0] * R[0][0] + row[1] * R[1][0],
-    row[0] * R[0][1] + row[1] * R[1][1]
-  ]);
-
-  return { Y_rot };
 }

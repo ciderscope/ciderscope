@@ -11,7 +11,7 @@ const isStringRecord = (value: unknown): value is Record<string, string> =>
   && !Array.isArray(value)
   && Object.values(value).every(item => typeof item === "string");
 
-export const csvCell = (value: unknown, separator = CSV_SEPARATOR): string => {
+const csvCell = (value: unknown, separator = CSV_SEPARATOR): string => {
   const text = String(value ?? "");
   return text.includes(separator) || /["\r\n]/.test(text)
     ? `"${text.replace(/"/g, '""')}"`

@@ -2,10 +2,10 @@
 import { useState, useEffect } from "react";
 import { Chart as ChartJS } from "chart.js";
 import type { RadarAnswer } from "../../../types";
-export { buildAnalysisSteps as getSteps, isStepDone as checkStepDone, isStepValidated as checkStepValidated } from "../../../lib/sessionSteps";
+export { buildAnalysisSteps as getSteps, isStepValidated as checkStepValidated } from "../../../lib/sessionSteps";
 
-export const COLORS_LIGHT = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
-export const COLORS_DARK  = ["#ef7a3c", "#5b9cc1", "#5cab73", "#bb7fbb", "#c0a13a", "#a07a5e", "#5b8db1", "#92a35a"];
+const COLORS_LIGHT = ["#c8520a", "#2e6b8a", "#1a6b3a", "#8a4c8a", "#8a6d00", "#5a4030", "#2a5a7a", "#5a6a2a"];
+const COLORS_DARK  = ["#ef7a3c", "#5b9cc1", "#5cab73", "#bb7fbb", "#c0a13a", "#a07a5e", "#5b8db1", "#92a35a"];
 
 export function getChartColors(): string[] {
   if (typeof window === "undefined") return COLORS_LIGHT;

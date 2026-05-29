@@ -3,7 +3,7 @@
  * Implements the methodology proposed by Léa Koenig for sensory analysis of structured, zero-inflated data.
  */
 
-import { anovaOneWay, cochranQ, pcaCovariance, projectToPCA, pca2D } from "./stats";
+import { anovaOneWay, cochranQ } from "./stats";
 
 export interface HrataObservation {
   subjectId: string;
@@ -20,7 +20,7 @@ export interface HrataConfig {
   maxIntensityScale: number; // default: 10
 }
 
-export interface AttributeMetrics {
+interface AttributeMetrics {
   attributeId: string;
   level: "famille" | "classe" | "descripteur";
   
@@ -43,7 +43,7 @@ export interface AttributeMetrics {
   isLowCoverage: boolean;
 }
 
-export type DiscriminationStatus = 
+type DiscriminationStatus =
   | "Non discriminant"
   | "Discriminant par applicabilité"
   | "Discriminant par intensité"
@@ -61,7 +61,6 @@ export interface AttributeAnalysis extends AttributeMetrics {
 
   status: DiscriminationStatus;
 }
-
 /**
  * 1. Data Preprocessing & Metric Calculation
  * Applies the NC vs 0 imputation rule.
@@ -236,7 +235,7 @@ export function analyzeAttributes(
 /**
  * Applies Benjamini-Hochberg False Discovery Rate adjustment.
  */
-export function benjaminiHochberg(pValues: number[]): number[] {
+function benjaminiHochberg(pValues: number[]): number[] {
   const n = pValues.length;
   if (n === 0) return [];
   
@@ -259,141 +258,4 @@ export function benjaminiHochberg(pValues: number[]): number[] {
   }
 
   return fdr.map(p => Math.min(p, 1));
-}
-
-/**
- * Computes Mantel correlation between two distance matrices using Pearson correlation
- * of their flattened upper triangles.
- */
-export function mantelTest(distMat1: number[][], distMat2: number[][]): number {
-  const n = distMat1.length;
-  if (n < 2 || distMat2.length !== n) return 0;
-
-  const vec1: number[] = [];
-  const vec2: number[] = [];
-
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      vec1.push(distMat1[i][j]);
-      vec2.push(distMat2[i][j]);
-    }
-  }
-
-  return pearson(vec1, vec2);
-}
-
-/** Utility: Pearson Correlation */
-function pearson(x: number[], y: number[]): number {
-  const n = x.length;
-  if (n === 0) return 0;
-  const mx = x.reduce((a, b) => a + b, 0) / n;
-  const my = y.reduce((a, b) => a + b, 0) / n;
-  let num = 0, denX = 0, denY = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = x[i] - mx;
-    const dy = y[i] - my;
-    num += dx * dy;
-    denX += dx * dx;
-    denY += dy * dy;
-  }
-  if (denX === 0 || denY === 0) return 0;
-  return num / Math.sqrt(denX * denY);
-}
-
-/**
- * Calculates per-product metrics (Dravnieks, Means) to feed the PCA.
- */
-export function getProductAttributeMatrix(
-  data: HrataObservation[],
-  analyses: AttributeAnalysis[],
-  metric: "dravnieksWeighted" | "dravnieksConditional" | "conditionalFrequency" | "conditionalMeanIntensity",
-  maxIntensityScale: number = 10
-): {
-  products: string[];
-  categories: { labels: string[]; matrix: number[][] }; // Active
-  illustratives: { labels: string[]; matrix: number[][] }; // Illustrative
-} {
-  const products = Array.from(new Set(data.map(d => d.productId)));
-  
-  // Active variables: only classes (categories) with sufficient coverage
-  const activeLabels = analyses.filter(a => a.level === "classe" && !a.isLowCoverage).map(a => a.attributeId);
-  
-  // Illustrative variables: families, descriptors, AND any category that had low coverage
-  const illusLabels = analyses.filter(a => {
-    if (a.level === "classe" && !a.isLowCoverage) return false; // already active
-    return true; // include everything else as illustrative (even low coverage items, for exploratory interpretation)
-  }).map(a => a.attributeId);
-
-  // Group data by attr -> prod -> sub -> val
-  const dataMap: Record<string, Record<string, Record<string, number>>> = {};
-  data.forEach(d => {
-    if (d.intensity != null && d.intensity > 0) {
-      if (!dataMap[d.attributeId]) dataMap[d.attributeId] = {};
-      if (!dataMap[d.attributeId][d.productId]) dataMap[d.attributeId][d.productId] = {};
-      dataMap[d.attributeId][d.productId][d.subjectId] = d.intensity;
-    }
-  });
-
-  const getMat = (labels: string[]) => {
-    const mat: number[][] = products.map(() => []);
-    
-    labels.forEach(attrId => {
-      const an = analyses.find(a => a.attributeId === attrId)!;
-      const nCons = an.subjectsConsidering;
-      const covRate = an.coverageRate;
-
-      products.forEach((prod, pIdx) => {
-        const subNotes = dataMap[attrId]?.[prod] || {};
-        const activeSubs = Object.keys(subNotes);
-        
-        const freq = activeSubs.length;
-        const sumInt = activeSubs.reduce((acc, sub) => acc + subNotes[sub], 0);
-
-        let val = 0;
-        if (nCons > 0) {
-          const freqCond = freq / nCons;
-          const intCondMean = sumInt / nCons;
-          const intPercent = sumInt / (nCons * maxIntensityScale);
-          
-          if (metric === "conditionalFrequency") val = freqCond;
-          else if (metric === "conditionalMeanIntensity") val = intCondMean;
-          else if (metric === "dravnieksConditional") val = Math.sqrt(freqCond * intPercent) * 100;
-          else if (metric === "dravnieksWeighted") val = Math.sqrt(freqCond * intPercent) * 100 * covRate;
-        }
-
-        mat[pIdx].push(val);
-      });
-    });
-
-    return mat;
-  };
-
-  return {
-    products,
-    categories: { labels: activeLabels, matrix: getMat(activeLabels) },
-    illustratives: { labels: illusLabels, matrix: getMat(illusLabels) }
-  };
-}
-
-/**
- * HRATA Multi-block analysis using stats.ts primitives
- */
-export function runHrataMultidimensional(
-  productMatrix: ReturnType<typeof getProductAttributeMatrix>,
-  normalize: boolean = false
-) {
-  // Use non-normalized PCA (Covariance) by default for Dravnieks, else standard Correlation PCA
-  const pcaFn = normalize ? pca2D : pcaCovariance; 
-
-  const activeRes = pcaFn(productMatrix.categories.matrix);
-  
-  // Project illustratives
-  const illusProj = projectToPCA(productMatrix.illustratives.matrix, activeRes.scores);
-
-  return {
-    scores: activeRes.scores,
-    explained: activeRes.explained,
-    activeLoadings: activeRes.loadings,
-    illustrativeLoadings: illusProj
-  };
 }
