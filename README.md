@@ -10,6 +10,8 @@ CiderScope est une application web pour creer des seances d'analyse sensorielle,
 
 Le projet est associe a une plateforme d'analyse sensorielle IFPC. Il expose deux parcours principaux : un parcours participant pour rejoindre une seance active et repondre au questionnaire, et un parcours administration pour configurer les seances, suivre les jurys et exploiter les resultats.
 
+Cette application a été codée en partie par IA (Claude/GPT).
+
 ## Valorisation produit et informations du projet
 
 | Element | Statut dans le depot | Ou le mettre ou le verifier |
