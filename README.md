@@ -19,7 +19,7 @@ Le projet est associe a une plateforme d'analyse sensorielle IFPC. Il expose deu
 | Logo / icone | `public/assets/logo.png`, `public/Logo.jpg`, `public/Logo.ico`, `app/favicon.ico` | README, favicon Next.js, section GitHub "About" si un visuel externe est utilise. |
 | Application | URL indiquee sur GitHub : `https://ciderscope.vercel.app` | Section GitHub "About" puis lien dans le README apres confirmation de production. |
 | Documentation | `docs/wiki/overview.md`, `docs/wiki/getting-started.md`, `docs/integrations.md`, `docs/auto-devops.md`, `k8s/README.md` | Section "Documentation" du README et Wiki GitHub si publie. |
-| Licence | A confirmer. Le depot contient `LICENSE.template`, pas un fichier `LICENSE` final. | Remplacer `LICENSE.template` par `LICENSE` quand la licence est choisie. |
+| Licence | GNU GPL v3.0 | Voir LICENCE |
 | Version applicative | `0.1.0` dans `package.json` | Releases GitHub, changelog, package metadata. |
 | Pipeline qualite | GitHub Actions via `.github/workflows/ci.yml` | Onglet Actions GitHub et badge CI du README. |
 | Deploiement | Vercel prevu via `vercel.json`; templates Kubernetes disponibles dans `k8s/` | Vercel pour l'application courante, Kubernetes seulement apres adaptation des templates. |
