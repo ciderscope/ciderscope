@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ciderscope-deployment
+  labels:
+    app: ciderscope
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ciderscope
+  template:
+    metadata:
+      labels:
+        app: ciderscope
+    spec:
+      containers:
+      - name: ciderscope
+        image: REPLACE_WITH_YOUR_REGISTRY/ciderscope:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: ciderscope-config
+              key: NEXT_PUBLIC_SUPABASE_URL
+        - name: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ciderscope-secrets
+              key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

@@ -117,7 +117,7 @@ export type AnswerValue =
 // Par produit : Record<questionId, AnswerValue>.
 // Pour "_global" : Record<questionId, AnswerValue>.
 // Pour les autres : structures ad hoc typées plus souplement.
-export type JurorAnswerValue =
+type JurorAnswerValue =
   | AnswerValue
   | Record<string, AnswerValue>
   | Record<string, number>

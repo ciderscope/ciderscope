@@ -123,7 +123,7 @@ export function ChipPool({ codes, label }: { codes: string[]; label?: string }) 
   );
 }
 
-export function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
+function DraggableSerie({ codes, onChange, onRemove, onAdd }: {
   codes: string[];
   onChange: (c: string[]) => void;
   onRemove: (code: string) => void;

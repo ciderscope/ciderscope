@@ -138,7 +138,7 @@ export const posteToPresentationIndex = (poste: Poste | null): number | null => 
   return (poste.day === "jeudi" ? 10 : 0) + (poste.num - 1);
 };
 
-export const getJurorIndex = (name: string, jurorList: string[]): number => {
+const getJurorIndex = (name: string, jurorList: string[]): number => {
   const idx = jurorList.indexOf(name);
   return idx >= 0 ? idx : jurorList.length;
 };
