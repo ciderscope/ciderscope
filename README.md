@@ -68,8 +68,8 @@ L'ecran d'analyse est charge a la demande et s'appuie sur Chart.js. Selon le que
 
 Deux exports CSV sont disponibles depuis l'administration :
 
-- CSV standard au format long ;
-- CSV FactoMineR/R pour les donnees quantitatives.
+- CSV standard au format base de donnée ;
+- CSV FactoMineR/R pour les donnees en mode tableau.
 
 ## Parcours utilisateur
 
@@ -90,7 +90,7 @@ Deux exports CSV sont disponibles depuis l'administration :
 4. Suivre ou supprimer les jurys associes a une seance.
 5. Ouvrir les analyses et exporter les resultats.
 
-TODO: remplacer les identifiants admin codes en dur par une authentification configuree avant tout usage de production.
+Les indentifiants actuels sont en dur dans le code car il n'y a pas de besoin fort de sécurité pour notre usage interne. Une identification sécurisée serait nécessaire en fonction des besoins.
 
 ## Documentation
 
@@ -144,7 +144,7 @@ Option de developpement :
 NEXT_PUBLIC_ENABLE_TEST_DATA=1
 ```
 
-Cette option affiche le bouton de generation de participants fictifs dans l'administration.
+Cette option affiche le bouton de generation de participants fictifs dans l'administration pour lancer des tests.
 
 ## Base de donnees
 
@@ -153,7 +153,7 @@ Le schema Supabase est documente dans `supabase-schema.sql`. Il cree :
 - `sessions` : configuration, statut actif, compteur de jurys et visibilite des resultats ;
 - `answers` : reponses par couple seance / jury.
 
-TODO: restreindre les politiques RLS avant production. Le fichier SQL contient actuellement des politiques publiques a adapter selon l'authentification retenue.
+Il faudra penser à restreindre les politiques RLS avant production. Le fichier SQL contient actuellement des politiques publiques a adapter selon l'authentification retenue.
 
 ## Commandes
 
@@ -179,7 +179,6 @@ Le depot contient `vercel.json` avec le framework `nextjs`, ce qui indique un de
 
 Les fichiers `k8s/deployment.yaml`, `k8s/service.yaml` et `k8s/ingress.yaml` sont des templates documentaires. Ils doivent etre adaptes avant un deploiement reel, notamment avec une image Docker, une registry, un `ConfigMap` et un `Secret`.
 
-TODO: confirmer l'URL officielle de production et documenter le processus de release.
 
 ## Structure du depot
 
@@ -217,16 +216,13 @@ Consulter [CONTRIBUTING.md](CONTRIBUTING.md) pour les conventions de developpeme
 
 ## Licence
 
-La licence n'est pas encore confirmee dans le depot. Un fichier `LICENSE.template` est fourni comme point de depart.
+Ce projet est distribué sous licence GNU GPL v3.0.
 
-TODO: choisir la licence, ajouter un fichier `LICENSE` final, puis mettre a jour la section GitHub "About" pour que GitHub detecte correctement la licence.
+Vous pouvez utiliser, modifier et redistribuer ce logiciel, à condition que les versions redistribuées restent sous licence GPL et que le code source reste disponible conformément aux termes de la licence.
+
+Voir le fichier `LICENSE` pour le texte complet.
 
 ## A completer avant publication
 
-- Confirmer la licence et l'identite du titulaire des droits.
-- Confirmer l'URL officielle de production.
-- Definir le contact support ou mainteneur.
 - Ajouter une description courte dans GitHub "About" : `Plateforme web d'analyse sensorielle pour seances de degustation, jurys et analyses de panel`.
 - Ajouter des topics GitHub coherents, par exemple : `sensory-analysis`, `nextjs`, `supabase`, `typescript`, `chartjs`, `ifpc`.
-- Transformer `LICENSE.template` en `LICENSE`.
-- Publier une premiere release si la version `0.1.0` correspond a un jalon stable.
