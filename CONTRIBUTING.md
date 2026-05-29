@@ -31,4 +31,4 @@ First off, thank you for considering contributing to CiderScope!
 
 ## Making changes as an AI Agent
 
-Please refer to `AGENTS.md` and `CLAUDE.md` for specific rules regarding automated modifications. Modification of application code without explicit user consent is strictly prohibited.
+Please refer to `CLAUDE.md` for specific rules regarding automated modifications. Modification of application code without explicit user consent is strictly prohibited.
