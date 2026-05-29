@@ -23,7 +23,7 @@ Le projet est associe a une plateforme d'analyse sensorielle IFPC. Il expose deu
 | Version applicative | `0.1.0` dans `package.json` | Releases GitHub, changelog, package metadata. |
 | Pipeline qualite | GitHub Actions via `.github/workflows/ci.yml` | Onglet Actions GitHub et badge CI du README. |
 | Deploiement | Vercel prevu via `vercel.json`; templates Kubernetes disponibles dans `k8s/` | Vercel pour l'application courante, Kubernetes seulement apres adaptation des templates. |
-| Contact / support | TODO: definir le contact projet officiel | Section GitHub "About", README, documentation interne. |
+| Contact / support | lucas.semaan@ifpc.eu | Section GitHub "About", README, documentation interne. |
 
 ## Ce que permet CiderScope
 
