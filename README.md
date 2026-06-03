@@ -223,8 +223,3 @@ Ce projet est distribué sous licence GNU GPL v3.0.
 Vous pouvez utiliser, modifier et redistribuer ce logiciel, à condition que les versions redistribuées restent sous licence GPL et que le code source reste disponible conformément aux termes de la licence.
 
 Voir le fichier `LICENSE` pour le texte complet.
-
-## A completer avant publication
-
-- Ajouter une description courte dans GitHub "About" : `Plateforme web d'analyse sensorielle pour seances de degustation, jurys et analyses de panel`.
-- Ajouter des topics GitHub coherents, par exemple : `sensory-analysis`, `nextjs`, `supabase`, `typescript`, `chartjs`, `ifpc`.
