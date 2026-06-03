@@ -94,3 +94,10 @@ export function buildRadarDisplayAxes(criteria: string[], preset: RadarDisplayPr
     };
   });
 }
+
+export function applyRadarAxisCorrection(value: number, correction: number, max: number): number {
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const safeCorrection = Number.isFinite(correction) ? correction : 1; // Par défaut, multiplier par 1 (pas de changement)
+  const safeMax = Number.isFinite(max) && max > 0 ? max : 10;
+  return Math.min(safeMax, Math.max(0, safeValue * safeCorrection));
+}

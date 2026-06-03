@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo, Fragment } from "react";
+import React, { useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Radar, Scatter } from "react-chartjs-2";
 import type { TooltipItem } from "chart.js";
 import { Card } from "../../ui/Card";
@@ -20,16 +20,18 @@ import { rvCoefficient, dravnieksScore, pcaCovariance } from "../../../lib/stats
 import { analyzeAttributes, HrataObservation } from "../../../lib/hrata";
 import type { SessionConfig, AllAnswers, Question, Product, RadarAxis, RadarAnswer } from "../../../types";
 import { getChartColors, pearson, flattenRadarAnswers } from "./utils";
-import { buildRadarDisplayAxes, FRUITY_RADAR_DISPLAY_PRESET, type RadarDisplayAxis } from "../../../lib/radarDisplayPreset";
+import { supabase } from "../../../lib/supabase";
+import { applyRadarAxisCorrection, buildRadarDisplayAxes, FRUITY_RADAR_DISPLAY_PRESET, type RadarDisplayAxis } from "../../../lib/radarDisplayPreset";
 
 interface AnalyseRadarProps {
   config: SessionConfig;
   allAnswers: AllAnswers;
+  sessionId?: string;
   participantMode?: boolean;
   currentJuror?: string;
 }
 
-const grid2Class = "grid2 grid min-w-0 grid-cols-2 gap-4 [&>*]:min-w-0 max-[900px]:grid-cols-1 max-[480px]:gap-2.5 min-[1600px]:grid-cols-3";
+const grid2Class = "grid2 grid min-w-0 grid-cols-1 gap-4 [&>*]:min-w-0 max-[480px]:gap-2.5 min-[901px]:grid-cols-[repeat(var(--analysis-panel-cols-lg),minmax(0,1fr))] min-[1600px]:grid-cols-[repeat(var(--analysis-panel-cols-wide),minmax(0,1fr))]";
 const pcaLevelSwitchClass = "pca-level-switch inline-flex overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--paper)] max-[480px]:max-w-full max-[480px]:flex-wrap";
 const pcaLevelBtnClass = (active: boolean) => [
   "pca-level-btn border-0 bg-transparent px-3.5 py-1.5 text-xs font-medium text-[var(--ink)] transition-all duration-100 hover:bg-[var(--paper2)] [&:not(:last-child)]:border-r [&:not(:last-child)]:border-[var(--border)] max-[480px]:min-w-0 max-[480px]:px-2.5 max-[480px]:text-[11.5px]",
@@ -49,6 +51,28 @@ type HiddenLegendMap = Record<string, Record<string, boolean>>;
 type ChartLegendItem = { id: string; label: string; color: string; visible: boolean };
 type RadarDisplayMode = "standard" | typeof FRUITY_RADAR_DISPLAY_PRESET.id;
 type RadarPanel = { id: string; title: string; displayAxes: RadarDisplayAxis[]; fixedScale: boolean };
+type CorrectionSaveStatus = "idle" | "saving" | "saved" | "error";
+type RadarCorrectionSettings = Record<string, Record<string, Record<string, number>>>;
+
+const RADAR_CORRECTIONS_SETTINGS_KEY = "radarCorrectionFactors";
+const radarChartWithCorrectionsClass = "grid grid-cols-[minmax(280px,460px)_minmax(220px,280px)] items-center gap-4";
+const radarCorrectionPanelClass = "rounded-md border border-[var(--border)] bg-[var(--paper2)] p-3";
+const radarCorrectionTitleClass = "mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--mid)]";
+const radarCorrectionRowsClass = "flex flex-col gap-2";
+const radarCorrectionRowClass = "grid grid-cols-[minmax(0,1fr)_96px] items-center gap-2";
+const radarCorrectionLabelClass = "min-w-0 truncate text-xs font-medium text-[var(--ink)]";
+const radarCorrectionInputClass = "h-8 w-full rounded-md border border-[var(--border)] bg-[var(--paper)] px-2 text-right font-mono text-xs text-[var(--ink)] outline-none focus:border-[var(--accent)]";
+const radarCorrectionStatusClass: Record<CorrectionSaveStatus, string> = {
+  idle: "text-[var(--mid)]",
+  saving: "text-[#8a5a00]",
+  saved: "text-[#1a6b3a]",
+  error: "text-[#c0392b]",
+};
+
+const radarPanelGridStyle = (itemCount: number) => ({
+  "--analysis-panel-cols-lg": Math.max(1, Math.min(itemCount, 2)),
+  "--analysis-panel-cols-wide": Math.max(1, Math.min(itemCount, 3)),
+} as React.CSSProperties);
 
 function getSwatchTextColor(color: string): string {
   const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
@@ -124,6 +148,97 @@ function ChartToggleLegend({
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeCorrectionSettings(value: unknown): RadarCorrectionSettings {
+  if (!isRecord(value)) return {};
+  const out: RadarCorrectionSettings = {};
+
+  for (const [questionId, byPreset] of Object.entries(value)) {
+    if (!isRecord(byPreset)) continue;
+    const presetOut: Record<string, Record<string, number>> = {};
+    for (const [presetId, byAxis] of Object.entries(byPreset)) {
+      if (!isRecord(byAxis)) continue;
+      const axisOut: Record<string, number> = {};
+      for (const [axisLabel, raw] of Object.entries(byAxis)) {
+        const n = typeof raw === "number" ? raw : Number(raw);
+        if (Number.isFinite(n)) axisOut[axisLabel] = n;
+      }
+      presetOut[presetId] = axisOut;
+    }
+    out[questionId] = presetOut;
+  }
+
+  return out;
+}
+
+function getCorrectionValue(corrections: RadarCorrectionSettings, questionId: string, presetId: string, axisLabel: string): number {
+  return corrections[questionId]?.[presetId]?.[axisLabel] ?? 0;
+}
+
+function formatCorrectionInput(value: number): string {
+  return value === 0 ? "1.00" : value.toFixed(2);
+}
+
+function correctionStatusLabel(status: CorrectionSaveStatus): string {
+  if (status === "saving") return "Enregistrement...";
+  if (status === "saved") return "Enregistré";
+  if (status === "error") return "Erreur de sauvegarde";
+  return "Correction multiplicative";
+}
+
+function RadarCorrectionControls({
+  axes,
+  questionId,
+  presetId,
+  corrections,
+  status,
+  onChange,
+}: {
+  axes: RadarDisplayAxis[];
+  questionId: string;
+  presetId: string;
+  corrections: RadarCorrectionSettings;
+  status: CorrectionSaveStatus;
+  onChange: (questionId: string, presetId: string, axisLabel: string, value: number) => void;
+}) {
+  return (
+    <div className={radarCorrectionPanelClass}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className={radarCorrectionTitleClass}>Correction</div>
+        <div className={`text-[10px] ${radarCorrectionStatusClass[status]}`}>
+          {correctionStatusLabel(status)}
+        </div>
+      </div>
+      <div className={radarCorrectionRowsClass}>
+        {axes.map(axis => {
+          const value = getCorrectionValue(corrections, questionId, presetId, axis.label);
+          return (
+            <label key={axis.label} className={radarCorrectionRowClass}>
+              <span className={radarCorrectionLabelClass}>{axis.label}</span>
+              <input
+                type="number"
+                step="0.1"
+                inputMode="decimal"
+                value={formatCorrectionInput(value)}
+                onChange={(e) => {
+                  const raw = e.currentTarget.value;
+                  const next = raw === "" ? 0 : Number(raw);
+                  onChange(questionId, presetId, axis.label, Number.isFinite(next) ? next : 0);
+                }}
+                className={radarCorrectionInputClass}
+                aria-label={`Correction ${axis.label}`}
+              />
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const getRadarAnswer = (answers: AllAnswers[string] | undefined, productCode: string, questionId: string): RadarAnswer | undefined => {
   const section = answers?.[productCode];
   if (!section || typeof section !== "object" || Array.isArray(section)) return undefined;
@@ -132,10 +247,99 @@ const getRadarAnswer = (answers: AllAnswers[string] | undefined, productCode: st
   return value as RadarAnswer;
 };
 
-export function AnalyseRadar({ config, allAnswers, participantMode, currentJuror }: AnalyseRadarProps) {
+export function AnalyseRadar({ config, allAnswers, sessionId, participantMode, currentJuror }: AnalyseRadarProps) {
   const radarQs = config.questions.filter(q => q.type === "radar");
   const products = config.products || [];
   const jurors = useMemo(() => Object.keys(allAnswers), [allAnswers]);
+  const [radarCorrections, setRadarCorrections] = useState<RadarCorrectionSettings>({});
+  const [correctionSaveStatus, setCorrectionSaveStatus] = useState<CorrectionSaveStatus>("idle");
+  const analysisSettingsRef = useRef<Record<string, unknown>>({});
+  const radarCorrectionsRef = useRef<RadarCorrectionSettings>({});
+  const correctionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (participantMode || !sessionId) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadCorrections = async () => {
+      const { data, error } = await supabase
+        .from("sessions")
+        .select("analysis_settings")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        console.error("Erreur lors du chargement des corrections radar:", error);
+        setCorrectionSaveStatus("error");
+        return;
+      }
+
+      const row = data as { analysis_settings?: unknown } | null;
+      const settings = isRecord(row?.analysis_settings) ? row.analysis_settings : {};
+      const nextCorrections = normalizeCorrectionSettings(settings[RADAR_CORRECTIONS_SETTINGS_KEY]);
+      analysisSettingsRef.current = settings;
+      radarCorrectionsRef.current = nextCorrections;
+      setRadarCorrections(nextCorrections);
+      setCorrectionSaveStatus("idle");
+    };
+
+    void loadCorrections();
+    return () => { cancelled = true; };
+  }, [participantMode, sessionId]);
+
+  useEffect(() => {
+    return () => {
+      if (correctionSaveTimerRef.current) clearTimeout(correctionSaveTimerRef.current);
+    };
+  }, []);
+
+  const scheduleCorrectionSave = (nextCorrections: RadarCorrectionSettings) => {
+    if (participantMode || !sessionId) return;
+    if (correctionSaveTimerRef.current) clearTimeout(correctionSaveTimerRef.current);
+    setCorrectionSaveStatus("saving");
+
+    correctionSaveTimerRef.current = setTimeout(() => {
+      correctionSaveTimerRef.current = null;
+      const nextSettings = {
+        ...analysisSettingsRef.current,
+        [RADAR_CORRECTIONS_SETTINGS_KEY]: nextCorrections,
+      };
+
+      void supabase
+        .from("sessions")
+        .update({ analysis_settings: nextSettings })
+        .eq("id", sessionId)
+        .then(({ error }) => {
+          if (error) {
+            console.error("Erreur lors de l'enregistrement des corrections radar:", error);
+            setCorrectionSaveStatus("error");
+            return;
+          }
+          analysisSettingsRef.current = nextSettings;
+          setCorrectionSaveStatus("saved");
+        });
+    }, 400);
+  };
+
+  const setRadarCorrection = (questionId: string, presetId: string, axisLabel: string, value: number) => {
+    const correction = Number.isFinite(value) ? value : 0;
+    const prev = radarCorrectionsRef.current;
+    const next = {
+      ...prev,
+      [questionId]: {
+        ...(prev[questionId] || {}),
+        [presetId]: {
+          ...(prev[questionId]?.[presetId] || {}),
+          [axisLabel]: correction,
+        },
+      },
+    };
+    radarCorrectionsRef.current = next;
+    setRadarCorrections(next);
+    scheduleCorrectionSave(next);
+  };
 
   if (radarQs.length === 0) {
     return <AnalysisEmpty>Aucune donnée radar disponible.</AnalysisEmpty>;
@@ -144,13 +348,44 @@ export function AnalyseRadar({ config, allAnswers, participantMode, currentJuror
   return (
     <AnalysisStack deep>
       {radarQs.map(q => (
-        <RadarQuestionAnalysis key={q.id} question={q} products={products} jurors={jurors} allAnswers={allAnswers} participantMode={participantMode} currentJuror={currentJuror} />
+        <RadarQuestionAnalysis
+          key={q.id}
+          question={q}
+          products={products}
+          jurors={jurors}
+          allAnswers={allAnswers}
+          participantMode={participantMode}
+          currentJuror={currentJuror}
+          radarCorrections={radarCorrections}
+          correctionSaveStatus={correctionSaveStatus}
+          onCorrectionChange={setRadarCorrection}
+        />
       ))}
     </AnalysisStack>
   );
 }
 
-function RadarQuestionAnalysis({ question, products, jurors, allAnswers, participantMode, currentJuror }: { question: Question; products: Product[]; jurors: string[]; allAnswers: AllAnswers; participantMode?: boolean; currentJuror?: string }) {
+function RadarQuestionAnalysis({
+  question,
+  products,
+  jurors,
+  allAnswers,
+  participantMode,
+  currentJuror,
+  radarCorrections,
+  correctionSaveStatus,
+  onCorrectionChange,
+}: {
+  question: Question;
+  products: Product[];
+  jurors: string[];
+  allAnswers: AllAnswers;
+  participantMode?: boolean;
+  currentJuror?: string;
+  radarCorrections: RadarCorrectionSettings;
+  correctionSaveStatus: CorrectionSaveStatus;
+  onCorrectionChange: (questionId: string, presetId: string, axisLabel: string, value: number) => void;
+}) {
   // Criteria par groupe (pour filtrer l'ACP) + liste globale
   const groups = useMemo(() => question.radarGroups || [], [question.radarGroups]);
   const { criteriaByGroup, criteria } = useMemo(() => {
@@ -452,6 +687,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   const pcaLegendScope = `${question.id}:${activeGroup?.id || "all"}:${effectiveLevel}`;
   const pcaProductLegendKey = `${pcaLegendScope}:pca-products`;
   const pcaCriteriaLegendKey = `${pcaLegendScope}:pca-criteria`;
+  const radarPanelItemCount = radarPanels.length * (participantMode && currentJuror ? 2 : 1);
 
   return (
     <AnalysisStack>
@@ -494,16 +730,29 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
         )}
       </div>
 
-      <div className={grid2Class}>
+      <div className={grid2Class} style={radarPanelGridStyle(radarPanelItemCount)}>
         {radarPanels.map((panel) => {
           const panelRadarKey = `${question.id}:${panel.id}:panel`;
           const jurorRadarKey = `${question.id}:${panel.id}:juror`;
+          const isCorrectionPanel = !participantMode && panel.id === FRUITY_RADAR_DISPLAY_PRESET.id;
+          const correctedPanelValue = (productCode: string, axis: RadarDisplayAxis): number => {
+            const raw = avg(productCode, axis.id);
+            if (!isCorrectionPanel) return raw;
+            const correction = getCorrectionValue(radarCorrections, question.id, panel.id, axis.label);
+            return applyRadarAxisCorrection(raw, correction, fixedScaleMax);
+          };
+          const correctedJurorValue = (juror: string, productCode: string, axis: RadarDisplayAxis): number => {
+            const raw = getNote(juror, productCode, axis.id) ?? 0;
+            if (!isCorrectionPanel) return raw;
+            const correction = getCorrectionValue(radarCorrections, question.id, panel.id, axis.label);
+            return applyRadarAxisCorrection(raw, correction, fixedScaleMax);
+          };
 
           const radarData = {
             labels: panel.displayAxes.map(axis => axis.label),
             datasets: products.map((p, pi) => ({
               label: p.code,
-              data: panel.displayAxes.map(axis => avg(p.code, axis.id)),
+              data: panel.displayAxes.map(axis => correctedPanelValue(p.code, axis)),
               borderColor: chartColors[pi % chartColors.length],
               backgroundColor: chartColors[pi % chartColors.length] + "22",
               pointBackgroundColor: chartColors[pi % chartColors.length],
@@ -515,7 +764,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             labels: panel.displayAxes.map(axis => axis.label),
             datasets: products.map((p, pi) => ({
               label: p.code,
-              data: panel.displayAxes.map(axis => getNote(currentJuror, p.code, axis.id) ?? 0),
+              data: panel.displayAxes.map(axis => correctedJurorValue(currentJuror, p.code, axis)),
               borderColor: chartColors[pi % chartColors.length],
               backgroundColor: chartColors[pi % chartColors.length] + "22",
               pointBackgroundColor: chartColors[pi % chartColors.length],
@@ -533,10 +782,10 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             if (top <= 0) return 1;
             return Math.min(10, Math.max(1, Math.ceil(top * 1.2)));
           };
-          const panelValues = panel.displayAxes.flatMap(axis => products.map(p => avg(p.code, axis.id)));
+          const panelValues = panel.displayAxes.flatMap(axis => products.map(p => correctedPanelValue(p.code, axis)));
           const radarMax = panel.fixedScale ? fixedScaleMax : computeMax(panelValues);
           const jurorValues = jurorRadarData
-            ? panel.displayAxes.flatMap(axis => products.map(p => getNote(currentJuror!, p.code, axis.id) ?? 0))
+            ? panel.displayAxes.flatMap(axis => products.map(p => correctedJurorValue(currentJuror!, p.code, axis)))
             : [];
           const jurorMax = panel.fixedScale ? fixedScaleMax : computeMax(jurorValues);
           // Options communes : on désactive explicitement le rectangle gris
@@ -572,9 +821,25 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           return (
             <Fragment key={panel.id}>
               <Card title={participantMode ? `${panel.title} (Moyenne globale)` : panel.title}>
-                <div className={ANALYSIS_RADAR_WRAP}>
-                  <Radar data={radarData} options={buildOpts(radarMax)} />
-                </div>
+                {isCorrectionPanel ? (
+                  <div className={radarChartWithCorrectionsClass}>
+                    <div className={ANALYSIS_RADAR_WRAP}>
+                      <Radar data={radarData} options={buildOpts(radarMax)} />
+                    </div>
+                    <RadarCorrectionControls
+                      axes={panel.displayAxes}
+                      questionId={question.id}
+                      presetId={panel.id}
+                      corrections={radarCorrections}
+                      status={correctionSaveStatus}
+                      onChange={onCorrectionChange}
+                    />
+                  </div>
+                ) : (
+                  <div className={ANALYSIS_RADAR_WRAP}>
+                    <Radar data={radarData} options={buildOpts(radarMax)} />
+                  </div>
+                )}
                 <ChartToggleLegend
                   items={legendItemsFor(panelRadarKey)}
                   ariaLabel="Légende des échantillons"
@@ -602,7 +867,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                               {axis.label}
                             </td>
                             {products.map(p => {
-                              const m = avg(p.code, axis.id);
+                              const m = correctedPanelValue(p.code, axis);
                               const s = sd(p.code, axis.id);
                               return <td key={p.code} className={`${ANALYSIS_NUM_CELL} ${m > 0 ? "opacity-100" : "opacity-30"}`}>
                                 {m > 0 ? `${m.toFixed(1)} ±${s.toFixed(1)}` : "—"}
@@ -719,7 +984,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
       )}
 
       {pcaRes && (
-        <div className={grid2Class}>
+        <div className={grid2Class} style={radarPanelGridStyle(2)}>
           <Card title={`ACP — Carte des produits · ${activeGroup?.title || ""} (${levelLabel[effectiveLevel].toLowerCase()})`}>
             <div className={ANALYSIS_CHART_BOX}>
               <Scatter
