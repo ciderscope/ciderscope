@@ -20,6 +20,7 @@ import { rvCoefficient, dravnieksScore, pcaCovariance } from "../../../lib/stats
 import { analyzeAttributes, HrataObservation } from "../../../lib/hrata";
 import type { SessionConfig, AllAnswers, Question, Product, RadarAxis, RadarAnswer } from "../../../types";
 import { getChartColors, pearson, flattenRadarAnswers } from "./utils";
+import { buildRadarDisplayAxes, FRUITY_RADAR_DISPLAY_PRESET, type RadarDisplayAxis } from "../../../lib/radarDisplayPreset";
 
 interface AnalyseRadarProps {
   config: SessionConfig;
@@ -34,6 +35,10 @@ const pcaLevelBtnClass = (active: boolean) => [
   "pca-level-btn border-0 bg-transparent px-3.5 py-1.5 text-xs font-medium text-[var(--ink)] transition-all duration-100 hover:bg-[var(--paper2)] [&:not(:last-child)]:border-r [&:not(:last-child)]:border-[var(--border)] max-[480px]:min-w-0 max-[480px]:px-2.5 max-[480px]:text-[11.5px]",
   active ? "active bg-[var(--ink)] text-white hover:bg-[var(--ink)]" : "",
 ].filter(Boolean).join(" ");
+const radarModeBtnClass = (active: boolean) => [
+  "border-0 bg-transparent px-3.5 py-1.5 text-xs font-medium text-[var(--ink)] transition-all duration-100 hover:bg-[var(--paper2)] [&:not(:last-child)]:border-r [&:not(:last-child)]:border-[var(--border)] max-[480px]:min-w-0 max-[480px]:px-2.5 max-[480px]:text-[11.5px]",
+  active ? "!bg-[var(--ink)] !text-white hover:!bg-[var(--ink)]" : "",
+].filter(Boolean).join(" ");
 const radarLegendClass = "mt-3 flex flex-wrap items-center justify-center gap-2";
 const radarLegendItemClass = "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--paper2)] px-2 text-xs text-[var(--ink)] transition-colors hover:border-[var(--accent)]";
 const radarLegendCheckClass = "h-4 w-4 cursor-pointer accent-[var(--accent)]";
@@ -42,6 +47,8 @@ const radarLegendAllLabelClass = `${radarLegendItemClass} bg-[var(--paper)] font
 
 type HiddenLegendMap = Record<string, Record<string, boolean>>;
 type ChartLegendItem = { id: string; label: string; color: string; visible: boolean };
+type RadarDisplayMode = "standard" | typeof FRUITY_RADAR_DISPLAY_PRESET.id;
+type RadarPanel = { id: string; title: string; displayAxes: RadarDisplayAxis[]; fixedScale: boolean };
 
 function getSwatchTextColor(color: string): string {
   const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
@@ -183,6 +190,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
   // ── Niveau d'affichage / ACP — types et états (déclarés tôt pour être en scope partout) ──
   type PcaLevel = "famille" | "classe" | "descripteur";
   const [displayLevel, setDisplayLevel] = useState<PcaLevel>("famille");
+  const [displayMode, setDisplayMode] = useState<RadarDisplayMode>("standard");
   const [pcaLevel, setPcaLevel] = useState<PcaLevel>("descripteur");
   const [pcaGroupId, setPcaGroupId] = useState<string>(groups[0]?.id ?? "");
   const [hiddenProductsByChart, setHiddenProductsByChart] = useState<HiddenLegendMap>({});
@@ -372,6 +380,47 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
     return s / products.length;
   };
   const TOP_N = 9;
+  const fixedScaleMax = Math.max(1, question.max ?? 10);
+  const specialRadarAxes = useMemo(
+    () => buildRadarDisplayAxes(criteria, FRUITY_RADAR_DISPLAY_PRESET),
+    [criteria]
+  );
+  const buildStandardRadarAxes = (axes: RadarAxis[]): RadarDisplayAxis[] => {
+    const groupCriteria: string[] = [];
+    const walk = (items: RadarAxis[], prefix = "") => {
+      items.forEach(ax => {
+        const full = prefix ? `${prefix} > ${ax.label}` : ax.label;
+        groupCriteria.push(full);
+        if (ax.children) walk(ax.children, full);
+      });
+    };
+    walk(axes);
+
+    const isFlat = groupCriteria.length > 0 && groupCriteria.every(c => !c.includes(" > "));
+    const effectiveDisplayLevel: PcaLevel = isFlat ? "famille" : displayLevel;
+    const displayCriteriaAll = groupCriteria
+      .filter(c => depthOf(c) === levelDepth[effectiveDisplayLevel])
+      .filter(c => products.some(p => avg(p.code, c) > 0));
+
+    return [...displayCriteriaAll]
+      .sort((a, b) => overallMean(b) - overallMean(a))
+      .slice(0, TOP_N)
+      .map(c => ({ id: c, label: c.split(" > ").pop() || c, matched: true }));
+  };
+  const useSpecialRadarDisplay = !participantMode && displayMode === FRUITY_RADAR_DISPLAY_PRESET.id;
+  const radarPanels: RadarPanel[] = useSpecialRadarDisplay
+    ? [{
+        id: FRUITY_RADAR_DISPLAY_PRESET.id,
+        title: FRUITY_RADAR_DISPLAY_PRESET.label,
+        displayAxes: specialRadarAxes,
+        fixedScale: FRUITY_RADAR_DISPLAY_PRESET.fixedScale,
+      }]
+    : groups.map(g => ({
+        id: g.id,
+        title: g.title,
+        displayAxes: buildStandardRadarAxes(g.axes),
+        fixedScale: false,
+      }));
   const pcaCriteriaAll = scopeCriteria
     .filter(c => depthOf(c) === levelDepth[effectiveLevel])
     .filter(c => products.some(p => avg(p.code, c) > 0));
@@ -422,42 +471,39 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             </button>
           ))}
         </div>
+        {!participantMode && (
+          <>
+            <ToolbarLabel>Modèle radar</ToolbarLabel>
+            <div className={pcaLevelSwitchClass}>
+              <button
+                type="button"
+                className={radarModeBtnClass(displayMode === "standard")}
+                onClick={() => setDisplayMode("standard")}
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                className={radarModeBtnClass(displayMode === FRUITY_RADAR_DISPLAY_PRESET.id)}
+                onClick={() => setDisplayMode(FRUITY_RADAR_DISPLAY_PRESET.id)}
+              >
+                7 axes fruités
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className={grid2Class}>
-        {(question.radarGroups || []).map((g) => {
-          const groupCriteria: string[] = [];
-          const walk = (axes: RadarAxis[], prefix = "") => {
-            axes.forEach(ax => {
-              const full = prefix ? `${prefix} > ${ax.label}` : ax.label;
-              groupCriteria.push(full);
-              if (ax.children) walk(ax.children, full);
-            });
-          };
-          walk(g.axes);
-
-          // Critères sélectionnés selon le niveau d'affichage. Les groupes "plats" (sans
-          // hiérarchie, ex. profil gustatif) restent affichés tels quels au niveau famille.
-          const isFlat = groupCriteria.length > 0 && groupCriteria.every(c => !c.includes(" > "));
-          const effectiveDisplayLevel: PcaLevel = isFlat ? "famille" : displayLevel;
-          const displayCriteriaAll = groupCriteria
-            .filter(c => depthOf(c) === levelDepth[effectiveDisplayLevel])
-            .filter(c => products.some(p => avg(p.code, c) > 0));
-          // Quel que soit le niveau, on cape à TOP_N (9) critères en triant
-          // par moyenne globale décroissante : les nuls sont déjà exclus par
-          // le filtre `avg > 0` ci-dessus, donc on n'affiche que les plus
-          // marqués jusqu'à 9 max — radar lisible et homogène entre niveaux.
-          const displayCriteria = [...displayCriteriaAll]
-            .sort((a, b) => overallMean(b) - overallMean(a))
-            .slice(0, TOP_N);
-          const panelRadarKey = `${question.id}:${g.id}:panel`;
-          const jurorRadarKey = `${question.id}:${g.id}:juror`;
+        {radarPanels.map((panel) => {
+          const panelRadarKey = `${question.id}:${panel.id}:panel`;
+          const jurorRadarKey = `${question.id}:${panel.id}:juror`;
 
           const radarData = {
-            labels: displayCriteria.map(c => c.split(" > ").pop()),
+            labels: panel.displayAxes.map(axis => axis.label),
             datasets: products.map((p, pi) => ({
               label: p.code,
-              data: displayCriteria.map(c => avg(p.code, c)),
+              data: panel.displayAxes.map(axis => avg(p.code, axis.id)),
               borderColor: chartColors[pi % chartColors.length],
               backgroundColor: chartColors[pi % chartColors.length] + "22",
               pointBackgroundColor: chartColors[pi % chartColors.length],
@@ -466,10 +512,10 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           };
 
           const jurorRadarData = (participantMode && currentJuror) ? {
-            labels: displayCriteria.map(c => c.split(" > ").pop()),
+            labels: panel.displayAxes.map(axis => axis.label),
             datasets: products.map((p, pi) => ({
               label: p.code,
-              data: displayCriteria.map(c => getNote(currentJuror, p.code, c) ?? 0),
+              data: panel.displayAxes.map(axis => getNote(currentJuror, p.code, axis.id) ?? 0),
               borderColor: chartColors[pi % chartColors.length],
               backgroundColor: chartColors[pi % chartColors.length] + "22",
               pointBackgroundColor: chartColors[pi % chartColors.length],
@@ -487,12 +533,12 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
             if (top <= 0) return 1;
             return Math.min(10, Math.max(1, Math.ceil(top * 1.2)));
           };
-          const panelValues = displayCriteria.flatMap(c => products.map(p => avg(p.code, c)));
-          const radarMax = computeMax(panelValues);
+          const panelValues = panel.displayAxes.flatMap(axis => products.map(p => avg(p.code, axis.id)));
+          const radarMax = panel.fixedScale ? fixedScaleMax : computeMax(panelValues);
           const jurorValues = jurorRadarData
-            ? displayCriteria.flatMap(c => products.map(p => getNote(currentJuror!, p.code, c) ?? 0))
+            ? panel.displayAxes.flatMap(axis => products.map(p => getNote(currentJuror!, p.code, axis.id) ?? 0))
             : [];
-          const jurorMax = computeMax(jurorValues);
+          const jurorMax = panel.fixedScale ? fixedScaleMax : computeMax(jurorValues);
           // Options communes : on désactive explicitement le rectangle gris
           // derrière les graduations (backdrop) pour garantir un rendu
           // identique entre admin et résumé participant, indépendamment
@@ -508,6 +554,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                 r: {
                   beginAtZero: true,
                   max,
+                  ...(panel.fixedScale ? { startAngle: 0 } : {}),
                   ticks: {
                     showLabelBackdrop: false,
                     backdropColor: "transparent" as const,
@@ -523,8 +570,8 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
           };
 
           return (
-            <Fragment key={g.id}>
-              <Card title={participantMode ? `${g.title} (Moyenne globale)` : g.title}>
+            <Fragment key={panel.id}>
+              <Card title={participantMode ? `${panel.title} (Moyenne globale)` : panel.title}>
                 <div className={ANALYSIS_RADAR_WRAP}>
                   <Radar data={radarData} options={buildOpts(radarMax)} />
                 </div>
@@ -546,17 +593,17 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                         </tr>
                       </thead>
                       <tbody>
-                        {displayCriteria.map(c => (
-                          <tr key={c}>
+                        {panel.displayAxes.map(axis => (
+                          <tr key={axis.id}>
                             <td
-                              className={c.includes(">") ? "font-normal text-[var(--mid)]" : "font-bold"}
-                              style={{ paddingLeft: `${(c.split(" > ").length - 1) * 12}px` }}
+                              className={!panel.fixedScale && axis.id.includes(">") ? "font-normal text-[var(--mid)]" : "font-bold"}
+                              style={{ paddingLeft: panel.fixedScale ? 0 : `${(axis.id.split(" > ").length - 1) * 12}px` }}
                             >
-                              {c.split(" > ").pop()}
+                              {axis.label}
                             </td>
                             {products.map(p => {
-                              const m = avg(p.code, c);
-                              const s = sd(p.code, c);
+                              const m = avg(p.code, axis.id);
+                              const s = sd(p.code, axis.id);
                               return <td key={p.code} className={`${ANALYSIS_NUM_CELL} ${m > 0 ? "opacity-100" : "opacity-30"}`}>
                                 {m > 0 ? `${m.toFixed(1)} ±${s.toFixed(1)}` : "—"}
                               </td>;
@@ -569,7 +616,7 @@ function RadarQuestionAnalysis({ question, products, jurors, allAnswers, partici
                 )}
               </Card>
               {jurorRadarData && (
-                <Card title={`${g.title} (Vos réponses)`}>
+                <Card title={`${panel.title} (Vos réponses)`}>
                   <div className={ANALYSIS_RADAR_WRAP}>
                     <Radar data={jurorRadarData} options={buildOpts(jurorMax)} />
                   </div>
