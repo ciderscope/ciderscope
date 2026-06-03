@@ -175,7 +175,7 @@ function normalizeCorrectionSettings(value: unknown): RadarCorrectionSettings {
 }
 
 function getCorrectionValue(corrections: RadarCorrectionSettings, questionId: string, presetId: string, axisLabel: string): number {
-  return corrections[questionId]?.[presetId]?.[axisLabel] ?? 0;
+  return corrections[questionId]?.[presetId]?.[axisLabel] ?? 1;
 }
 
 function formatCorrectionInput(value: number): string {
