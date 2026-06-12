@@ -18,7 +18,7 @@ export interface RadarDisplayAxis {
 
 export const FRUITY_RADAR_DISPLAY_PRESET: RadarDisplayPreset = {
   id: "fruity-seven",
-  label: "Radar fruité 7 axes",
+  label: "Classique",
   fixedScale: true,
   axes: [
     { label: "Fruité", aliases: ["Fruité", "Fruit"] },

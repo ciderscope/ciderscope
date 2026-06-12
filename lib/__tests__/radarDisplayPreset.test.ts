@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRadarDisplayAxes, FRUITY_RADAR_DISPLAY_PRESET } from "../radarDisplayPreset";
+import { applyRadarAxisCorrection, buildRadarDisplayAxes, FRUITY_RADAR_DISPLAY_PRESET } from "../radarDisplayPreset";
 
 describe("fruity radar display preset", () => {
   it("keeps the requested clockwise order and display labels", () => {
@@ -53,5 +53,11 @@ describe("fruity radar display preset", () => {
       "Agrumes",
       "Fruits rouges",
     ]);
+  });
+
+  it("applies multiplicative corrections inside the radar scale", () => {
+    expect(applyRadarAxisCorrection(5, 1.8, 10)).toBe(9);
+    expect(applyRadarAxisCorrection(5, -8, 10)).toBe(0);
+    expect(applyRadarAxisCorrection(9.5, 2, 10)).toBe(10);
   });
 });

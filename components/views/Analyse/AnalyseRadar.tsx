@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Radar, Scatter } from "react-chartjs-2";
 import type { TooltipItem } from "chart.js";
+import { FiDownload } from "react-icons/fi";
 import { Card } from "../../ui/Card";
 import {
   AnalysisEmpty,
@@ -22,6 +23,7 @@ import type { SessionConfig, AllAnswers, Question, Product, RadarAxis, RadarAnsw
 import { getChartColors, pearson, flattenRadarAnswers } from "./utils";
 import { supabase } from "../../../lib/supabase";
 import { applyRadarAxisCorrection, buildRadarDisplayAxes, FRUITY_RADAR_DISPLAY_PRESET, type RadarDisplayAxis } from "../../../lib/radarDisplayPreset";
+import { buildDelimitedText, downloadTextFile } from "../../../lib/csv";
 
 interface AnalyseRadarProps {
   config: SessionConfig;
@@ -62,6 +64,8 @@ const radarCorrectionRowsClass = "flex flex-col gap-2";
 const radarCorrectionRowClass = "grid grid-cols-[minmax(0,1fr)_96px] items-center gap-2";
 const radarCorrectionLabelClass = "min-w-0 truncate text-xs font-medium text-[var(--ink)]";
 const radarCorrectionInputClass = "h-8 w-full rounded-md border border-[var(--border)] bg-[var(--paper)] px-2 text-right font-mono text-xs text-[var(--ink)] outline-none focus:border-[var(--accent)]";
+const radarCsvActionsClass = "mb-3 flex justify-end";
+const radarCsvButtonClass = "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--paper)] px-2.5 text-xs font-medium text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]";
 const radarCorrectionStatusClass: Record<CorrectionSaveStatus, string> = {
   idle: "text-[var(--mid)]",
   saving: "text-[#8a5a00]",
@@ -204,6 +208,21 @@ function RadarCorrectionControls({
   status: CorrectionSaveStatus;
   onChange: (questionId: string, presetId: string, axisLabel: string, value: number) => void;
 }) {
+  const editingLabelsRef = useRef<Set<string>>(new Set());
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setDraftValues(prev => {
+      const next: Record<string, string> = {};
+      axes.forEach(axis => {
+        next[axis.label] = editingLabelsRef.current.has(axis.label)
+          ? prev[axis.label] ?? formatCorrectionInput(getCorrectionValue(corrections, questionId, presetId, axis.label))
+          : formatCorrectionInput(getCorrectionValue(corrections, questionId, presetId, axis.label));
+      });
+      return next;
+    });
+  }, [axes, corrections, questionId, presetId]);
+
   return (
     <div className={radarCorrectionPanelClass}>
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -215,18 +234,33 @@ function RadarCorrectionControls({
       <div className={radarCorrectionRowsClass}>
         {axes.map(axis => {
           const value = getCorrectionValue(corrections, questionId, presetId, axis.label);
+          const draftValue = draftValues[axis.label] ?? formatCorrectionInput(value);
           return (
             <label key={axis.label} className={radarCorrectionRowClass}>
               <span className={radarCorrectionLabelClass}>{axis.label}</span>
               <input
-                type="number"
-                step="0.1"
+                type="text"
                 inputMode="decimal"
-                value={formatCorrectionInput(value)}
+                value={draftValue}
+                onFocus={() => {
+                  editingLabelsRef.current.add(axis.label);
+                }}
                 onChange={(e) => {
                   const raw = e.currentTarget.value;
-                  const next = raw === "" ? 0 : Number(raw);
-                  onChange(questionId, presetId, axis.label, Number.isFinite(next) ? next : 0);
+                  setDraftValues(prev => ({ ...prev, [axis.label]: raw }));
+                  if (raw.trim() === "") return;
+                  const next = Number(raw.replace(",", "."));
+                  if (Number.isFinite(next)) {
+                    onChange(questionId, presetId, axis.label, next);
+                  }
+                }}
+                onBlur={(e) => {
+                  editingLabelsRef.current.delete(axis.label);
+                  const raw = e.currentTarget.value;
+                  const next = Number(raw.replace(",", "."));
+                  const normalized = Number.isFinite(next) ? next : value;
+                  onChange(questionId, presetId, axis.label, normalized);
+                  setDraftValues(prev => ({ ...prev, [axis.label]: formatCorrectionInput(normalized) }));
                 }}
                 className={radarCorrectionInputClass}
                 aria-label={`Correction ${axis.label}`}
@@ -246,6 +280,20 @@ const getRadarAnswer = (answers: AllAnswers[string] | undefined, productCode: st
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as RadarAnswer;
 };
+
+function formatRadarCsvValue(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  return value.toFixed(3).replace(/\.?0+$/, "");
+}
+
+function safeFilenamePart(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase() || "radar";
+}
 
 export function AnalyseRadar({ config, allAnswers, sessionId, participantMode, currentJuror }: AnalyseRadarProps) {
   const radarQs = config.questions.filter(q => q.type === "radar");
@@ -723,7 +771,7 @@ function RadarQuestionAnalysis({
                 className={radarModeBtnClass(displayMode === FRUITY_RADAR_DISPLAY_PRESET.id)}
                 onClick={() => setDisplayMode(FRUITY_RADAR_DISPLAY_PRESET.id)}
               >
-                7 axes fruités
+                Classique
               </button>
             </div>
           </>
@@ -746,6 +794,23 @@ function RadarQuestionAnalysis({
             if (!isCorrectionPanel) return raw;
             const correction = getCorrectionValue(radarCorrections, question.id, panel.id, axis.label);
             return applyRadarAxisCorrection(raw, correction, fixedScaleMax);
+          };
+          const downloadClassicRadarCsv = () => {
+            const headers = ["nom_echantillon", "description", ...panel.displayAxes.map(axis => axis.label)];
+            const rows = products.map(p => {
+              const row: Record<string, unknown> = {
+                nom_echantillon: p.code,
+                description: p.label || "",
+              };
+              panel.displayAxes.forEach(axis => {
+                row[axis.label] = formatRadarCsvValue(correctedPanelValue(p.code, axis));
+              });
+              return row;
+            });
+            downloadTextFile(
+              buildDelimitedText(headers, rows),
+              `${safeFilenamePart(question.label)}_radar_classique.csv`
+            );
           };
 
           const radarData = {
@@ -821,6 +886,20 @@ function RadarQuestionAnalysis({
           return (
             <Fragment key={panel.id}>
               <Card title={participantMode ? `${panel.title} (Moyenne globale)` : panel.title}>
+                {isCorrectionPanel && (
+                  <div className={radarCsvActionsClass}>
+                    <button
+                      type="button"
+                      className={radarCsvButtonClass}
+                      onClick={downloadClassicRadarCsv}
+                      title="Exporter les valeurs pondérées du radar classique"
+                      aria-label="Exporter les valeurs pondérées du radar classique en CSV"
+                    >
+                      <FiDownload aria-hidden="true" />
+                      CSV
+                    </button>
+                  </div>
+                )}
                 {isCorrectionPanel ? (
                   <div className={radarChartWithCorrectionsClass}>
                     <div className={ANALYSIS_RADAR_WRAP}>
