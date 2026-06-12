@@ -8,11 +8,13 @@ create table if not exists sessions (
   active boolean default false,
   juror_count int default 0,
   config jsonb not null default '{}'::jsonb,
+  analysis_settings jsonb not null default '{}'::jsonb,
   results_visible boolean default false,
   created_at timestamptz default now()
 );
 
 -- Migration idempotente : ajouter la colonne sur les bases existantes.
+alter table sessions add column if not exists analysis_settings jsonb not null default '{}'::jsonb;
 alter table sessions add column if not exists results_visible boolean default false;
 
 create table if not exists answers (

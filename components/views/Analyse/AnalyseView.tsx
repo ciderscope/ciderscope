@@ -251,7 +251,7 @@ export const AnalyseView = ({
 
           <div id="anContent">
             {activeTab === "profil"  && <AnalyseProfil    config={anCfg} data={csvData} />}
-            {activeTab === "radar"   && <AnalyseRadar     config={anCfg} allAnswers={allAnswers} participantMode={participantMode} currentJuror={currentJuror} />}
+            {activeTab === "radar"   && <AnalyseRadar     config={anCfg} allAnswers={allAnswers} sessionId={anSessId || undefined} participantMode={participantMode} currentJuror={currentJuror} />}
             {activeTab === "texte"   && <AnalyseWordCloud data={csvData} config={anCfg} />}
             {activeTab === "jury"    && <AnalyseJury      config={anCfg} allAnswers={allAnswers} currentJuror={currentJuror} />}
             {activeTab === "données" && <AnalyseDonnees   data={csvData} />}

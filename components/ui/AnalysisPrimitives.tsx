@@ -1,5 +1,5 @@
 "use client";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export const ANALYSIS_TOOLBAR = "flex flex-wrap items-center gap-2.5";
 export const ANALYSIS_CHART_BOX = "h-80";
@@ -24,6 +24,22 @@ const ANALYSIS_DETAILS = "mt-3.5";
 const ANALYSIS_SUMMARY = "cursor-pointer text-xs text-[var(--mid)]";
 const ANALYSIS_DETAIL_TABLE = `${ANALYSIS_TABLE_CLASS} mt-2`;
 const ANALYSIS_TOOLBAR_LABEL = "font-mono text-[11px] uppercase tracking-[0.4px] text-[var(--mid)]";
+const ADAPTIVE_ANALYSIS_GRID = [
+  "grid min-w-0 grid-cols-1 justify-items-center gap-3",
+  "sm:grid-cols-[repeat(var(--analysis-grid-cols-sm),minmax(0,1fr))]",
+  "lg:grid-cols-[repeat(var(--analysis-grid-cols-lg),minmax(0,1fr))]",
+  "xl:grid-cols-[repeat(var(--analysis-grid-cols-xl),minmax(0,1fr))]",
+  "2xl:grid-cols-[repeat(var(--analysis-grid-cols-2xl),minmax(0,1fr))]",
+  "[&>*]:w-full [&>*]:max-w-[var(--analysis-card-max)]",
+].join(" ");
+
+const chooseColumns = (itemCount: number, maxColumns: number) => {
+  const count = Math.max(1, itemCount);
+  const max = Math.max(1, Math.min(count, maxColumns));
+  if (count <= max) return count;
+  if (count % max === 1 && max > 2) return max - 1;
+  return max;
+};
 
 export const answerStateClass = (ok: boolean) => `text-center font-semibold ${ok ? OK_TEXT : DANGER_TEXT}`;
 export const significanceClass = (ok: boolean) => `font-bold ${ok ? OK_TEXT : DIM_TEXT}`;
@@ -31,6 +47,30 @@ export const confidenceClass = (score: number) => score > 0.6 ? OK_TEXT : score 
 
 export const AnalysisEmpty = ({ children }: { children: ReactNode }) => <div className={ANALYSIS_EMPTY}>{children}</div>;
 export const AnalysisStack = ({ children, deep = false }: { children: ReactNode; deep?: boolean }) => <div className={deep ? ANALYSIS_DEEP_STACK : ANALYSIS_STACK}>{children}</div>;
+export const AdaptiveAnalysisGrid = ({
+  children,
+  itemCount,
+  className = "",
+  maxItemWidth = 440,
+  wideMaxColumns = 5,
+}: {
+  children: ReactNode;
+  itemCount: number;
+  className?: string;
+  maxItemWidth?: number;
+  wideMaxColumns?: number;
+}) => {
+  const count = Math.max(1, itemCount);
+  const style = {
+    "--analysis-grid-cols-sm": chooseColumns(count, 2),
+    "--analysis-grid-cols-lg": chooseColumns(count, 3),
+    "--analysis-grid-cols-xl": chooseColumns(count, 4),
+    "--analysis-grid-cols-2xl": chooseColumns(count, wideMaxColumns),
+    "--analysis-card-max": `${maxItemWidth}px`,
+  } as CSSProperties;
+
+  return <div className={`${ADAPTIVE_ANALYSIS_GRID} ${className}`.trim()} style={style}>{children}</div>;
+};
 export const MetricLayout = ({ children, compact = false }: { children: ReactNode; compact?: boolean }) => <div className={compact ? "flex flex-wrap items-start gap-6" : ANALYSIS_METRIC_ROW}>{children}</div>;
 export const AnalysisPanel = ({ children, loose = false, className = "" }: { children: ReactNode; loose?: boolean; className?: string }) => <div className={`${loose ? ANALYSIS_PANEL_LOOSE : ANALYSIS_PANEL} ${className}`}>{children}</div>;
 export const TableCaption = ({ children, className = "" }: { children: ReactNode; className?: string }) => <div className={`${ANALYSIS_TABLE_LABEL} ${className}`}>{children}</div>;

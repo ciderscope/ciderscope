@@ -1,6 +1,7 @@
 "use client";
 import React, { useMemo } from "react";
 import { Card } from "../../ui/Card";
+import { AdaptiveAnalysisGrid } from "../../ui/AnalysisPrimitives";
 import type { AllAnswers, AnswerValue, RadarAnswer, SessionConfig } from "../../../types";
 import { asRecord } from "../../../lib/sessionSteps";
 import { flattenRadarAnswers } from "./utils";
@@ -70,7 +71,7 @@ export function AnalyseSynthese({ config, allAnswers }: { config: SessionConfig;
 
   return (
     <Card title="Synthèse" className="mb-5">
-      <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <AdaptiveAnalysisGrid itemCount={summaries.length}>
         {summaries.map(({ product, criteria }) => (
           <div key={product.code} className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--paper2)] p-3.5">
             <div className="mb-2 flex items-baseline gap-2">
@@ -91,7 +92,7 @@ export function AnalyseSynthese({ config, allAnswers }: { config: SessionConfig;
             )}
           </div>
         ))}
-      </div>
+      </AdaptiveAnalysisGrid>
     </Card>
   );
 }

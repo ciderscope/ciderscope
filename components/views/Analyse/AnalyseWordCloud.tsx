@@ -1,7 +1,7 @@
 "use client";
 import React, { useMemo } from "react";
 import { Card } from "../../ui/Card";
-import { AnalysisEmpty, AnalysisStack, DetailTable } from "../../ui/AnalysisPrimitives";
+import { AdaptiveAnalysisGrid, AnalysisEmpty, AnalysisStack, DetailTable } from "../../ui/AnalysisPrimitives";
 import type { SessionConfig, CSVRow, Question, Product } from "../../../types";
 import { wordColor } from "./utils";
 
@@ -80,18 +80,20 @@ export function AnalyseWordCloud({ data, config }: AnalyseWordCloudProps) {
         const qRows = textRows.filter(r => r.question === qLabel);
 
         if (isPerProduct) {
+          const productClouds = products
+            .map((p: Product) => ({ product: p, rows: qRows.filter(r => r.produit === p.code) }))
+            .filter(item => item.rows.length > 0);
+
           return (
             <div key={qLabel}>
               <div className="mb-3.5 border-b border-[var(--border)] pb-1 font-mono text-[10px] font-bold uppercase tracking-[1px] text-[var(--accent)]">{qLabel}</div>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
-                {products.map((p: Product) => {
-                  const pRows = qRows.filter(r => r.produit === p.code);
-                  if (pRows.length === 0) return null;
+              <AdaptiveAnalysisGrid itemCount={productClouds.length} className="gap-4" maxItemWidth={520}>
+                {productClouds.map(({ product, rows }) => {
                   return (
-                    <WordCloudDisplay key={p.code} rows={pRows} title={`${p.code}${p.label ? ` — ${p.label}` : ""}`} />
+                    <WordCloudDisplay key={product.code} rows={rows} title={`${product.code}${product.label ? ` — ${product.label}` : ""}`} />
                   );
                 })}
-              </div>
+              </AdaptiveAnalysisGrid>
             </div>
           );
         }
