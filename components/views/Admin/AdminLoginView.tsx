@@ -20,7 +20,13 @@ export const AdminLoginView = ({ onSuccess }: AdminLoginViewProps) => {
     setBusy(true);
 
     try {
-      if (login.trim().toLowerCase() === "ifpc" && mdp === "ifpc") {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login, password: mdp }),
+      });
+
+      if (response.ok) {
         sessionStorage.setItem("admin_auth", "1");
         setError(false);
         onSuccess();

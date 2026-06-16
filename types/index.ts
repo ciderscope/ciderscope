@@ -72,6 +72,12 @@ export interface SessionListItem {
   resultsVisible?: boolean; // l'animateur a autorisé l'affichage du résumé aux jurys
 }
 
+export interface HelpRequest {
+  id: string;
+  requestedAt: string;
+  stepIndex: number;
+}
+
 // ── Answer value shapes ─────────────────────────────────────────────────────
 // Réponse à une échelle avec sous-critères : { _: noteGlobale, _subs: [labels…], [label]: note }
 // `_touched` indique que le jury a explicitement validé la note principale
@@ -119,6 +125,7 @@ export type AnswerValue =
 // Pour les autres : structures ad hoc typées plus souplement.
 type JurorAnswerValue =
   | AnswerValue
+  | HelpRequest[]
   | Record<string, AnswerValue>
   | Record<string, number>
   | Record<string, boolean>
@@ -130,6 +137,7 @@ export type JurorAnswers = {
   _finished?: boolean;
   _poste?: Record<string, string | number>;
   _completedSteps?: Record<string, boolean>;
+  _helpRequests?: HelpRequest[];
   [key: string]: JurorAnswerValue;
 };
 

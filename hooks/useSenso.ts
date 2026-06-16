@@ -4,6 +4,7 @@ import { SessionListItem, SessionConfig, JurorAnswers, SessionStep, AllAnswers, 
 import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
 import { asRecord, buildSessionSteps, isStepDone, isStepValidated } from "../lib/sessionSteps";
+import { appendHelpRequest, createHelpRequest } from "../lib/helpRequests";
 
 // Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
 // et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
@@ -14,7 +15,7 @@ const CONFIG_CACHE_TTL_MS = 60_000;
 
 const APP_MODES = ["home", "participant", "admin"] as const satisfies readonly AppMode[];
 const APP_SCREENS = ["landing", "jury", "poste", "order", "form", "done", "summary", "edit"] as const satisfies readonly AppScreen[];
-const ADMIN_SECTIONS = ["seances", "analyse"] as const;
+const ADMIN_SECTIONS = ["seances", "creneaux", "analyse"] as const;
 
 const isStoredChoice = <T extends string>(value: string | null, choices: readonly T[]): value is T => {
   return !!value && (choices as readonly string[]).includes(value);
@@ -54,7 +55,7 @@ export const useSenso = () => {
   const [anCfg, setAnCfg] = useState<SessionConfig | null>(null);
   const [allAnswers, setAllAnswers] = useState<AllAnswers>({});
   const [curAnT, setCurAnT] = useState<string>("profil");
-  const [adminSection, setAdminSection] = useState<"seances" | "analyse">("seances");
+  const [adminSection, setAdminSection] = useState<"seances" | "creneaux" | "analyse">("seances");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [pendingCount, setPendingCount] = useState<number>(0);
 
@@ -68,7 +69,7 @@ export const useSenso = () => {
     cj: string; poste: Poste | null; ja: JurorAnswers; cs: number;
     editCfg: SessionConfig | null; editSessId: string | null; curEditTab: string;
     anSessId: string | null; anCfg: SessionConfig | null; allAnswers: AllAnswers;
-    curAnT: string; adminSection: "seances" | "analyse";
+    curAnT: string; adminSection: "seances" | "creneaux" | "analyse";
     saveStatus: SaveStatus; pendingCount: number;
   };
   const stateRef = useRef<SensoStateSnapshot>({
@@ -496,6 +497,15 @@ export const useSenso = () => {
     _saveTimerRef.current = setTimeout(() => { void flushSave(); }, 400);
   }, [flushSave]);
 
+  const requestHelp = useCallback(async () => {
+    const { curSessId, cj, cs } = stateRef.current;
+    if (!curSessId || !cj) return { success: false };
+    const request = createHelpRequest(cs);
+    handleSetJa(prev => appendHelpRequest(prev, request));
+    await flushSave();
+    return { success: true };
+  }, [handleSetJa, flushSave]);
+
   // Flush de la file d'attente hors-ligne dès qu'on est en ligne (montage + bascule online).
   const flushPending = useCallback(async () => {
     const entries = listPending();
@@ -733,7 +743,7 @@ export const useSenso = () => {
     setAnSessId, setCurAnT, setAdminSection,
     loadSessionConfig, loadSessions,
     handleSelectSession, handleLoginJury, handleSelectPoste,
-    handleSetJa, handleAnSessChange,
+    handleSetJa, requestHelp, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
     listJurorsForSession, toggleActive, toggleResultsVisible,
     isStepComplete,
@@ -743,7 +753,7 @@ export const useSenso = () => {
   }), [
     loadSessionConfig, loadSessions,
     handleSelectSession, handleLoginJury, handleSelectPoste,
-    handleSetJa, handleAnSessChange,
+    handleSetJa, requestHelp, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
     listJurorsForSession, toggleActive, toggleResultsVisible,
     isStepComplete, flushPending, flushSave,

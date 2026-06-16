@@ -28,7 +28,7 @@ const AnalyseView = dynamic(() => import("../components/views/Analyse/AnalyseVie
 });
 
 const fingerprint = (cfg: unknown) => hsh(JSON.stringify(cfg));
-type AdminSection = "seances" | "analyse";
+type AdminSection = "seances" | "creneaux" | "analyse";
 type NavigationPoint = { mode: AppMode; screen: AppScreen; adminSection: AdminSection };
 
 const sameNavigationPoint = (a: NavigationPoint, b: NavigationPoint) => (
@@ -44,7 +44,7 @@ const getHierarchicalBackTarget = ({ mode, screen, adminSection }: NavigationPoi
     if (screen === "done") return { mode: "participant", screen: "landing", adminSection };
   }
   if (mode === "admin") {
-    if (screen === "edit" || adminSection === "analyse") {
+    if (screen === "edit" || adminSection !== "seances") {
       return { mode: "admin", screen: "landing", adminSection: "seances" };
     }
   }
@@ -60,7 +60,7 @@ export default function CiderScope() {
     curSess, curSessId,
     jurors, cj, ja, cs, setCs,
     takenPostes, handleSelectPoste,
-    handleSelectSession, handleLoginJury, handleSetJa,
+    handleSelectSession, handleLoginJury, handleSetJa, requestHelp,
     editCfg, setEditCfg,
     editSessId, setEditSessId,
     curEditTab, setCurEditTab,
@@ -147,6 +147,7 @@ export default function CiderScope() {
         onSelectSession={handleSelectSession}
         onLoginJury={handleLoginJury}
         onSetJa={handleSetJa}
+        onRequestHelp={requestHelp}
         onPrevStep={() => setCs(prev => Math.max(0, prev - 1))}
         onNextStep={() => {
           if (!isStepComplete(cs)) return;

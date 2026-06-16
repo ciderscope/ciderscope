@@ -28,6 +28,7 @@ interface ParticipantViewProps {
   onPrevStep: () => void;
   onNextStep: () => void;
   onSetJa: (updater: JurorAnswers | ((prev: JurorAnswers) => JurorAnswers)) => void;
+  onRequestHelp: () => void | Promise<{ success: boolean } | undefined>;
   onGoBack: () => void;
   onChangeJury: () => void;
   onReviewAnswers: () => void;
@@ -94,6 +95,7 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           cj={props.cj}
           ja={props.ja}
           onSetJa={props.onSetJa}
+          onRequestHelp={props.onRequestHelp}
         />
       )}
 

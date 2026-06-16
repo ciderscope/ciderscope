@@ -1,6 +1,6 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { FiArrowLeft, FiArrowRight } from "react-icons/fi";
+import React, { useEffect, useRef, useState } from "react";
+import { FiArrowLeft, FiArrowRight, FiBell } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Questionnaire } from "../../features/Questionnaire";
 import { validateRadarAnswer } from "../../../lib/radarAnswer";
@@ -30,11 +30,12 @@ interface FormScreenProps {
   cj: string;
   ja: JurorAnswers;
   onSetJa: SetJa;
+  onRequestHelp: () => void | Promise<{ success: boolean } | undefined>;
 }
 
 export const FormScreen = ({
   onChangeJury, steps, cs, completion, validatedCompletion, onPrevStep, onNextStep,
-  curSess, cj, ja, onSetJa
+  curSess, cj, ja, onSetJa, onRequestHelp
 }: FormScreenProps) => {
   const products: Product[] = curSess.products || [];
   const total = steps.length;
@@ -44,7 +45,12 @@ export const FormScreen = ({
   const canAdvance = completion[cs] ?? true;
   const [confirmNext, setConfirmNext] = useState(false);
   const [confirmPrev, setConfirmPrev] = useState(false);
+  const [confirmHelp, setConfirmHelp] = useState(false);
+  const [helpBusy, setHelpBusy] = useState(false);
+  const [helpSent, setHelpSent] = useState(false);
+  const [helpError, setHelpError] = useState<string | null>(null);
   const [radarIssues, setRadarIssues] = useState<{ untouched: string[]; emptyChildren: string[] } | null>(null);
+  const helpSentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -64,6 +70,12 @@ export const FormScreen = ({
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     });
   }, [cs]);
+
+  useEffect(() => {
+    return () => {
+      if (helpSentTimerRef.current) clearTimeout(helpSentTimerRef.current);
+    };
+  }, []);
 
   // Pour l'étape courante : si elle contient une toile d'araignée, on calcule
   // les familles non touchées / non précisées avant de laisser passer.
@@ -101,6 +113,26 @@ export const FormScreen = ({
     setConfirmPrev(false);
     onPrevStep();
   };
+  const handleConfirmHelp = async () => {
+    if (helpBusy) return;
+    setHelpBusy(true);
+    setHelpError(null);
+    try {
+      const result = await onRequestHelp();
+      if (result && result.success === false) {
+        setHelpError("La demande n'a pas pu être envoyée.");
+        return;
+      }
+      setConfirmHelp(false);
+      setHelpSent(true);
+      if (helpSentTimerRef.current) clearTimeout(helpSentTimerRef.current);
+      helpSentTimerRef.current = setTimeout(() => setHelpSent(false), 2500);
+    } catch {
+      setHelpError("La demande n'a pas pu être envoyée.");
+    } finally {
+      setHelpBusy(false);
+    }
+  };
 
   return (
     <>
@@ -111,6 +143,23 @@ export const FormScreen = ({
             <div className="mt-0.5 font-mono text-[12.5px] text-[var(--mid)]">{curSess.name}</div>
           </div>
           <div className="flex-1"></div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setHelpError(null);
+              setConfirmHelp(true);
+            }}
+            className={[
+              "border-[#e1b94c] bg-[#fff5cc] px-2.5 text-[#8a5a00] hover:border-[#d8a716] hover:bg-[#ffe7a3] hover:text-[#6d4600]",
+              helpSent ? "ring-2 ring-[#f0c94a]/60" : "",
+            ].filter(Boolean).join(" ")}
+            aria-label={helpSent ? "Aide demandée" : "Demander de l'aide"}
+            title={helpSent ? "Aide demandée" : "Demander de l'aide"}
+          >
+            <FiBell />
+            <span className="sr-only">{helpSent ? "Aide demandée" : "Demander de l'aide"}</span>
+          </Button>
           <Button variant="ghost" size="sm" onClick={onChangeJury}><FiArrowLeft /> Changer</Button>
         </div>
 
@@ -205,6 +254,27 @@ export const FormScreen = ({
           tone="warn"
           onConfirm={handleConfirmPrev}
           onCancel={() => setConfirmPrev(false)}
+        />
+      )}
+      {confirmHelp && (
+        <ConfirmModal
+          title="Demander de l'aide ?"
+          message={
+            <div className="flex flex-col gap-2">
+              <p>L&apos;animateur recevra une notification pour {cj} sur cette séance.</p>
+              {helpError && <p className="font-semibold text-[var(--danger)]">{helpError}</p>}
+            </div>
+          }
+          confirmLabel={helpBusy ? "Envoi..." : "Envoyer"}
+          cancelLabel="Annuler"
+          confirmVariant="secondary"
+          cancelVariant="ghost"
+          tone="warn"
+          onConfirm={handleConfirmHelp}
+          onCancel={() => {
+            if (helpBusy) return;
+            setConfirmHelp(false);
+          }}
         />
       )}
       {radarIssues && (

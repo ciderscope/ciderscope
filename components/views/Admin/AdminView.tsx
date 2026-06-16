@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, Dispatch, SetStateAction } from "react";
 import dynamic from "next/dynamic";
-import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart } from "react-icons/fi";
+import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart, FiCalendar } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { Badge } from "../../ui/Badge";
@@ -12,6 +12,8 @@ import { adminFieldGridClass, chipRemoveButtonClass } from "./utils";
 // Import subcomponents
 import { ParticipantsTab } from "./ParticipantsTab";
 import { QuestionBuilder } from "./QuestionBuilder";
+import { SlotAdminView } from "./SlotAdminView";
+import { AdminHelpNotifications } from "./AdminHelpNotifications";
 
 const adminShellClass = "mx-auto max-w-full overflow-x-clip px-[22px] py-7 pb-[60px] sm:max-w-[95%] supports-[not(overflow-x:clip)]:overflow-x-hidden";
 const sessionCardClass = "mb-2.5 flex max-w-full min-w-0 flex-wrap items-center gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] px-5 py-[18px] shadow-[var(--shadow)] transition-[box-shadow,border-color] duration-150 hover:border-[rgba(30,46,46,.18)] hover:shadow-[0_3px_16px_rgba(30,46,46,.09)]";
@@ -35,8 +37,8 @@ interface AdminViewProps {
   editCfg: SessionConfig | null;
   curEditTab: string;
   editSessId: string | null;
-  adminSection: "seances" | "analyse";
-  setAdminSection: (v: "seances" | "analyse") => void;
+  adminSection: "seances" | "creneaux" | "analyse";
+  setAdminSection: (v: "seances" | "creneaux" | "analyse") => void;
   onNewSession: () => void;
   onEditSession: (id: string) => void;
   onToggleActive: (id: string) => void;
@@ -68,10 +70,40 @@ export const AdminView = ({
   allAnswers, anSessId, anCfg, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const helpSessionId = screen === "edit" ? editSessId : (adminSection === "analyse" ? anSessId : null);
+  const helpSessionName = helpSessionId
+    ? (helpSessionId === editSessId ? editCfg?.name : anCfg?.name) || sessions.find(s => s.id === helpSessionId)?.name
+    : undefined;
 
   if (screen === "landing") {
     return (
+      <>
+      <AdminHelpNotifications sessionId={helpSessionId} sessionName={helpSessionName} />
       <div className={adminShellClass}>
+        <div className="mb-5 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={adminSection === "seances" ? "ok" : "secondary"}
+            onClick={() => setAdminSection("seances")}
+          >
+            <FiList /> Séances
+          </Button>
+          <Button
+            size="sm"
+            variant={adminSection === "creneaux" ? "ok" : "secondary"}
+            onClick={() => setAdminSection("creneaux")}
+          >
+            <FiCalendar /> Créneaux
+          </Button>
+          <Button
+            size="sm"
+            variant={adminSection === "analyse" ? "ok" : "secondary"}
+            onClick={() => setAdminSection("analyse")}
+          >
+            <FiBarChart2 /> Analyse
+          </Button>
+        </div>
+
         {adminSection === "analyse" && (
           <AnalyseView
             sessions={sessions}
@@ -84,6 +116,10 @@ export const AdminView = ({
             downloadCSV={downloadCSV}
             onGoBack={onGoBack}
           />
+        )}
+
+        {adminSection === "creneaux" && (
+          <SlotAdminView sessions={sessions} />
         )}
 
         {adminSection === "seances" && (
@@ -161,6 +197,7 @@ export const AdminView = ({
           </ConfirmDialog>
         )}
       </div>
+      </>
     );
   }
 
@@ -172,6 +209,8 @@ export const AdminView = ({
     ];
 
     return (
+      <>
+      <AdminHelpNotifications sessionId={helpSessionId} sessionName={helpSessionName} />
       <div className={adminShellClass}>
         <header className={adminEditHeaderClass}>
           <Button variant="secondary" size="sm" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
@@ -316,6 +355,7 @@ export const AdminView = ({
           )}
         </div>
       </div>
+      </>
     );
   }
 

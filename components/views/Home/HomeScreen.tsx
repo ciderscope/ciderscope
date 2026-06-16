@@ -30,7 +30,7 @@ export const HomeScreen = ({ onSelectParticipant, onSelectAdmin }: HomeScreenPro
         <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--tile-color)_12%,var(--paper2))] text-[var(--tile-color)]"><FiUsers size={32} /></span>
         <span className="flex min-w-0 flex-col gap-1">
           <span className="text-xl font-bold tracking-normal text-[var(--ink)]">Participant</span>
-          <span className="text-[13px] leading-snug text-[var(--mid)]">Rejoindre une séance et noter les échantillons</span>
+          <span className="text-[13px] leading-snug text-[var(--mid)]">Rejoindre une séance ou gérer un créneau</span>
         </span>
         <span className="flex text-[var(--mid2)] transition-[color,transform] duration-200 group-hover:translate-x-[3px] group-hover:text-[var(--tile-color)]"><FiArrowRight size={20} /></span>
       </button>

@@ -138,6 +138,13 @@ Creer un fichier `.env.local` a la racine :
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+DATABASE_URL=
+DIRECT_URL=
+
+ADMIN_USERNAME=ifpc
+ADMIN_PASSWORD=ifpc
+ADMIN_SESSION_SECRET=
 ```
 
 Option de developpement :
@@ -148,12 +155,25 @@ NEXT_PUBLIC_ENABLE_TEST_DATA=1
 
 Cette option affiche le bouton de generation de participants fictifs dans l'administration pour lancer des tests.
 
+### Inscriptions aux creneaux
+
+La fonctionnalite d'inscription utilise les routes serveur Next.js. Elles utilisent d'abord le service role Supabase,
+puis basculent en local sur `DIRECT_URL` ou `DATABASE_URL` si `SUPABASE_SERVICE_ROLE_KEY` n'est pas renseignee. Appliquer la migration
+`supabase/migrations/202606161130_session_slots.sql` avant de l'utiliser.
+
+- `SUPABASE_SERVICE_ROLE_KEY` reste uniquement cote serveur et permet aux API de faire respecter les controles metier.
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD` et `ADMIN_SESSION_SECRET` pilotent le cookie admin HTTP-only utilise par les nouvelles API admin.
+- Aucun email n'est envoye en V1 pour les inscriptions aux creneaux.
+- Apres une inscription reussie, le participant voit une fenetre de confirmation et peut telecharger un fichier `.ics` d'invitation calendrier.
+- Le fichier `.ics` contient deux rappels locaux : 24 heures avant et 1 heure avant. Aucun vrai evenement Outlook n'est cree en V1.
+
 ## Base de donnees
 
 Le schema Supabase est documente dans `supabase-schema.sql`. Il cree :
 
 - `sessions` : configuration, statut actif, compteur de jurys et visibilite des resultats ;
 - `answers` : reponses par couple seance / jury.
+- `session_slots`, `slot_registrations` et `email_domain_whitelist` via la migration des creneaux d'inscription.
 
 Il faudra penser à restreindre les politiques RLS avant production. Le fichier SQL contient actuellement des politiques publiques a adapter selon l'authentification retenue.
 
