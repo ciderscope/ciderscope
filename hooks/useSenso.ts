@@ -31,6 +31,26 @@ const logDataError = (message: string, error: unknown) => {
   console.error(message, error);
 };
 
+type SessionActivityPayload = {
+  slottedSessionIds?: string[];
+  activeSessionIds?: string[];
+};
+
+const loadSessionActivity = async () => {
+  try {
+    const response = await fetch("/api/public/session-activity", { cache: "no-store" });
+    if (!response.ok) return null;
+    const payload = await response.json() as SessionActivityPayload;
+    return {
+      slottedSessionIds: new Set(payload.slottedSessionIds || []),
+      activeSessionIds: new Set(payload.activeSessionIds || []),
+    };
+  } catch (error) {
+    console.warn("Calcul d'activite par creneaux indisponible:", error);
+    return null;
+  }
+};
+
 export const useSenso = () => {
   const [mode, setMode] = useState<AppMode>("home");
   const [screen, setScreen] = useState<AppScreen>("landing");
@@ -235,6 +255,7 @@ export const useSenso = () => {
       setOnline(false);
     } else if (data) {
       setOnline(true);
+      const sessionActivity = await loadSessionActivity();
       type SessionRow = {
         id: string;
         name: string;
@@ -246,11 +267,12 @@ export const useSenso = () => {
       };
       const next: SessionListItem[] = (data as SessionRow[]).map(r => {
         const cfg = r.config;
+        const hasSlotSchedule = sessionActivity?.slottedSessionIds.has(r.id) || false;
         return {
           id: r.id,
           name: r.name,
           date: r.date,
-          active: r.active,
+          active: hasSlotSchedule ? (sessionActivity?.activeSessionIds.has(r.id) || false) : r.active,
           jurorCount: r.juror_count,
           productCount: cfg?.products?.length || 0,
           questionCount: cfg?.questions?.length || 0,

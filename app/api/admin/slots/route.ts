@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { listSlots } from "../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../lib/server/supabaseAdmin";
 import { createSlotFromSql, listSlotsFromSql } from "../../../../lib/server/slotSql";
@@ -6,6 +7,50 @@ import { requireAdmin } from "../../../../lib/server/adminAuth";
 import { parseIsoDate } from "../../../../lib/slots/dates";
 
 export const runtime = "nodejs";
+
+type SlotCreatePayload = {
+  slotDate?: string;
+  slotDates?: string[];
+  sessionId?: string | null;
+  sessionName?: string;
+};
+
+const getAdminErrorDetail = (error: unknown) => {
+  const typed = error as { code?: string; message?: string; details?: string; hint?: string };
+  return [typed.code, typed.message, typed.details, typed.hint].filter(Boolean).join(" - ");
+};
+
+const isUniqueSlotError = (error: unknown) => (error as { code?: string }).code === "23505";
+
+const normalizeSlotDates = (body: SlotCreatePayload | null) => {
+  const rawDates = Array.isArray(body?.slotDates) && body.slotDates.length > 0
+    ? body.slotDates
+    : body?.slotDate
+      ? [body.slotDate]
+      : [];
+  return Array.from(new Set(rawDates.map(date => date.trim()).filter(Boolean)));
+};
+
+const createSlotWithSupabase = async (
+  supabase: SupabaseClient,
+  slotDate: string,
+  sessionId: string | null,
+  sessionName: string
+) => {
+  const { data, error } = await supabase
+    .from("session_slots")
+    .insert({
+      slot_date: slotDate,
+      session_id: sessionId,
+      session_name: sessionName,
+      created_by: "admin",
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return { id: (data as { id: string }).id, slotDate };
+};
 
 export async function GET(request: Request) {
   const unauthorized = await requireAdmin();
@@ -22,7 +67,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ slots });
   } catch (error) {
     console.error("Admin slot list error:", error);
-    return NextResponse.json({ error: "Impossible de charger les créneaux." }, { status: 500 });
+    return NextResponse.json({
+      error: "Impossible de charger les creneaux.",
+      detail: getAdminErrorDetail(error),
+    }, { status: 500 });
   }
 }
 
@@ -31,15 +79,14 @@ export async function POST(request: Request) {
   if (unauthorized) return unauthorized;
 
   try {
-    const body = await request.json().catch(() => null) as {
-      slotDate?: string;
-      sessionId?: string | null;
-      sessionName?: string;
-    } | null;
+    const body = await request.json().catch(() => null) as SlotCreatePayload | null;
+    const slotDates = normalizeSlotDates(body);
 
-    const slotDate = body?.slotDate || "";
-    if (!parseIsoDate(slotDate)) {
-      return NextResponse.json({ error: "Date de créneau invalide." }, { status: 400 });
+    if (slotDates.length === 0 || slotDates.some(date => !parseIsoDate(date))) {
+      return NextResponse.json({ error: "Date de creneau invalide." }, { status: 400 });
+    }
+    if (slotDates.length > 366) {
+      return NextResponse.json({ error: "La plage de dates est trop longue." }, { status: 400 });
     }
 
     const supabase = getSupabaseAdminIfConfigured();
@@ -55,49 +102,55 @@ export async function POST(request: Request) {
 
       if (sessionError) throw sessionError;
       if (!session) {
-        return NextResponse.json({ error: "Séance introuvable." }, { status: 400 });
+        return NextResponse.json({ error: "Seance introuvable." }, { status: 400 });
       }
       if (!sessionName) sessionName = (session as { name: string }).name;
     }
 
-    if (!sessionName && !sessionId) {
-      return NextResponse.json({ error: "Le nom de séance est obligatoire." }, { status: 400 });
+    if (!sessionName) {
+      return NextResponse.json({ error: "Le nom de seance est obligatoire." }, { status: 400 });
     }
 
-    if (!supabase) {
-      const data = await createSlotFromSql({ slotDate, sessionId, sessionName });
-      return NextResponse.json({ ok: true, id: data.id });
-    }
+    const created: Array<{ id: string; slotDate: string }> = [];
+    const skipped: Array<{ slotDate: string; error: string }> = [];
 
-    const { data, error } = await supabase
-      .from("session_slots")
-      .insert({
-        slot_date: slotDate,
-        session_id: sessionId,
-        session_name: sessionName,
-        created_by: "admin",
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      const code = (error as { code?: string }).code;
-      if (code === "23505") {
-        return NextResponse.json({ error: "Un créneau existe déjà pour cette date." }, { status: 409 });
+    for (const slotDate of slotDates) {
+      try {
+        const data = supabase
+          ? await createSlotWithSupabase(supabase, slotDate, sessionId, sessionName)
+          : { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+        created.push(data);
+      } catch (error) {
+        if (isUniqueSlotError(error)) {
+          skipped.push({ slotDate, error: "Un creneau existe deja pour cette date." });
+          continue;
+        }
+        throw error;
       }
-      throw error;
     }
 
-    return NextResponse.json({ ok: true, id: (data as { id: string }).id });
+    if (created.length === 0 && skipped.length > 0) {
+      return NextResponse.json({ error: skipped[0].error, skipped }, { status: 409 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      id: created[0]?.id,
+      created,
+      skipped,
+    });
   } catch (error) {
     console.error("Admin slot create error:", error);
     const code = (error as { code?: string }).code;
     if (code === "23505") {
-      return NextResponse.json({ error: "Un créneau existe déjà pour cette date." }, { status: 409 });
+      return NextResponse.json({ error: "Un creneau existe deja pour cette date." }, { status: 409 });
     }
     if (code === "slot_session_not_found") {
-      return NextResponse.json({ error: "Séance introuvable." }, { status: 400 });
+      return NextResponse.json({ error: "Seance introuvable." }, { status: 400 });
     }
-    return NextResponse.json({ error: "Impossible de créer le créneau." }, { status: 500 });
+    return NextResponse.json({
+      error: "Impossible de creer le creneau.",
+      detail: getAdminErrorDetail(error),
+    }, { status: 500 });
   }
 }

@@ -231,18 +231,18 @@ export default function CiderScope() {
       onSetEditTab={setCurEditTab}
       onGoBack={goBack}
       onSaveEdit={async () => {
-        if (!editCfg) return;
+        if (!editCfg) return { success: false };
         const errs = validateSession(editCfg);
         if (errs.length > 0) {
           alert("Configuration incomplète :\n\n• " + errs.join("\n• "));
-          return;
+          return { success: false };
         }
         // Verrouillage optimiste : on vérifie que la version serveur n'a pas changé depuis l'ouverture.
         if (editSessId && editFingerprintRef.current !== null) {
           const current = await loadSessionConfig(editSessId);
           if (current && fingerprint(current) !== editFingerprintRef.current) {
             const ok = confirm("Cette séance a été modifiée ailleurs depuis que vous l'avez ouverte. Écraser ces modifications ?");
-            if (!ok) return;
+            if (!ok) return { success: false };
           }
         }
         const id = editSessId || "s" + Date.now();
@@ -255,9 +255,10 @@ export default function CiderScope() {
         if (res.success) {
           editFingerprintRef.current = fingerprint(editCfg);
           await loadSessions();
-          setScreen("landing");
+          return { success: true, sessionId: id, sessionName: editCfg.name };
         } else {
           alert("Erreur lors de l'enregistrement.");
+          return { success: false };
         }
       }}
       downloadCSV={downloadCSV}

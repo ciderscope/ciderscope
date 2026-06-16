@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, Dispatch, SetStateAction } from "react";
+import React, { useMemo, useState, Dispatch, SetStateAction } from "react";
 import dynamic from "next/dynamic";
 import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart, FiCalendar } from "react-icons/fi";
 import { Button } from "../../ui/Button";
@@ -8,6 +8,7 @@ import { Badge } from "../../ui/Badge";
 import { DangerGhostButton, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { SessionConfig, SessionListItem, AllAnswers, CSVRow, AppScreen } from "../../../types";
 import { adminFieldGridClass, chipRemoveButtonClass } from "./utils";
+import { parseIsoDate, toIsoDate } from "../../../lib/slots/dates";
 
 // Import subcomponents
 import { ParticipantsTab } from "./ParticipantsTab";
@@ -24,6 +25,46 @@ const editTabClass = (active: boolean) => [
   "inline-flex min-h-10 flex-1 basis-auto cursor-pointer items-center justify-center gap-2 rounded-lg border border-transparent bg-transparent px-3 py-[9px] text-[13px] font-semibold text-[var(--mid)] transition-[background,color,border-color] duration-100 hover:bg-[var(--paper)] hover:text-[var(--ink)] max-[480px]:min-w-0 max-[480px]:[&>svg]:hidden min-[481px]:min-h-11 min-[481px]:min-w-[140px] min-[481px]:px-4 min-[481px]:py-[11px] min-[481px]:text-sm",
   active ? "border-[var(--border-strong)] bg-[var(--paper)] text-[var(--ink)] shadow-[0_1px_3px_rgba(0,0,0,.08)] [&>svg]:text-[var(--accent)]" : "",
 ].filter(Boolean).join(" ");
+
+type SaveSessionResult = {
+  success: boolean;
+  sessionId?: string;
+  sessionName?: string;
+};
+
+type SlotCreationMode = "none" | "sessionDate" | "range";
+
+const weekdays = [
+  { id: 1, label: "Lun." },
+  { id: 2, label: "Mar." },
+  { id: 3, label: "Mer." },
+  { id: 4, label: "Jeu." },
+  { id: 5, label: "Ven." },
+  { id: 6, label: "Sam." },
+  { id: 0, label: "Dim." },
+];
+
+const buildRangeDates = (startValue: string, endValue: string, selectedWeekdays: number[]) => {
+  const start = parseIsoDate(startValue);
+  const end = parseIsoDate(endValue);
+  if (!start || !end || selectedWeekdays.length === 0) return [];
+
+  const startDate = new Date(Date.UTC(start.year, start.month - 1, start.day, 12));
+  const endDate = new Date(Date.UTC(end.year, end.month - 1, end.day, 12));
+  if (startDate.getTime() > endDate.getTime()) return [];
+
+  const dates: string[] = [];
+  for (
+    let current = new Date(startDate);
+    current.getTime() <= endDate.getTime();
+    current = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate() + 1, 12))
+  ) {
+    if (selectedWeekdays.includes(current.getUTCDay())) {
+      dates.push(toIsoDate(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate()));
+    }
+  }
+  return dates;
+};
 
 // AnalyseView (Chart.js, calculs lourds) chargée à la demande.
 const AnalyseView = dynamic(() => import("../Analyse/AnalyseView").then(m => m.AnalyseView), {
@@ -47,7 +88,7 @@ interface AdminViewProps {
   onDeleteSession: (id: string) => void;
   onSetEditCfg: Dispatch<SetStateAction<SessionConfig | null>>;
   onSetEditTab: (tab: string) => void;
-  onSaveEdit: () => void;
+  onSaveEdit: () => Promise<SaveSessionResult | void> | SaveSessionResult | void;
   onGoBack: () => void;
   downloadCSV: (rows: CSVRow[], filename: string) => void;
   listJurorsForSession: (id: string) => Promise<string[]>;
@@ -70,10 +111,81 @@ export const AdminView = ({
   allAnswers, anSessId, anCfg, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [slotMode, setSlotMode] = useState<SlotCreationMode>("none");
+  const [slotRangeStart, setSlotRangeStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const [slotRangeEnd, setSlotRangeEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const [slotWeekdays, setSlotWeekdays] = useState<number[]>([2, 4]);
+  const [slotMessage, setSlotMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const helpSessionId = screen === "edit" ? editSessId : (adminSection === "analyse" ? anSessId : null);
   const helpSessionName = helpSessionId
     ? (helpSessionId === editSessId ? editCfg?.name : anCfg?.name) || sessions.find(s => s.id === helpSessionId)?.name
     : undefined;
+
+  const pendingSlotDates = useMemo(() => {
+    if (!editCfg || slotMode === "none") return [];
+    if (slotMode === "sessionDate") return parseIsoDate(editCfg.date) ? [editCfg.date] : [];
+    return buildRangeDates(slotRangeStart, slotRangeEnd, slotWeekdays);
+  }, [editCfg, slotMode, slotRangeEnd, slotRangeStart, slotWeekdays]);
+
+  const createSlotsForSession = async (sessionId: string, sessionName: string) => {
+    if (pendingSlotDates.length === 0) return;
+    const response = await fetch("/api/admin/slots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slotDates: pendingSlotDates,
+        sessionId,
+        sessionName,
+      }),
+    });
+    const payload = await response.json().catch(() => ({})) as {
+      ok?: boolean;
+      error?: string;
+      detail?: string;
+      created?: unknown[];
+      skipped?: unknown[];
+    };
+
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.detail || payload.error || "Creation des creneaux impossible.");
+    }
+
+    const createdCount = payload.created?.length || 0;
+    const skippedCount = payload.skipped?.length || 0;
+    setSlotMessage({
+      kind: "ok",
+      text: skippedCount > 0
+        ? `${createdCount} creneau(x) cree(s), ${skippedCount} date(s) deja ouverte(s).`
+        : `${createdCount} creneau(x) cree(s).`,
+    });
+  };
+
+  const handleSaveWithSlots = async () => {
+    setSlotMessage(null);
+    const result = await onSaveEdit();
+    if (!result?.success) return;
+    if (slotMode === "none") {
+      onGoBack();
+      return;
+    }
+    if (!result.sessionId || !result.sessionName) {
+      setSlotMessage({ kind: "error", text: "Seance enregistree, mais impossible de recuperer son identifiant pour creer le creneau." });
+      return;
+    }
+    if (pendingSlotDates.length === 0) {
+      setSlotMessage({ kind: "error", text: "Choisissez au moins une date valide pour creer un creneau." });
+      return;
+    }
+
+    try {
+      await createSlotsForSession(result.sessionId, result.sessionName);
+    } catch (error) {
+      setSlotMessage({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Seance enregistree, mais creation des creneaux impossible.",
+      });
+    }
+  };
 
   if (screen === "landing") {
     return (
@@ -217,7 +329,7 @@ export const AdminView = ({
           <div className="flex-1">
              <h2 className="truncate text-[17px] font-extrabold leading-[1.2] tracking-[-.2px] min-[481px]:text-xl">{editCfg.name || "Nouvelle séance"}</h2>
           </div>
-          <Button onClick={onSaveEdit}>Enregistrer</Button>
+          <Button onClick={() => void handleSaveWithSlots()}>Enregistrer</Button>
         </header>
 
         <div className={editTabsClass}>
@@ -247,6 +359,114 @@ export const AdminView = ({
                       }}
                     />
                   </div>
+                  <div className="field-wrap">
+                    <label>DATE</label>
+                    <input
+                      type="date"
+                      value={editCfg.date}
+                      onChange={(e) => {
+                        const date = e.target.value;
+                        onSetEditCfg(prev => prev ? { ...prev, date } : prev);
+                      }}
+                    />
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="Creneau d'inscription">
+                <div className="grid gap-3 p-[15px]">
+                  <div className="grid gap-2 min-[720px]:grid-cols-3">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 text-sm font-semibold">
+                      <input
+                        type="radio"
+                        name="slotMode"
+                        checked={slotMode === "none"}
+                        onChange={() => setSlotMode("none")}
+                      />
+                      Aucun creneau
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 text-sm font-semibold">
+                      <input
+                        type="radio"
+                        name="slotMode"
+                        checked={slotMode === "sessionDate"}
+                        onChange={() => setSlotMode("sessionDate")}
+                      />
+                      Date de seance
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 text-sm font-semibold">
+                      <input
+                        type="radio"
+                        name="slotMode"
+                        checked={slotMode === "range"}
+                        onChange={() => setSlotMode("range")}
+                      />
+                      Plage de dates
+                    </label>
+                  </div>
+
+                  {slotMode === "range" && (
+                    <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--paper2)] p-3">
+                      <div className="grid gap-3 min-[720px]:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Debut</label>
+                          <input
+                            type="date"
+                            value={slotRangeStart}
+                            onChange={(event) => setSlotRangeStart(event.target.value)}
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 outline-none focus:border-[var(--primary)]"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Fin</label>
+                          <input
+                            type="date"
+                            value={slotRangeEnd}
+                            onChange={(event) => setSlotRangeEnd(event.target.value)}
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 outline-none focus:border-[var(--primary)]"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-2 text-xs font-bold uppercase text-[var(--mid)]">Jours inclus</div>
+                        <div className="flex flex-wrap gap-2">
+                          {weekdays.map(day => (
+                            <label key={day.id} className="flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--paper)] px-3 py-1.5 text-sm font-semibold">
+                              <input
+                                type="checkbox"
+                                checked={slotWeekdays.includes(day.id)}
+                                onChange={() => {
+                                  setSlotWeekdays(prev => prev.includes(day.id)
+                                    ? prev.filter(item => item !== day.id)
+                                    : [...prev, day.id]
+                                  );
+                                }}
+                              />
+                              {day.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {slotMode !== "none" && (
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 text-sm font-medium text-[var(--mid)]">
+                      {pendingSlotDates.length > 0
+                        ? `${pendingSlotDates.length} creneau(x) sera/seront cree(s) et rattache(s) a cette seance apres enregistrement.`
+                        : "Aucune date valide selectionnee pour le moment."}
+                    </div>
+                  )}
+
+                  {slotMessage && (
+                    <div className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                      slotMessage.kind === "ok"
+                        ? "border-[rgba(98,141,23,.24)] bg-[rgba(98,141,23,.09)] text-[var(--primary)]"
+                        : "border-[rgba(198,40,40,.22)] bg-[rgba(198,40,40,.08)] text-[var(--danger)]"
+                    }`}>
+                      {slotMessage.text}
+                    </div>
+                  )}
                 </div>
               </Card>
 
