@@ -1,14 +1,14 @@
 "use client";
 import React, { useMemo, useState, Dispatch, SetStateAction } from "react";
 import dynamic from "next/dynamic";
-import { FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart, FiCalendar } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart, FiCalendar } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { Badge } from "../../ui/Badge";
 import { DangerGhostButton, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { SessionConfig, SessionListItem, AllAnswers, CSVRow, AppScreen } from "../../../types";
 import { adminFieldGridClass, chipRemoveButtonClass } from "./utils";
-import { parseIsoDate, toIsoDate } from "../../../lib/slots/dates";
+import { getMonthCalendarDays, monthLabel } from "../../../lib/slots/dates";
 
 // Import subcomponents
 import { ParticipantsTab } from "./ParticipantsTab";
@@ -32,36 +32,11 @@ type SaveSessionResult = {
   sessionName?: string;
 };
 
-const weekdays = [
-  { id: 1, label: "Lun." },
-  { id: 2, label: "Mar." },
-  { id: 3, label: "Mer." },
-  { id: 4, label: "Jeu." },
-  { id: 5, label: "Ven." },
-  { id: 6, label: "Sam." },
-  { id: 0, label: "Dim." },
-];
+const calendarWeekdayLabels = ["L", "M", "M", "J", "V", "S", "D"];
 
-const buildRangeDates = (startValue: string, endValue: string, selectedWeekdays: number[]) => {
-  const start = parseIsoDate(startValue);
-  const end = parseIsoDate(endValue);
-  if (!start || !end || selectedWeekdays.length === 0) return [];
-
-  const startDate = new Date(Date.UTC(start.year, start.month - 1, start.day, 12));
-  const endDate = new Date(Date.UTC(end.year, end.month - 1, end.day, 12));
-  if (startDate.getTime() > endDate.getTime()) return [];
-
-  const dates: string[] = [];
-  for (
-    let current = new Date(startDate);
-    current.getTime() <= endDate.getTime();
-    current = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate() + 1, 12))
-  ) {
-    if (selectedWeekdays.includes(current.getUTCDay())) {
-      dates.push(toIsoDate(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate()));
-    }
-  }
-  return dates;
+const getCurrentCalendarMonth = () => {
+  const now = new Date();
+  return { year: now.getFullYear(), monthIndex: now.getMonth() };
 };
 
 // AnalyseView (Chart.js, calculs lourds) chargée à la demande.
@@ -110,21 +85,38 @@ export const AdminView = ({
 }: AdminViewProps) => {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [skipSlotCreation, setSkipSlotCreation] = useState(false);
-  const [slotRangeStart, setSlotRangeStart] = useState("");
-  const [slotRangeEnd, setSlotRangeEnd] = useState("");
-  const [slotWeekdays, setSlotWeekdays] = useState<number[]>([2, 4]);
+  const [selectedSlotDates, setSelectedSlotDates] = useState<Set<string>>(() => new Set());
+  const [slotCalendarMonth, setSlotCalendarMonth] = useState(getCurrentCalendarMonth);
   const [slotMessage, setSlotMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const helpSessionId = screen === "edit" ? editSessId : (adminSection === "analyse" ? anSessId : null);
   const helpSessionName = helpSessionId
     ? (helpSessionId === editSessId ? editCfg?.name : anCfg?.name) || sessions.find(s => s.id === helpSessionId)?.name
     : undefined;
-  const effectiveSlotRangeStart = slotRangeStart || editCfg?.date || new Date().toISOString().slice(0, 10);
-  const effectiveSlotRangeEnd = slotRangeEnd || editCfg?.date || effectiveSlotRangeStart;
+  const slotCalendarDays = useMemo(
+    () => getMonthCalendarDays(slotCalendarMonth.year, slotCalendarMonth.monthIndex),
+    [slotCalendarMonth.monthIndex, slotCalendarMonth.year]
+  );
 
   const pendingSlotDates = useMemo(() => {
     if (!editCfg || skipSlotCreation) return [];
-    return buildRangeDates(effectiveSlotRangeStart, effectiveSlotRangeEnd, slotWeekdays);
-  }, [editCfg, effectiveSlotRangeEnd, effectiveSlotRangeStart, skipSlotCreation, slotWeekdays]);
+    return Array.from(selectedSlotDates).sort();
+  }, [editCfg, selectedSlotDates, skipSlotCreation]);
+
+  const moveSlotCalendarMonth = (delta: number) => {
+    setSlotCalendarMonth(prev => {
+      const next = new Date(prev.year, prev.monthIndex + delta, 1);
+      return { year: next.getFullYear(), monthIndex: next.getMonth() };
+    });
+  };
+
+  const toggleSlotDate = (date: string) => {
+    setSelectedSlotDates(prev => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
 
   const createSlotsForSession = async (sessionId: string, sessionName: string) => {
     if (pendingSlotDates.length === 0) return;
@@ -358,17 +350,6 @@ export const AdminView = ({
                       }}
                     />
                   </div>
-                  <div className="field-wrap">
-                    <label>DATE</label>
-                    <input
-                      type="date"
-                      value={editCfg.date}
-                      onChange={(e) => {
-                        const date = e.target.value;
-                        onSetEditCfg(prev => prev ? { ...prev, date } : prev);
-                      }}
-                    />
-                  </div>
                 </div>
               </Card>
 
@@ -385,54 +366,56 @@ export const AdminView = ({
 
                   {!skipSlotCreation && (
                     <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--paper2)] p-3">
-                      <div className="grid gap-3 min-[720px]:grid-cols-2">
-                        <div>
-                          <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Date debut</label>
-                          <input
-                            type="date"
-                            value={effectiveSlotRangeStart}
-                            onChange={(event) => setSlotRangeStart(event.target.value)}
-                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 outline-none focus:border-[var(--primary)]"
-                          />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--mid)] hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
+                          onClick={() => moveSlotCalendarMonth(-1)}
+                          aria-label="Mois precedent"
+                          title="Mois precedent"
+                        >
+                          <FiChevronLeft />
+                        </button>
+                        <div className="flex-1 text-center text-sm font-extrabold capitalize text-[var(--ink)]">
+                          {monthLabel(slotCalendarMonth.year, slotCalendarMonth.monthIndex)}
                         </div>
-                        <div>
-                          <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Date fin</label>
-                          <input
-                            type="date"
-                            value={effectiveSlotRangeEnd}
-                            onChange={(event) => setSlotRangeEnd(event.target.value)}
-                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 outline-none focus:border-[var(--primary)]"
-                          />
-                        </div>
+                        <button
+                          type="button"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--mid)] hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
+                          onClick={() => moveSlotCalendarMonth(1)}
+                          aria-label="Mois suivant"
+                          title="Mois suivant"
+                        >
+                          <FiChevronRight />
+                        </button>
                       </div>
-                      <div>
-                        <div className="mb-2 text-xs font-bold uppercase text-[var(--mid)]">Jours inclus</div>
-                        <div className="flex flex-wrap gap-2">
-                          {weekdays.map(day => (
-                            <label key={day.id} className="flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--paper)] px-3 py-1.5 text-sm font-semibold">
-                              <input
-                                type="checkbox"
-                                checked={slotWeekdays.includes(day.id)}
-                                onChange={() => {
-                                  setSlotWeekdays(prev => prev.includes(day.id)
-                                    ? prev.filter(item => item !== day.id)
-                                    : [...prev, day.id]
-                                  );
-                                }}
-                              />
-                              {day.label}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
-                  {!skipSlotCreation && (
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 text-sm font-medium text-[var(--mid)]">
-                      {pendingSlotDates.length > 0
-                        ? `${pendingSlotDates.length} créneau(x) sera/seront créé(s) et rattaché(s) à cette séance après enregistrement.`
-                        : "Aucune date valide sélectionnée pour le moment."}
+                      <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase text-[var(--mid)]">
+                        {calendarWeekdayLabels.map((label, index) => (
+                          <div key={`${label}-${index}`} className="py-1">{label}</div>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1">
+                        {slotCalendarDays.map(day => {
+                          const selected = selectedSlotDates.has(day.date);
+                          return (
+                            <button
+                              key={day.date}
+                              type="button"
+                              onClick={() => toggleSlotDate(day.date)}
+                              className={[
+                                "aspect-square min-h-9 rounded-lg border text-sm font-semibold transition-colors",
+                                day.inMonth ? "border-[var(--border)] bg-[var(--paper)] text-[var(--ink)]" : "border-transparent bg-transparent text-[var(--mid2)]",
+                                selected ? "border-[var(--primary)] bg-[var(--primary)] text-white shadow-[0_1px_4px_rgba(0,0,0,.12)]" : "hover:border-[var(--border-strong)] hover:bg-[var(--paper)]",
+                              ].join(" ")}
+                              aria-pressed={selected}
+                            >
+                              {day.day}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 
