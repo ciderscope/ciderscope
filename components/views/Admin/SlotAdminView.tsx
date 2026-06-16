@@ -14,6 +14,18 @@ type SlotAdminViewProps = {
 
 const panelClass = "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-4 shadow-[var(--shadow)]";
 
+const readApiError = async (response: Response, fallback: string) => {
+  const statusLabel = `HTTP ${response.status}`;
+  try {
+    const payload = await response.json() as { error?: string; detail?: string };
+    const message = payload.detail || payload.error;
+    if (message) return `${message} (${statusLabel})`;
+  } catch {
+    // Keep the status visible when the response body is not JSON.
+  }
+  return `${fallback} (${statusLabel})`;
+};
+
 export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
   const [slots, setSlots] = useState<AdminSlotListItem[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -41,7 +53,11 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     try {
       const slotsResponse = await fetch("/api/admin/slots", { cache: "no-store" });
       if (!slotsResponse.ok) {
-        throw new Error("Admin data request failed.");
+        const text = slotsResponse.status === 401
+          ? "Session admin expiree. Deconnectez-vous puis reconnectez-vous. (HTTP 401)"
+          : await readApiError(slotsResponse, "Impossible de charger les creneaux admin.");
+        setMessage({ kind: "error", text });
+        return;
       }
 
       const slotsPayload = await slotsResponse.json();
