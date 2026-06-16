@@ -32,8 +32,6 @@ type SaveSessionResult = {
   sessionName?: string;
 };
 
-type SlotCreationMode = "none" | "sessionDate" | "range";
-
 const weekdays = [
   { id: 1, label: "Lun." },
   { id: 2, label: "Mar." },
@@ -111,21 +109,22 @@ export const AdminView = ({
   allAnswers, anSessId, anCfg, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [slotMode, setSlotMode] = useState<SlotCreationMode>("none");
-  const [slotRangeStart, setSlotRangeStart] = useState(() => new Date().toISOString().slice(0, 10));
-  const [slotRangeEnd, setSlotRangeEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const [skipSlotCreation, setSkipSlotCreation] = useState(false);
+  const [slotRangeStart, setSlotRangeStart] = useState("");
+  const [slotRangeEnd, setSlotRangeEnd] = useState("");
   const [slotWeekdays, setSlotWeekdays] = useState<number[]>([2, 4]);
   const [slotMessage, setSlotMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const helpSessionId = screen === "edit" ? editSessId : (adminSection === "analyse" ? anSessId : null);
   const helpSessionName = helpSessionId
     ? (helpSessionId === editSessId ? editCfg?.name : anCfg?.name) || sessions.find(s => s.id === helpSessionId)?.name
     : undefined;
+  const effectiveSlotRangeStart = slotRangeStart || editCfg?.date || new Date().toISOString().slice(0, 10);
+  const effectiveSlotRangeEnd = slotRangeEnd || editCfg?.date || effectiveSlotRangeStart;
 
   const pendingSlotDates = useMemo(() => {
-    if (!editCfg || slotMode === "none") return [];
-    if (slotMode === "sessionDate") return parseIsoDate(editCfg.date) ? [editCfg.date] : [];
-    return buildRangeDates(slotRangeStart, slotRangeEnd, slotWeekdays);
-  }, [editCfg, slotMode, slotRangeEnd, slotRangeStart, slotWeekdays]);
+    if (!editCfg || skipSlotCreation) return [];
+    return buildRangeDates(effectiveSlotRangeStart, effectiveSlotRangeEnd, slotWeekdays);
+  }, [editCfg, effectiveSlotRangeEnd, effectiveSlotRangeStart, skipSlotCreation, slotWeekdays]);
 
   const createSlotsForSession = async (sessionId: string, sessionName: string) => {
     if (pendingSlotDates.length === 0) return;
@@ -164,7 +163,7 @@ export const AdminView = ({
     setSlotMessage(null);
     const result = await onSaveEdit();
     if (!result?.success) return;
-    if (slotMode === "none") {
+    if (skipSlotCreation) {
       onGoBack();
       return;
     }
@@ -373,55 +372,34 @@ export const AdminView = ({
                 </div>
               </Card>
 
-              <Card title="Creneau d'inscription">
+              <Card title="Créneau">
                 <div className="grid gap-3 p-[15px]">
-                  <div className="grid gap-2 min-[720px]:grid-cols-3">
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 text-sm font-semibold">
-                      <input
-                        type="radio"
-                        name="slotMode"
-                        checked={slotMode === "none"}
-                        onChange={() => setSlotMode("none")}
-                      />
-                      Aucun creneau
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 text-sm font-semibold">
-                      <input
-                        type="radio"
-                        name="slotMode"
-                        checked={slotMode === "sessionDate"}
-                        onChange={() => setSlotMode("sessionDate")}
-                      />
-                      Date de seance
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 text-sm font-semibold">
-                      <input
-                        type="radio"
-                        name="slotMode"
-                        checked={slotMode === "range"}
-                        onChange={() => setSlotMode("range")}
-                      />
-                      Plage de dates
-                    </label>
-                  </div>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={skipSlotCreation}
+                      onChange={(event) => setSkipSlotCreation(event.target.checked)}
+                    />
+                    Ne pas assigner de créneau
+                  </label>
 
-                  {slotMode === "range" && (
+                  {!skipSlotCreation && (
                     <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--paper2)] p-3">
                       <div className="grid gap-3 min-[720px]:grid-cols-2">
                         <div>
-                          <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Debut</label>
+                          <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Date debut</label>
                           <input
                             type="date"
-                            value={slotRangeStart}
+                            value={effectiveSlotRangeStart}
                             onChange={(event) => setSlotRangeStart(event.target.value)}
                             className="w-full rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 outline-none focus:border-[var(--primary)]"
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Fin</label>
+                          <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Date fin</label>
                           <input
                             type="date"
-                            value={slotRangeEnd}
+                            value={effectiveSlotRangeEnd}
                             onChange={(event) => setSlotRangeEnd(event.target.value)}
                             className="w-full rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 outline-none focus:border-[var(--primary)]"
                           />
@@ -450,11 +428,11 @@ export const AdminView = ({
                     </div>
                   )}
 
-                  {slotMode !== "none" && (
+                  {!skipSlotCreation && (
                     <div className="rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 text-sm font-medium text-[var(--mid)]">
                       {pendingSlotDates.length > 0
-                        ? `${pendingSlotDates.length} creneau(x) sera/seront cree(s) et rattache(s) a cette seance apres enregistrement.`
-                        : "Aucune date valide selectionnee pour le moment."}
+                        ? `${pendingSlotDates.length} créneau(x) sera/seront créé(s) et rattaché(s) à cette séance après enregistrement.`
+                        : "Aucune date valide sélectionnée pour le moment."}
                     </div>
                   )}
 
