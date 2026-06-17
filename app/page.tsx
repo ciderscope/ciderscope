@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 
 import { ParticipantView } from "../components/views/Participant/ParticipantView";
@@ -30,6 +30,7 @@ const AnalyseView = dynamic(() => import("../components/views/Analyse/AnalyseVie
 const fingerprint = (cfg: unknown) => hsh(JSON.stringify(cfg));
 type AdminSection = "seances" | "creneaux" | "analyse";
 type NavigationPoint = { mode: AppMode; screen: AppScreen; adminSection: AdminSection };
+type SaveNotice = { title: string; text: string };
 
 const formatSaveError = (error: unknown) => {
   const typed = error as { error?: string; detail?: string; details?: string[] } | undefined;
@@ -62,6 +63,7 @@ const getHierarchicalBackTarget = ({ mode, screen, adminSection }: NavigationPoi
 
 export default function CiderScope() {
   const editFingerprintRef = useRef<number | null>(null);
+  const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
 
   const {
     mode, setMode, screen, setScreen,
@@ -255,6 +257,7 @@ export default function CiderScope() {
           }
         }
         const id = editSessId || "s" + Date.now();
+        const wasCreated = !editSessId;
         const existing = sessions.find(s => s.id === id);
         const res = await saveSession(id, editCfg, {
           active: existing ? existing.active : true,
@@ -264,12 +267,28 @@ export default function CiderScope() {
         if (res.success) {
           editFingerprintRef.current = fingerprint(editCfg);
           await loadSessions();
-          return { success: true, sessionId: id, sessionName: editCfg.name };
+          return { success: true, sessionId: id, sessionName: editCfg.name, wasCreated };
         } else {
           alert(`Erreur lors de l'enregistrement.${res.error ? "\n\n" + formatSaveError(res.error) : ""}`);
           return { success: false };
         }
       }}
+      onSessionSaved={(result) => {
+        setScreen("landing");
+        setAdminSection("seances");
+        setEditCfg(null);
+        setEditSessId(null);
+        setCurEditTab("session");
+        editFingerprintRef.current = null;
+        setSaveNotice({
+          title: result.wasCreated ? "Seance creee" : "Seance enregistree",
+          text: result.wasCreated
+            ? `La seance "${result.sessionName || "sans nom"}" a bien ete creee.`
+            : `La seance "${result.sessionName || "sans nom"}" a bien ete enregistree.`,
+        });
+      }}
+      saveNotice={saveNotice}
+      onDismissSaveNotice={() => setSaveNotice(null)}
       downloadCSV={downloadCSV}
       listJurorsForSession={listJurorsForSession}
       deleteJury={deleteJury}

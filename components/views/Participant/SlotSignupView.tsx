@@ -138,7 +138,10 @@ export const SlotSignupView = () => {
 
       setDuplicateEmail(null);
       setCancelEmail("");
-      setMessage({ kind: "ok", text: "Participation annulée." });
+      setMessage({
+        kind: "ok",
+        text: payload.alreadyCancelled ? "Participation déjà annulée." : "Participation annulée.",
+      });
       await loadSlots();
     } catch {
       setMessage({ kind: "error", text: "Erreur lors de l'annulation." });

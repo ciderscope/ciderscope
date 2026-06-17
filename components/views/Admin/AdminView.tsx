@@ -30,6 +30,12 @@ type SaveSessionResult = {
   success: boolean;
   sessionId?: string;
   sessionName?: string;
+  wasCreated?: boolean;
+};
+
+type SaveNotice = {
+  title: string;
+  text: string;
 };
 
 // AnalyseView (Chart.js, calculs lourds) chargée à la demande.
@@ -55,6 +61,9 @@ interface AdminViewProps {
   onSetEditCfg: Dispatch<SetStateAction<SessionConfig | null>>;
   onSetEditTab: (tab: string) => void;
   onSaveEdit: () => Promise<SaveSessionResult | void> | SaveSessionResult | void;
+  onSessionSaved: (result: SaveSessionResult) => void;
+  saveNotice: SaveNotice | null;
+  onDismissSaveNotice: () => void;
   onGoBack: () => void;
   downloadCSV: (rows: CSVRow[], filename: string) => void;
   listJurorsForSession: (id: string) => Promise<string[]>;
@@ -72,7 +81,7 @@ export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
   adminSection, setAdminSection,
   onNewSession, onEditSession, onToggleActive, onToggleResultsVisible, onDuplicateSession, onDeleteSession,
-  onSetEditCfg, onSetEditTab, onSaveEdit, onGoBack, downloadCSV,
+  onSetEditCfg, onSetEditTab, onSaveEdit, onSessionSaved, saveNotice, onDismissSaveNotice, onGoBack, downloadCSV,
   listJurorsForSession, deleteJury,
   allAnswers, anSessId, anCfg, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
@@ -143,7 +152,7 @@ export const AdminView = ({
     const result = await onSaveEdit();
     if (!result?.success) return;
     if (skipSlotCreation) {
-      onGoBack();
+      onSessionSaved(result);
       return;
     }
     if (!result.sessionId || !result.sessionName) {
@@ -157,6 +166,8 @@ export const AdminView = ({
 
     try {
       await createSlotsForSession(result.sessionId, result.sessionName);
+      setSelectedSlotDates(new Set());
+      onSessionSaved(result);
     } catch (error) {
       setSlotMessage({
         kind: "error",
@@ -285,6 +296,18 @@ export const AdminView = ({
           >
             Toutes les données et les réponses des participants seront définitivement supprimées.
           </ConfirmDialog>
+        )}
+
+        {saveNotice && (
+          <div role="dialog" aria-modal="true" className="fixed inset-0 z-[230] flex items-center justify-center bg-black/35 px-4">
+            <div className="w-full max-w-[430px] rounded-xl border border-[var(--border)] bg-[var(--paper)] p-6 shadow-[0_12px_36px_rgba(0,0,0,.18)]">
+              <div className="mb-2 text-lg font-extrabold text-[var(--ink)]">{saveNotice.title}</div>
+              <div className="text-sm leading-relaxed text-[var(--mid)]">{saveNotice.text}</div>
+              <div className="mt-5 flex justify-end">
+                <Button variant="ok" size="sm" onClick={onDismissSaveNotice}>OK</Button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
       </>

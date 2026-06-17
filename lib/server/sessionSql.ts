@@ -29,6 +29,30 @@ type UpsertSessionInput = {
   meta: Partial<SessionListItem>;
 };
 
+export const findDuplicateSessionFromSql = async ({
+  id,
+  name,
+  date,
+}: {
+  id: string;
+  name: string;
+  date: string;
+}) => {
+  const { rows } = await getPool().query<{ id: string }>(
+    `
+      select id::text
+      from sessions
+      where id <> $1
+        and date = $2
+        and lower(btrim(name)) = lower(btrim($3))
+      limit 1
+    `,
+    [id, date, name]
+  );
+
+  return rows[0] || null;
+};
+
 export const upsertSessionFromSql = async ({ id, cfg, meta }: UpsertSessionInput) => {
   const name = (meta.name ?? cfg.name).trim();
   const date = meta.date ?? cfg.date;

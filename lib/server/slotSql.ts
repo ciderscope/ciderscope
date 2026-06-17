@@ -361,6 +361,31 @@ export const cancelSlotRegistrationFromSql = async ({
   });
 };
 
+export const hasCancelledSlotRegistrationFromSql = async ({
+  slotId,
+  participantEmail,
+}: {
+  slotId: string;
+  participantEmail: string;
+}): Promise<boolean> => {
+  const email = normalizeEmail(participantEmail);
+  if (!isValidEmail(email)) return false;
+
+  const { rowCount } = await getPool().query(
+    `
+      select 1
+      from slot_registrations
+      where slot_id = $1
+        and participant_email = $2
+        and status = 'cancelled'
+      limit 1
+    `,
+    [slotId, email]
+  );
+
+  return (rowCount || 0) > 0;
+};
+
 export const getCalendarSlotFromSql = async (slotId: string) => {
   const { rows } = await getPool().query<CalendarSlotRow>(
     "select id::text, slot_date::text, session_name from session_slots where id = $1",

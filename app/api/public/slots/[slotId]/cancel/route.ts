@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminIfConfigured } from "../../../../../../lib/server/supabaseAdmin";
-import { cancelSlotRegistrationFromSql } from "../../../../../../lib/server/slotSql";
+import { cancelSlotRegistrationFromSql, hasCancelledSlotRegistrationFromSql } from "../../../../../../lib/server/slotSql";
 import { normalizeEmail } from "../../../../../../lib/slots/validation";
 
 export const runtime = "nodejs";
@@ -23,6 +23,23 @@ const messageForCode = (code?: string) => {
   return "Annulation impossible.";
 };
 
+const hasCancelledSlotRegistrationWithSupabase = async (
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdminIfConfigured>>,
+  slotId: string,
+  participantEmail: string
+) => {
+  const { data, error } = await supabase
+    .from("slot_registrations")
+    .select("id")
+    .eq("slot_id", slotId)
+    .eq("participant_email", participantEmail)
+    .eq("status", "cancelled")
+    .limit(1);
+
+  if (error) throw error;
+  return (data || []).length > 0;
+};
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ slotId: string }> }
@@ -43,15 +60,27 @@ export async function POST(
       })
       : await cancelSlotRegistrationFromSql({ slotId, participantEmail });
 
-    if (!result.ok || !result.registration) {
+    if (result.ok) {
+      return NextResponse.json({ ok: true });
+    }
+
+    if (result.code === "not_registered") {
+      const alreadyCancelled = supabase
+        ? await hasCancelledSlotRegistrationWithSupabase(supabase, slotId, participantEmail)
+        : await hasCancelledSlotRegistrationFromSql({ slotId, participantEmail });
+
+      if (alreadyCancelled) {
+        return NextResponse.json({ ok: true, alreadyCancelled: true });
+      }
+    }
+
+    if (!result.ok) {
       return NextResponse.json({
         ok: false,
         code: result.code,
         message: messageForCode(result.code),
       }, { status: 400 });
     }
-
-    return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Slot cancellation error:", error);
     return NextResponse.json({ ok: false, message: "Erreur lors de l'annulation." }, { status: 500 });
