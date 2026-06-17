@@ -32,3 +32,20 @@ export const appendHelpRequest = (answers: JurorAnswers, request: HelpRequest): 
     _helpRequests: [...previous, request],
   };
 };
+
+export const acknowledgeHelpRequest = (
+  answers: JurorAnswers | null | undefined,
+  requestId: string,
+  acknowledgedAt = new Date().toISOString()
+): JurorAnswers => {
+  const source = answers || {};
+  const requests = getHelpRequests(source);
+  return {
+    ...source,
+    _helpRequests: requests.map(request => (
+      request.id === requestId
+        ? { ...request, acknowledgedAt: request.acknowledgedAt || acknowledgedAt }
+        : request
+    )),
+  };
+};

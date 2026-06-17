@@ -76,6 +76,7 @@ export interface HelpRequest {
   id: string;
   requestedAt: string;
   stepIndex: number;
+  acknowledgedAt?: string;
 }
 
 // ── Answer value shapes ─────────────────────────────────────────────────────

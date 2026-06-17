@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FiBell, FiVolume2, FiX } from "react-icons/fi";
 import { Button } from "../../ui/Button";
-import { getHelpRequests } from "../../../lib/helpRequests";
+import { acknowledgeHelpRequest, getHelpRequests } from "../../../lib/helpRequests";
 import { supabase } from "../../../lib/supabase";
 import type { HelpRequest, JurorAnswers } from "../../../types";
 
@@ -22,12 +22,12 @@ type BrowserWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
 };
 
-const seenStorageKey = (sessionId: string) => `senso_seen_help_requests_v1:${sessionId}`;
+const acknowledgedStorageKey = (sessionId: string) => `senso_acknowledged_help_requests_v1:${sessionId}`;
 
-const readSeen = (sessionId: string): Set<string> => {
+const readAcknowledged = (sessionId: string): Set<string> => {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(seenStorageKey(sessionId));
+    const raw = localStorage.getItem(acknowledgedStorageKey(sessionId));
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : []);
   } catch {
@@ -35,10 +35,10 @@ const readSeen = (sessionId: string): Set<string> => {
   }
 };
 
-const writeSeen = (sessionId: string, seen: Set<string>) => {
+const writeAcknowledged = (sessionId: string, acknowledged: Set<string>) => {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(seenStorageKey(sessionId), JSON.stringify(Array.from(seen).slice(-250)));
+    localStorage.setItem(acknowledgedStorageKey(sessionId), JSON.stringify(Array.from(acknowledged).slice(-250)));
   } catch {
     // Storage quota/private mode: the popup still works for this render.
   }
@@ -52,12 +52,14 @@ const collectNotifications = (
   return rows.flatMap(row => {
     const jurorName = row.juror_name?.trim();
     if (!jurorName) return [];
-    return getHelpRequests(row.data).map(request => ({
-      ...request,
-      jurorName,
-      sessionId,
-      sessionName,
-    }));
+    return getHelpRequests(row.data)
+      .filter(request => !request.acknowledgedAt)
+      .map(request => ({
+        ...request,
+        jurorName,
+        sessionId,
+        sessionName,
+      }));
   });
 };
 
@@ -103,6 +105,34 @@ const formatRequestTime = (value: string): string => {
   }).format(date);
 };
 
+const persistAcknowledgement = async (notification: HelpNotification) => {
+  const { data, error } = await supabase
+    .from("answers")
+    .select("data")
+    .eq("session_id", notification.sessionId)
+    .eq("juror_name", notification.jurorName)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Acquittement de la demande d'aide impossible:", error);
+    return;
+  }
+
+  const next = acknowledgeHelpRequest((data?.data || {}) as JurorAnswers, notification.id);
+  const { error: updateError } = await supabase
+    .from("answers")
+    .update({
+      data: next,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("session_id", notification.sessionId)
+    .eq("juror_name", notification.jurorName);
+
+  if (updateError) {
+    console.warn("Enregistrement de l'acquittement de la demande d'aide impossible:", updateError);
+  }
+};
+
 interface AdminHelpNotificationsProps {
   sessionId: string | null;
   sessionName?: string;
@@ -113,28 +143,30 @@ export const AdminHelpNotifications = ({ sessionId, sessionName }: AdminHelpNoti
     sessionId: null,
     items: [],
   });
-  const seenRef = useRef<Set<string>>(new Set());
+  const queuedRef = useRef<Set<string>>(new Set());
+  const acknowledgedRef = useRef<Set<string>>(new Set());
   const queue = queueState.sessionId === sessionId ? queueState.items : [];
   const active = queue[0] || null;
 
   useEffect(() => {
     if (!sessionId) {
-      seenRef.current = new Set();
+      queuedRef.current = new Set();
+      acknowledgedRef.current = new Set();
       return;
     }
 
     let cancelled = false;
-    seenRef.current = readSeen(sessionId);
+    queuedRef.current = new Set();
+    acknowledgedRef.current = readAcknowledged(sessionId);
 
     const pushNewNotifications = (rows: AnswerRow[]) => {
       const next = collectNotifications(rows, sessionId, sessionName)
-        .filter(notification => !seenRef.current.has(notification.id))
+        .filter(notification => !queuedRef.current.has(notification.id) && !acknowledgedRef.current.has(notification.id))
         .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
 
       if (next.length === 0 || cancelled) return;
 
-      for (const notification of next) seenRef.current.add(notification.id);
-      writeSeen(sessionId, seenRef.current);
+      for (const notification of next) queuedRef.current.add(notification.id);
       setQueueState(prev => ({
         sessionId,
         items: prev.sessionId === sessionId ? [...prev.items, ...next] : next,
@@ -183,7 +215,14 @@ export const AdminHelpNotifications = ({ sessionId, sessionName }: AdminHelpNoti
   if (!sessionId || !active) return null;
 
   const requestTime = formatRequestTime(active.requestedAt);
-  const dismissActive = () => {
+  const dismissActive = (acknowledge = false) => {
+    if (acknowledge) {
+      acknowledgedRef.current.add(active.id);
+      writeAcknowledged(sessionId, acknowledgedRef.current);
+      void persistAcknowledgement(active);
+    } else {
+      queuedRef.current.delete(active.id);
+    }
     setQueueState(prev => (
       prev.sessionId === sessionId
         ? { sessionId, items: prev.items.slice(1) }
@@ -213,7 +252,7 @@ export const AdminHelpNotifications = ({ sessionId, sessionName }: AdminHelpNoti
           <button
             type="button"
             className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-[var(--mid)] transition-colors hover:bg-[var(--paper2)] hover:text-[var(--ink)]"
-            onClick={dismissActive}
+            onClick={() => dismissActive(false)}
             aria-label="Fermer la notification"
             title="Fermer"
           >
@@ -221,7 +260,7 @@ export const AdminHelpNotifications = ({ sessionId, sessionName }: AdminHelpNoti
           </button>
         </div>
         <div className="mt-4 flex justify-end">
-          <Button variant="secondary" size="sm" onClick={dismissActive}>
+          <Button variant="secondary" size="sm" onClick={() => dismissActive(true)}>
             J&apos;ai vu
           </Button>
         </div>
