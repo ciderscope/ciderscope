@@ -191,7 +191,7 @@ export const createSlotFromSql = async ({
   slotDate: string;
   sessionId: string | null;
   sessionName: string;
-}): Promise<{ id: string }> => {
+}): Promise<{ id: string; attached: boolean }> => {
   return transaction(async client => {
     let finalSessionName = sessionName.trim();
 
@@ -208,6 +208,26 @@ export const createSlotFromSql = async ({
       if (!finalSessionName) finalSessionName = session.rows[0].name;
     }
 
+    const existing = await client.query<{ id: string }>(
+      "select id::text from session_slots where slot_date = $1 and deleted_at is null for update",
+      [slotDate]
+    );
+
+    if ((existing.rowCount || 0) > 0) {
+      const { rows } = await client.query<{ id: string }>(
+        `
+          update session_slots
+          set session_id = $2,
+              session_name = $3,
+              created_by = coalesce(created_by, 'admin')
+          where id = $1
+          returning id::text
+        `,
+        [existing.rows[0].id, sessionId, finalSessionName]
+      );
+      return { id: rows[0].id, attached: true };
+    }
+
     const { rows } = await client.query<{ id: string }>(
       `
         insert into session_slots (slot_date, session_id, session_name, created_by)
@@ -217,7 +237,7 @@ export const createSlotFromSql = async ({
       [slotDate, sessionId, finalSessionName]
     );
 
-    return rows[0];
+    return { id: rows[0].id, attached: false };
   });
 };
 

@@ -29,6 +29,7 @@ const readApiError = async (response: Response, fallback: string) => {
 export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
   const [slots, setSlots] = useState<AdminSlotListItem[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedSlotDates, setSelectedSlotDates] = useState<Set<string>>(() => new Set());
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [slotDate, setSlotDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [sessionId, setSessionId] = useState("");
@@ -48,14 +49,19 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     capacity: slot.capacity,
   }));
 
+  const pendingSlotDates = useMemo(() => {
+    const dates = Array.from(selectedSlotDates).sort();
+    return dates.length > 0 ? dates : [slotDate];
+  }, [selectedSlotDates, slotDate]);
+
   const loadAll = async () => {
     setBusy(true);
     try {
       const slotsResponse = await fetch("/api/admin/slots", { cache: "no-store" });
       if (!slotsResponse.ok) {
         const text = slotsResponse.status === 401
-          ? "Session admin expiree. Deconnectez-vous puis reconnectez-vous. (HTTP 401)"
-          : await readApiError(slotsResponse, "Impossible de charger les creneaux admin.");
+          ? "Session admin expirée. Déconnectez-vous puis reconnectez-vous. (HTTP 401)"
+          : await readApiError(slotsResponse, "Impossible de charger les créneaux admin.");
         setMessage({ kind: "error", text });
         return;
       }
@@ -85,6 +91,7 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slotDate,
+          slotDates: pendingSlotDates,
           sessionId: sessionId || null,
           sessionName,
         }),
@@ -95,8 +102,11 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
         return;
       }
 
-      setMessage({ kind: "ok", text: "Créneau créé." });
-      setSelectedDate(slotDate);
+      const createdCount = payload.created?.length || 0;
+      const attachedCount = payload.attached?.length || 0;
+      setMessage({ kind: "ok", text: `${createdCount} créneau(x) créé(s), ${attachedCount} créneau(x) rattaché(s).` });
+      setSelectedDate(pendingSlotDates[0] || slotDate);
+      setSelectedSlotDates(new Set());
       await loadAll();
     } catch {
       setMessage({ kind: "error", text: "Erreur lors de la création du créneau." });
@@ -161,7 +171,14 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
           <SlotCalendar
             slots={calendarSlots}
             selectedDate={selectedDate}
+            selectedDates={selectedSlotDates}
             onSelectDate={(date, slot) => {
+              setSelectedSlotDates(prev => {
+                const next = new Set(prev);
+                if (next.has(date)) next.delete(date);
+                else next.add(date);
+                return next;
+              });
               setSelectedDate(date);
               setSelectedSlotId(slot?.id || null);
               setSlotDate(date);
@@ -237,6 +254,29 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
         <form className={`${panelClass} self-stretch`} onSubmit={createSlot}>
           <h3 className="mb-3 text-base font-bold text-[var(--ink)]">Ouvrir un créneau</h3>
           <div className="grid gap-3">
+            {selectedSlotDates.size > 0 && (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 text-sm text-[var(--mid)]">
+                <span className="font-semibold text-[var(--ink)]">{selectedSlotDates.size} date(s) sélectionnée(s)</span>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {Array.from(selectedSlotDates).sort().map(date => (
+                    <button
+                      key={date}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSlotDates(prev => {
+                          const next = new Set(prev);
+                          next.delete(date);
+                          return next;
+                        });
+                      }}
+                      className="rounded-full border border-[var(--border)] bg-[var(--paper)] px-2 py-1 text-xs font-semibold text-[var(--mid)] hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
+                    >
+                      {formatSlotDateLong(date)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Date</label>
               <input
@@ -275,7 +315,7 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
               />
             </div>
             <Button type="submit" disabled={busy}>
-              <FiUserPlus /> Créer le créneau
+              <FiUserPlus /> {pendingSlotDates.length > 1 ? "Créer les créneaux" : "Créer le créneau"}
             </Button>
           </div>
         </form>

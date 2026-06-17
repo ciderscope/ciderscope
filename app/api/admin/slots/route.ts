@@ -38,6 +38,31 @@ const createSlotWithSupabase = async (
   sessionId: string | null,
   sessionName: string
 ) => {
+  const { data: existing, error: existingError } = await supabase
+    .from("session_slots")
+    .select("id")
+    .eq("slot_date", slotDate)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from("session_slots")
+      .update({
+        session_id: sessionId,
+        session_name: sessionName,
+        created_by: "admin",
+      })
+      .eq("id", (existing as { id: string }).id)
+      .select("id")
+      .single();
+
+    if (error) throw error;
+    return { id: (data as { id: string }).id, slotDate, attached: true };
+  }
+
   const { data, error } = await supabase
     .from("session_slots")
     .insert({
@@ -50,7 +75,7 @@ const createSlotWithSupabase = async (
     .single();
 
   if (error) throw error;
-  return { id: (data as { id: string }).id, slotDate };
+  return { id: (data as { id: string }).id, slotDate, attached: false };
 };
 
 export async function GET(request: Request) {
@@ -114,6 +139,7 @@ export async function POST(request: Request) {
     }
 
     const created: Array<{ id: string; slotDate: string }> = [];
+    const attached: Array<{ id: string; slotDate: string }> = [];
     const skipped: Array<{ slotDate: string; error: string }> = [];
 
     for (const slotDate of slotDates) {
@@ -123,29 +149,34 @@ export async function POST(request: Request) {
           : supabase
             ? await createSlotWithSupabase(supabase, slotDate, sessionId, sessionName)
             : { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
-        created.push(data);
+        if (data.attached) attached.push(data);
+        else created.push(data);
       } catch (error) {
         if (isUniqueSlotError(error)) {
-          skipped.push({ slotDate, error: "Un creneau existe deja pour cette date." });
+          const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+          if (data.attached) attached.push(data);
+          else created.push(data);
           continue;
         }
         if (isRlsError(error) && canUseSql) {
           const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
-          created.push(data);
+          if (data.attached) attached.push(data);
+          else created.push(data);
           continue;
         }
         throw error;
       }
     }
 
-    if (created.length === 0 && skipped.length > 0) {
+    if (created.length === 0 && attached.length === 0 && skipped.length > 0) {
       return NextResponse.json({ error: skipped[0].error, skipped }, { status: 409 });
     }
 
     return NextResponse.json({
       ok: true,
-      id: created[0]?.id,
+      id: created[0]?.id || attached[0]?.id,
       created,
+      attached,
       skipped,
     });
   } catch (error) {

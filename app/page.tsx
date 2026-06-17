@@ -281,10 +281,10 @@ export default function CiderScope() {
         setCurEditTab("session");
         editFingerprintRef.current = null;
         setSaveNotice({
-          title: result.wasCreated ? "Seance creee" : "Seance enregistree",
+          title: result.wasCreated ? "Séance créée" : "Séance enregistrée",
           text: result.wasCreated
-            ? `La seance "${result.sessionName || "sans nom"}" a bien ete creee.`
-            : `La seance "${result.sessionName || "sans nom"}" a bien ete enregistree.`,
+            ? `La séance "${result.sessionName || "sans nom"}" a bien été créée.`
+            : `La séance "${result.sessionName || "sans nom"}" a bien été enregistrée.`,
         });
       }}
       saveNotice={saveNotice}

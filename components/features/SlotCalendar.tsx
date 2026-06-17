@@ -14,6 +14,7 @@ export type SlotCalendarItem = {
 type SlotCalendarProps = {
   slots: SlotCalendarItem[];
   selectedDate?: string | null;
+  selectedDates?: Set<string>;
   onSelectDate: (date: string, slot: SlotCalendarItem | null) => void;
 };
 
@@ -28,7 +29,7 @@ const cellClass = (state: "available" | "full" | "empty", selected: boolean, inM
   state === "empty" ? "border-[var(--border)] bg-[var(--paper2)] text-[var(--mid)] hover:border-[var(--border-strong)]" : "",
 ].filter(Boolean).join(" ");
 
-export const SlotCalendar = ({ slots, selectedDate, onSelectDate }: SlotCalendarProps) => {
+export const SlotCalendar = ({ slots, selectedDate, selectedDates, onSelectDate }: SlotCalendarProps) => {
   const today = new Date();
   const [visibleMonth, setVisibleMonth] = useState(() => ({
     year: today.getFullYear(),
@@ -84,11 +85,12 @@ export const SlotCalendar = ({ slots, selectedDate, onSelectDate }: SlotCalendar
         {days.map(day => {
           const slot = slotsByDate.get(day.date) || null;
           const state = slot ? (slot.placesTaken >= slot.capacity ? "full" : "available") : "empty";
+          const selected = selectedDates ? selectedDates.has(day.date) : selectedDate === day.date;
           return (
             <button
               type="button"
               key={day.date}
-              className={cellClass(state, selectedDate === day.date, day.inMonth)}
+              className={cellClass(state, selected, day.inMonth)}
               onClick={() => onSelectDate(day.date, slot)}
               aria-label={slot ? `${day.date}, ${slot.placesTaken} places prises sur ${slot.capacity}` : `${day.date}, pas de créneau`}
             >

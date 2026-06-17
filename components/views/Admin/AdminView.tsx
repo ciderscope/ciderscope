@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState, Dispatch, SetStateAction } from "react";
+import React, { useEffect, useMemo, useState, Dispatch, SetStateAction } from "react";
 import dynamic from "next/dynamic";
 import { FiChevronLeft, FiChevronRight, FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart, FiCalendar } from "react-icons/fi";
 import { Button } from "../../ui/Button";
@@ -7,6 +7,7 @@ import { Card } from "../../ui/Card";
 import { Badge } from "../../ui/Badge";
 import { DangerGhostButton, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { SessionConfig, SessionListItem, AllAnswers, CSVRow, AppScreen } from "../../../types";
+import type { AdminSlotListItem } from "../../../types/slots";
 import { adminFieldGridClass, chipRemoveButtonClass } from "./utils";
 import { addDays, getWeekCalendarDays, getWeekStart, weekLabel } from "../../../lib/slots/dates";
 
@@ -36,6 +37,58 @@ type SaveSessionResult = {
 type SaveNotice = {
   title: string;
   text: string;
+};
+
+type SessionDateParts = {
+  year: number;
+  month: number;
+  day: number;
+  time: number;
+};
+
+type SessionGroup = {
+  key: string;
+  title: string;
+  sessions: SessionListItem[];
+  order: number;
+};
+
+const sessionGroupClass = "grid gap-3";
+const sessionGroupHeaderClass = "flex items-center gap-3 border-b border-[var(--border)] pb-2";
+
+const monthFormatter = new Intl.DateTimeFormat("fr-FR", { month: "long" });
+
+const parseSessionDate = (value: string): SessionDateParts | null => {
+  const trimmed = value.trim();
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+  if (isoMatch) {
+    const year = Number.parseInt(isoMatch[1], 10);
+    const month = Number.parseInt(isoMatch[2], 10);
+    const day = Number.parseInt(isoMatch[3], 10);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    ) {
+      return { year, month, day, time: date.getTime() };
+    }
+    return null;
+  }
+
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+    time: new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(),
+  };
+};
+
+const getMonthGroupTitle = (year: number, month: number) => {
+  const label = monthFormatter.format(new Date(year, month - 1, 1));
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)} ${year}`;
 };
 
 // AnalyseView (Chart.js, calculs lourds) chargée à la demande.
@@ -88,6 +141,7 @@ export const AdminView = ({
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [skipSlotCreation, setSkipSlotCreation] = useState(false);
   const [selectedSlotDates, setSelectedSlotDates] = useState<Set<string>>(() => new Set());
+  const [existingSlots, setExistingSlots] = useState<AdminSlotListItem[]>([]);
   const [slotWeekStart, setSlotWeekStart] = useState(() => getWeekStart(new Date()));
   const [slotMessage, setSlotMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const helpSessionId = screen === "edit" ? editSessId : (adminSection === "analyse" ? anSessId : null);
@@ -95,11 +149,76 @@ export const AdminView = ({
     ? (helpSessionId === editSessId ? editCfg?.name : anCfg?.name) || sessions.find(s => s.id === helpSessionId)?.name
     : undefined;
   const slotWeekDays = useMemo(() => getWeekCalendarDays(slotWeekStart), [slotWeekStart]);
+  const existingSlotsByDate = useMemo(() => {
+    return new Map(existingSlots.map(slot => [slot.slotDate, slot]));
+  }, [existingSlots]);
+
+  const groupedSessions = useMemo<SessionGroup[]>(() => {
+    const currentYear = new Date().getFullYear();
+    const groups = new Map<string, SessionGroup>();
+    const datedSessions = sessions.map(session => ({
+      session,
+      date: parseSessionDate(session.date),
+    }));
+
+    datedSessions
+      .sort((a, b) => {
+        if (a.date && b.date) return b.date.time - a.date.time;
+        if (a.date) return -1;
+        if (b.date) return 1;
+        return a.session.name.localeCompare(b.session.name, "fr");
+      })
+      .forEach(({ session, date }) => {
+        const key = date
+          ? date.year === currentYear
+            ? `month-${date.year}-${String(date.month).padStart(2, "0")}`
+            : `year-${date.year}`
+          : "undated";
+        const title = date
+          ? date.year === currentYear
+            ? getMonthGroupTitle(date.year, date.month)
+            : String(date.year)
+          : "Sans date";
+        const order = date
+          ? date.year === currentYear
+            ? date.year * 100 + date.month
+            : date.year * 100
+          : Number.NEGATIVE_INFINITY;
+        const group = groups.get(key);
+        if (group) {
+          group.sessions.push(session);
+        } else {
+          groups.set(key, { key, title, sessions: [session], order });
+        }
+      });
+
+    return Array.from(groups.values()).sort((a, b) => b.order - a.order);
+  }, [sessions]);
 
   const pendingSlotDates = useMemo(() => {
     if (!editCfg || skipSlotCreation) return [];
     return Array.from(selectedSlotDates).sort();
   }, [editCfg, selectedSlotDates, skipSlotCreation]);
+
+  useEffect(() => {
+    if (screen !== "edit") return;
+    let cancelled = false;
+    const loadExistingSlots = async () => {
+      try {
+        const response = await fetch("/api/admin/slots", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({})) as { slots?: AdminSlotListItem[] };
+        if (!response.ok) throw new Error("Impossible de charger les créneaux.");
+        if (!cancelled) setExistingSlots(payload.slots || []);
+      } catch (error) {
+        console.warn("Chargement des créneaux indisponible:", error);
+      }
+    };
+
+    void loadExistingSlots();
+    return () => {
+      cancelled = true;
+    };
+  }, [screen]);
 
   const moveSlotWeek = (delta: number) => {
     setSlotWeekStart(prev => addDays(prev, delta * 7));
@@ -130,20 +249,22 @@ export const AdminView = ({
       error?: string;
       detail?: string;
       created?: unknown[];
+      attached?: unknown[];
       skipped?: unknown[];
     };
 
     if (!response.ok || !payload.ok) {
-      throw new Error(payload.detail || payload.error || "Creation des creneaux impossible.");
+      throw new Error(payload.detail || payload.error || "Création des créneaux impossible.");
     }
 
     const createdCount = payload.created?.length || 0;
+    const attachedCount = payload.attached?.length || 0;
     const skippedCount = payload.skipped?.length || 0;
     setSlotMessage({
       kind: "ok",
       text: skippedCount > 0
-        ? `${createdCount} creneau(x) cree(s), ${skippedCount} date(s) deja ouverte(s).`
-        : `${createdCount} creneau(x) cree(s).`,
+        ? `${createdCount} créneau(x) créé(s), ${attachedCount} créneau(x) rattaché(s), ${skippedCount} date(s) ignorée(s).`
+        : `${createdCount} créneau(x) créé(s), ${attachedCount} créneau(x) rattaché(s).`,
     });
   };
 
@@ -156,11 +277,11 @@ export const AdminView = ({
       return;
     }
     if (!result.sessionId || !result.sessionName) {
-      setSlotMessage({ kind: "error", text: "Seance enregistree, mais impossible de recuperer son identifiant pour creer le creneau." });
+      setSlotMessage({ kind: "error", text: "Séance enregistrée, mais impossible de récupérer son identifiant pour créer le créneau." });
       return;
     }
     if (pendingSlotDates.length === 0) {
-      setSlotMessage({ kind: "error", text: "Choisissez au moins une date valide pour creer un creneau." });
+      setSlotMessage({ kind: "error", text: "Choisissez au moins une date valide pour créer un créneau." });
       return;
     }
 
@@ -171,10 +292,59 @@ export const AdminView = ({
     } catch (error) {
       setSlotMessage({
         kind: "error",
-        text: error instanceof Error ? error.message : "Seance enregistree, mais creation des creneaux impossible.",
+        text: error instanceof Error ? error.message : "Séance enregistrée, mais création des créneaux impossible.",
       });
     }
   };
+
+  const renderSessionCard = (s: SessionListItem) => (
+    <div key={s.id} className={sessionCardClass}>
+      <div className="min-w-0">
+        <div className="text-base font-bold">
+          {s.name}
+          {s.active ? <Badge variant="active">ACTIVE</Badge> : <Badge variant="inactive">INACTIVE</Badge>}
+        </div>
+        <div className="mt-0.5 font-mono text-[11px] text-[var(--mid)]">{s.date} · {s.productCount} éch. · {s.questionCount} Q · {s.jurorCount} jurys</div>
+      </div>
+      <div className="flex-1"></div>
+      <div className="flex flex-wrap gap-[5px]">
+        {s.active
+          ? <Button variant="ghost" size="sm" onClick={() => onToggleActive(s.id)}>Désactiver</Button>
+          : <Button variant="ok" size="sm" onClick={() => onToggleActive(s.id)}>Activer</Button>}
+        <Button
+          variant={s.resultsVisible ? "ok" : "ghost"}
+          size="sm"
+          onClick={() => onToggleResultsVisible(s.id)}
+          title={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
+          aria-label={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
+        >
+          <FiPieChart />
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            onAnSessChange(s.id);
+            setAdminSection("analyse");
+          }}
+          title="Voir l'analyse"
+          aria-label="Voir l'analyse de la séance"
+        >
+          <FiBarChart2 />
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier" aria-label="Modifier la séance"><FiEdit2 /></Button>
+        <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer" aria-label="Dupliquer la séance"><FiCopy /></Button>
+        {confirmingId === s.id ? (
+          <div className="flex gap-1">
+            <Button variant="danger" size="sm" onClick={() => { onDeleteSession(s.id); setConfirmingId(null); }}>Confirmer ?</Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirmingId(null)}>Annuler</Button>
+          </div>
+        ) : (
+          <DangerGhostButton onClick={() => setConfirmingId(s.id)} title="Supprimer" aria-label="Supprimer la séance"><FiX /></DangerGhostButton>
+        )}
+      </div>
+    </div>
+  );
 
   if (screen === "landing") {
     return (
@@ -403,6 +573,8 @@ export const AdminView = ({
                       <div className="grid grid-cols-7 gap-1">
                         {slotWeekDays.map(day => {
                           const selected = selectedSlotDates.has(day.date);
+                          const existingSlot = existingSlotsByDate.get(day.date);
+                          const isFull = existingSlot ? existingSlot.placesTaken >= existingSlot.capacity : false;
                           return (
                             <button
                               key={day.date}
@@ -410,17 +582,28 @@ export const AdminView = ({
                               onClick={() => toggleSlotDate(day.date)}
                               className={[
                                 "grid min-h-[58px] rounded-lg border px-1 py-2 text-center transition-colors",
-                                "border-[var(--border)] bg-[var(--paper)] text-[var(--ink)]",
-                                selected ? "border-[var(--primary)] bg-[var(--primary)] text-white shadow-[0_1px_4px_rgba(0,0,0,.12)]" : "hover:border-[var(--border-strong)] hover:bg-[var(--paper)]",
+                                existingSlot && !selected && !isFull ? "border-[rgba(98,141,23,.28)] bg-[rgba(98,141,23,.11)] text-[var(--ink)]" : "",
+                                existingSlot && !selected && isFull ? "border-[rgba(198,40,40,.25)] bg-[rgba(198,40,40,.10)] text-[var(--ink)]" : "",
+                                !existingSlot && !selected ? "border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] hover:border-[var(--border-strong)] hover:bg-[var(--paper)]" : "",
+                                selected ? "border-[var(--primary)] bg-[var(--primary)] text-white shadow-[0_1px_4px_rgba(0,0,0,.12)]" : "",
                               ].join(" ")}
                               aria-pressed={selected}
+                              title={existingSlot ? "Créneau déjà ouvert : la séance sera rattachée à cette date." : undefined}
                             >
                               <span className="text-[10px] font-bold uppercase leading-none">{day.weekday}</span>
                               <span className="mt-1 text-base font-extrabold leading-none">{day.day}</span>
-                              <span className="mt-1 truncate text-[10px] font-semibold uppercase leading-none opacity-75">{day.month}</span>
+                              <span className="mt-1 truncate text-[10px] font-semibold uppercase leading-none opacity-75">
+                                {existingSlot ? `${existingSlot.placesTaken}/${existingSlot.capacity}` : day.month}
+                              </span>
                             </button>
                           );
                         })}
+                      </div>
+
+                      <div className="flex flex-wrap gap-3 text-[12px] text-[var(--mid)]">
+                        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" /> créneau ouvert</span>
+                        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--danger)]" /> créneau complet</span>
+                        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--paper3)]" /> sans créneau</span>
                       </div>
                     </div>
                   )}
