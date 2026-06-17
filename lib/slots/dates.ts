@@ -11,6 +11,13 @@ export type CalendarDay = {
   inMonth: boolean;
 };
 
+export type WeekDay = {
+  date: string;
+  day: number;
+  weekday: string;
+  month: string;
+};
+
 const pad2 = (value: number) => value.toString().padStart(2, "0");
 
 export const toIsoDate = (year: number, monthIndex: number, day: number) => {
@@ -52,6 +59,52 @@ export const getMonthCalendarDays = (year: number, monthIndex: number): Calendar
   }
 
   return days;
+};
+
+export const getWeekStart = (date: Date) => {
+  const mondayOffset = (date.getDay() + 6) % 7;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - mondayOffset);
+};
+
+export const addDays = (date: Date, days: number) => {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+};
+
+export const getWeekCalendarDays = (weekStart: Date): WeekDay[] => {
+  const formatter = new Intl.DateTimeFormat("fr-FR", {
+    weekday: "short",
+    month: "short",
+    timeZone: SLOT_TIMEZONE,
+  });
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const current = addDays(weekStart, index);
+    const parts = formatter.formatToParts(new Date(Date.UTC(
+      current.getFullYear(),
+      current.getMonth(),
+      current.getDate(),
+      12
+    )));
+    const get = (type: string) => parts.find(part => part.type === type)?.value || "";
+    return {
+      date: toIsoDate(current.getFullYear(), current.getMonth(), current.getDate()),
+      day: current.getDate(),
+      weekday: get("weekday"),
+      month: get("month"),
+    };
+  });
+};
+
+export const weekLabel = (weekStart: Date) => {
+  const start = addDays(weekStart, 0);
+  const end = addDays(weekStart, 6);
+  const formatter = new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: SLOT_TIMEZONE,
+  });
+  return `${formatter.format(start)} - ${formatter.format(end)}`;
 };
 
 export const monthLabel = (year: number, monthIndex: number) => {

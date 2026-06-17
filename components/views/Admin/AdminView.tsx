@@ -8,7 +8,7 @@ import { Badge } from "../../ui/Badge";
 import { DangerGhostButton, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { SessionConfig, SessionListItem, AllAnswers, CSVRow, AppScreen } from "../../../types";
 import { adminFieldGridClass, chipRemoveButtonClass } from "./utils";
-import { getMonthCalendarDays, monthLabel } from "../../../lib/slots/dates";
+import { addDays, getWeekCalendarDays, getWeekStart, weekLabel } from "../../../lib/slots/dates";
 
 // Import subcomponents
 import { ParticipantsTab } from "./ParticipantsTab";
@@ -30,13 +30,6 @@ type SaveSessionResult = {
   success: boolean;
   sessionId?: string;
   sessionName?: string;
-};
-
-const calendarWeekdayLabels = ["L", "M", "M", "J", "V", "S", "D"];
-
-const getCurrentCalendarMonth = () => {
-  const now = new Date();
-  return { year: now.getFullYear(), monthIndex: now.getMonth() };
 };
 
 // AnalyseView (Chart.js, calculs lourds) chargée à la demande.
@@ -86,27 +79,21 @@ export const AdminView = ({
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [skipSlotCreation, setSkipSlotCreation] = useState(false);
   const [selectedSlotDates, setSelectedSlotDates] = useState<Set<string>>(() => new Set());
-  const [slotCalendarMonth, setSlotCalendarMonth] = useState(getCurrentCalendarMonth);
+  const [slotWeekStart, setSlotWeekStart] = useState(() => getWeekStart(new Date()));
   const [slotMessage, setSlotMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const helpSessionId = screen === "edit" ? editSessId : (adminSection === "analyse" ? anSessId : null);
   const helpSessionName = helpSessionId
     ? (helpSessionId === editSessId ? editCfg?.name : anCfg?.name) || sessions.find(s => s.id === helpSessionId)?.name
     : undefined;
-  const slotCalendarDays = useMemo(
-    () => getMonthCalendarDays(slotCalendarMonth.year, slotCalendarMonth.monthIndex),
-    [slotCalendarMonth.monthIndex, slotCalendarMonth.year]
-  );
+  const slotWeekDays = useMemo(() => getWeekCalendarDays(slotWeekStart), [slotWeekStart]);
 
   const pendingSlotDates = useMemo(() => {
     if (!editCfg || skipSlotCreation) return [];
     return Array.from(selectedSlotDates).sort();
   }, [editCfg, selectedSlotDates, skipSlotCreation]);
 
-  const moveSlotCalendarMonth = (delta: number) => {
-    setSlotCalendarMonth(prev => {
-      const next = new Date(prev.year, prev.monthIndex + delta, 1);
-      return { year: next.getFullYear(), monthIndex: next.getMonth() };
-    });
+  const moveSlotWeek = (delta: number) => {
+    setSlotWeekStart(prev => addDays(prev, delta * 7));
   };
 
   const toggleSlotDate = (date: string) => {
@@ -369,35 +356,29 @@ export const AdminView = ({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--mid)] hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
-                          onClick={() => moveSlotCalendarMonth(-1)}
-                          aria-label="Mois precedent"
-                          title="Mois precedent"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--mid)] hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
+                          onClick={() => moveSlotWeek(-1)}
+                          aria-label="Semaine precedente"
+                          title="Semaine precedente"
                         >
                           <FiChevronLeft />
                         </button>
-                        <div className="flex-1 text-center text-sm font-extrabold capitalize text-[var(--ink)]">
-                          {monthLabel(slotCalendarMonth.year, slotCalendarMonth.monthIndex)}
+                        <div className="flex-1 text-center text-sm font-extrabold text-[var(--ink)]">
+                          Semaine du {weekLabel(slotWeekStart)}
                         </div>
                         <button
                           type="button"
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--mid)] hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
-                          onClick={() => moveSlotCalendarMonth(1)}
-                          aria-label="Mois suivant"
-                          title="Mois suivant"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--mid)] hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
+                          onClick={() => moveSlotWeek(1)}
+                          aria-label="Semaine suivante"
+                          title="Semaine suivante"
                         >
                           <FiChevronRight />
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase text-[var(--mid)]">
-                        {calendarWeekdayLabels.map((label, index) => (
-                          <div key={`${label}-${index}`} className="py-1">{label}</div>
-                        ))}
-                      </div>
-
                       <div className="grid grid-cols-7 gap-1">
-                        {slotCalendarDays.map(day => {
+                        {slotWeekDays.map(day => {
                           const selected = selectedSlotDates.has(day.date);
                           return (
                             <button
@@ -405,13 +386,15 @@ export const AdminView = ({
                               type="button"
                               onClick={() => toggleSlotDate(day.date)}
                               className={[
-                                "aspect-square min-h-9 rounded-lg border text-sm font-semibold transition-colors",
-                                day.inMonth ? "border-[var(--border)] bg-[var(--paper)] text-[var(--ink)]" : "border-transparent bg-transparent text-[var(--mid2)]",
+                                "grid min-h-[58px] rounded-lg border px-1 py-2 text-center transition-colors",
+                                "border-[var(--border)] bg-[var(--paper)] text-[var(--ink)]",
                                 selected ? "border-[var(--primary)] bg-[var(--primary)] text-white shadow-[0_1px_4px_rgba(0,0,0,.12)]" : "hover:border-[var(--border-strong)] hover:bg-[var(--paper)]",
                               ].join(" ")}
                               aria-pressed={selected}
                             >
-                              {day.day}
+                              <span className="text-[10px] font-bold uppercase leading-none">{day.weekday}</span>
+                              <span className="mt-1 text-base font-extrabold leading-none">{day.day}</span>
+                              <span className="mt-1 truncate text-[10px] font-semibold uppercase leading-none opacity-75">{day.month}</span>
                             </button>
                           );
                         })}

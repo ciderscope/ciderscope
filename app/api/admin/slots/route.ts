@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listSlots } from "../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../lib/server/supabaseAdmin";
-import { createSlotFromSql, listSlotsFromSql } from "../../../../lib/server/slotSql";
+import { createSlotFromSql, hasSlotSqlConfig, listSlotsFromSql } from "../../../../lib/server/slotSql";
 import { requireAdmin } from "../../../../lib/server/adminAuth";
 import { parseIsoDate } from "../../../../lib/slots/dates";
 
@@ -21,6 +21,7 @@ const getAdminErrorDetail = (error: unknown) => {
 };
 
 const isUniqueSlotError = (error: unknown) => (error as { code?: string }).code === "23505";
+const isRlsError = (error: unknown) => (error as { code?: string }).code === "42501";
 
 const normalizeSlotDates = (body: SlotCreatePayload | null) => {
   const rawDates = Array.isArray(body?.slotDates) && body.slotDates.length > 0
@@ -90,10 +91,11 @@ export async function POST(request: Request) {
     }
 
     const supabase = getSupabaseAdminIfConfigured();
+    const canUseSql = hasSlotSqlConfig();
     const sessionId = body?.sessionId || null;
     let sessionName = (body?.sessionName || "").trim();
 
-    if (supabase && sessionId) {
+    if (!sessionName && supabase && sessionId && !canUseSql) {
       const { data: session, error: sessionError } = await supabase
         .from("sessions")
         .select("id, name")
@@ -107,7 +109,7 @@ export async function POST(request: Request) {
       if (!sessionName) sessionName = (session as { name: string }).name;
     }
 
-    if (!sessionName) {
+    if (!sessionName && !sessionId) {
       return NextResponse.json({ error: "Le nom de seance est obligatoire." }, { status: 400 });
     }
 
@@ -116,13 +118,20 @@ export async function POST(request: Request) {
 
     for (const slotDate of slotDates) {
       try {
-        const data = supabase
-          ? await createSlotWithSupabase(supabase, slotDate, sessionId, sessionName)
-          : { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+        const data = canUseSql
+          ? { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate }
+          : supabase
+            ? await createSlotWithSupabase(supabase, slotDate, sessionId, sessionName)
+            : { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
         created.push(data);
       } catch (error) {
         if (isUniqueSlotError(error)) {
           skipped.push({ slotDate, error: "Un creneau existe deja pour cette date." });
+          continue;
+        }
+        if (isRlsError(error) && canUseSql) {
+          const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+          created.push(data);
           continue;
         }
         throw error;
@@ -147,6 +156,12 @@ export async function POST(request: Request) {
     }
     if (code === "slot_session_not_found") {
       return NextResponse.json({ error: "Seance introuvable." }, { status: 400 });
+    }
+    if (code === "42501") {
+      return NextResponse.json({
+        error: "Impossible de creer le creneau.",
+        detail: "RLS bloque l'insertion dans session_slots. Verifiez que SUPABASE_SERVICE_ROLE_KEY contient la cle service_role Supabase, ou configurez DIRECT_URL/DATABASE_URL cote serveur pour le chemin SQL admin.",
+      }, { status: 500 });
     }
     return NextResponse.json({
       error: "Impossible de creer le creneau.",
