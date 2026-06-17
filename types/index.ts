@@ -66,6 +66,9 @@ export interface SessionListItem {
   name: string;
   date: string;
   active: boolean;
+  hasSlotSchedule?: boolean;
+  slotDate?: string | null;
+  slotDates?: string[];
   jurorCount: number;
   productCount?: number;
   questionCount?: number;

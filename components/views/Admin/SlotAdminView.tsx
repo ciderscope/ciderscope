@@ -107,7 +107,13 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
 
       const createdCount = payload.created?.length || 0;
       const attachedCount = payload.attached?.length || 0;
-      setMessage({ kind: "ok", text: `${createdCount} créneau(x) créé(s), ${attachedCount} créneau(x) rattaché(s).` });
+      const skippedCount = payload.skipped?.length || 0;
+      setMessage({
+        kind: skippedCount > 0 && createdCount === 0 && attachedCount === 0 ? "error" : "ok",
+        text: skippedCount > 0
+          ? `${createdCount} créneau(x) créé(s), ${attachedCount} créneau(x) rattaché(s), ${skippedCount} date(s) ignorée(s).`
+          : `${createdCount} créneau(x) créé(s), ${attachedCount} créneau(x) rattaché(s).`,
+      });
       setSelectedDate(pendingSlotDates[0] || null);
       setSelectedSlotDates(new Set());
       await loadAll();

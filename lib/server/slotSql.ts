@@ -208,12 +208,18 @@ export const createSlotFromSql = async ({
       if (!finalSessionName) finalSessionName = session.rows[0].name;
     }
 
-    const existing = await client.query<{ id: string }>(
-      "select id::text from session_slots where slot_date = $1 and deleted_at is null for update",
+    const existing = await client.query<{ id: string; session_id: string | null }>(
+      "select id::text, session_id from session_slots where slot_date = $1 and deleted_at is null for update",
       [slotDate]
     );
 
     if ((existing.rowCount || 0) > 0) {
+      if (existing.rows[0].session_id && existing.rows[0].session_id !== sessionId) {
+        const error = new Error("Slot already attached to another session.") as PgError;
+        error.code = "slot_already_attached";
+        throw error;
+      }
+
       const { rows } = await client.query<{ id: string }>(
         `
           update session_slots

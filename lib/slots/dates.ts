@@ -127,6 +127,17 @@ export const formatSlotDateLong = (value: string) => {
   }).format(new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day, 12)));
 };
 
+export const chooseSessionSlotDate = (
+  slotDates: string[],
+  activeSlotDate: string | null,
+  today: string | null | undefined
+) => {
+  if (activeSlotDate) return activeSlotDate;
+  if (slotDates.length === 0) return null;
+  if (today) return slotDates.find(date => date >= today) || slotDates[slotDates.length - 1] || null;
+  return slotDates[0] || null;
+};
+
 export const getTodayInSlotTimezone = () => {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: SLOT_TIMEZONE,

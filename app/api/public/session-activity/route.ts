@@ -16,17 +16,30 @@ export async function GET() {
 
     const slottedSessionIds = new Set<string>();
     const activeSessionIds = new Set<string>();
+    const slotDatesBySessionId: Record<string, string[]> = {};
+    const activeSlotDateBySessionId: Record<string, string> = {};
 
     slots.forEach(slot => {
       if (!slot.sessionId) return;
       slottedSessionIds.add(slot.sessionId);
-      if (slot.slotDate === today) activeSessionIds.add(slot.sessionId);
+      slotDatesBySessionId[slot.sessionId] = [
+        ...(slotDatesBySessionId[slot.sessionId] || []),
+        slot.slotDate,
+      ];
+      if (slot.slotDate === today) {
+        activeSessionIds.add(slot.sessionId);
+        activeSlotDateBySessionId[slot.sessionId] = slot.slotDate;
+      }
     });
+
+    Object.values(slotDatesBySessionId).forEach(dates => dates.sort());
 
     return NextResponse.json({
       today,
       slottedSessionIds: Array.from(slottedSessionIds),
       activeSessionIds: Array.from(activeSessionIds),
+      slotDatesBySessionId,
+      activeSlotDateBySessionId,
     });
   } catch (error) {
     console.error("Public session activity error:", error);

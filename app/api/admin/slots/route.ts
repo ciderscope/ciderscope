@@ -22,6 +22,7 @@ const getAdminErrorDetail = (error: unknown) => {
 
 const isUniqueSlotError = (error: unknown) => (error as { code?: string }).code === "23505";
 const isRlsError = (error: unknown) => (error as { code?: string }).code === "42501";
+const isSlotAlreadyAttachedError = (error: unknown) => (error as { code?: string }).code === "slot_already_attached";
 
 const normalizeSlotDates = (body: SlotCreatePayload | null) => {
   const rawDates = Array.isArray(body?.slotDates) && body.slotDates.length > 0
@@ -40,7 +41,7 @@ const createSlotWithSupabase = async (
 ) => {
   const { data: existing, error: existingError } = await supabase
     .from("session_slots")
-    .select("id")
+    .select("id, session_id")
     .eq("slot_date", slotDate)
     .is("deleted_at", null)
     .maybeSingle();
@@ -48,6 +49,13 @@ const createSlotWithSupabase = async (
   if (existingError) throw existingError;
 
   if (existing) {
+    const existingSlot = existing as { id: string; session_id: string | null };
+    if (existingSlot.session_id && existingSlot.session_id !== sessionId) {
+      const error = new Error("Slot already attached to another session.") as Error & { code?: string };
+      error.code = "slot_already_attached";
+      throw error;
+    }
+
     const { data, error } = await supabase
       .from("session_slots")
       .update({
@@ -55,7 +63,7 @@ const createSlotWithSupabase = async (
         session_name: sessionName,
         created_by: "admin",
       })
-      .eq("id", (existing as { id: string }).id)
+      .eq("id", existingSlot.id)
       .select("id")
       .single();
 
@@ -153,15 +161,35 @@ export async function POST(request: Request) {
         else created.push(data);
       } catch (error) {
         if (isUniqueSlotError(error)) {
-          const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
-          if (data.attached) attached.push(data);
-          else created.push(data);
+          try {
+            const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+            if (data.attached) attached.push(data);
+            else created.push(data);
+          } catch (sqlError) {
+            if (isSlotAlreadyAttachedError(sqlError)) {
+              skipped.push({ slotDate, error: "Ce creneau est deja rattache a une autre seance." });
+              continue;
+            }
+            throw sqlError;
+          }
           continue;
         }
         if (isRlsError(error) && canUseSql) {
-          const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
-          if (data.attached) attached.push(data);
-          else created.push(data);
+          try {
+            const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+            if (data.attached) attached.push(data);
+            else created.push(data);
+          } catch (sqlError) {
+            if (isSlotAlreadyAttachedError(sqlError)) {
+              skipped.push({ slotDate, error: "Ce creneau est deja rattache a une autre seance." });
+              continue;
+            }
+            throw sqlError;
+          }
+          continue;
+        }
+        if (isSlotAlreadyAttachedError(error)) {
+          skipped.push({ slotDate, error: "Ce creneau est deja rattache a une autre seance." });
           continue;
         }
         throw error;
@@ -187,6 +215,9 @@ export async function POST(request: Request) {
     }
     if (code === "slot_session_not_found") {
       return NextResponse.json({ error: "Seance introuvable." }, { status: 400 });
+    }
+    if (code === "slot_already_attached") {
+      return NextResponse.json({ error: "Ce creneau est deja rattache a une autre seance." }, { status: 409 });
     }
     if (code === "42501") {
       return NextResponse.json({

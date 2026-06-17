@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
 import { asRecord, buildSessionSteps, isStepDone, isStepValidated } from "../lib/sessionSteps";
 import { appendHelpRequest, createHelpRequest } from "../lib/helpRequests";
+import { chooseSessionSlotDate } from "../lib/slots/dates";
 
 // Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
 // et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
@@ -32,8 +33,11 @@ const logDataError = (message: string, error: unknown) => {
 };
 
 type SessionActivityPayload = {
+  today?: string;
   slottedSessionIds?: string[];
   activeSessionIds?: string[];
+  slotDatesBySessionId?: Record<string, string[]>;
+  activeSlotDateBySessionId?: Record<string, string>;
 };
 
 const loadSessionActivity = async () => {
@@ -42,8 +46,11 @@ const loadSessionActivity = async () => {
     if (!response.ok) return null;
     const payload = await response.json() as SessionActivityPayload;
     return {
+      today: payload.today || null,
       slottedSessionIds: new Set(payload.slottedSessionIds || []),
       activeSessionIds: new Set(payload.activeSessionIds || []),
+      slotDatesBySessionId: new Map(Object.entries(payload.slotDatesBySessionId || {})),
+      activeSlotDateBySessionId: new Map(Object.entries(payload.activeSlotDateBySessionId || {})),
     };
   } catch (error) {
     console.warn("Calcul d'activite par creneaux indisponible:", error);
@@ -173,7 +180,8 @@ export const useSenso = () => {
   useEffect(() => {
     const restoreApp = async () => {
       setLoading(true);
-      await loadSessions(true);
+      const loadedSessions = await loadSessions(true);
+      const joinableSessionIds = new Set(loadedSessions.filter(session => session.active).map(session => session.id));
 
       const savedMode = localStorage.getItem("senso_mode");
       const savedScreen = localStorage.getItem("senso_screen");
@@ -206,14 +214,21 @@ export const useSenso = () => {
       const savedStep = parseStoredStep(savedCs);
       if (savedStep !== null) setCs(savedStep);
 
-      if (savedSessId) {
+      if (savedSessId && joinableSessionIds.has(savedSessId)) {
+        const restoredSession = loadedSessions.find(session => session.id === savedSessId);
         setCurSessId(savedSessId);
-        promises.push(loadSessionData(savedSessId).then(async () => {
+        promises.push(loadSessionData(savedSessId, restoredSession?.slotDate || restoredSession?.date).then(async () => {
           if (savedCj) {
             setCj(savedCj);
             await reloadJuryData(savedSessId, savedCj);
           }
         }));
+      } else if (savedSessId) {
+        localStorage.removeItem("senso_curSessId");
+        localStorage.removeItem("senso_screen");
+        setCurSessId(null);
+        setCurSess(null);
+        setScreen("landing");
       }
 
       if (savedAnSessId) {
@@ -243,7 +258,7 @@ export const useSenso = () => {
     if (p) setPoste(p);
   }, []);
 
-  const loadSessions = useCallback(async (keepLoading?: boolean) => {
+  const loadSessions = useCallback(async (keepLoading?: boolean): Promise<SessionListItem[]> => {
     if (!keepLoading) setLoading(true);
     const { data, error } = await supabase
       .from("sessions")
@@ -267,12 +282,18 @@ export const useSenso = () => {
       };
       const next: SessionListItem[] = (data as SessionRow[]).map(r => {
         const cfg = r.config;
-        const hasSlotSchedule = sessionActivity?.slottedSessionIds.has(r.id) || false;
+        const slotDates = sessionActivity?.slotDatesBySessionId.get(r.id) || [];
+        const activeSlotDate = sessionActivity?.activeSlotDateBySessionId.get(r.id) || null;
+        const displaySlotDate = chooseSessionSlotDate(slotDates, activeSlotDate, sessionActivity?.today);
+        const hasSlotSchedule = slotDates.length > 0 || sessionActivity?.slottedSessionIds.has(r.id) || false;
         return {
           id: r.id,
           name: r.name,
-          date: r.date,
-          active: hasSlotSchedule ? (sessionActivity?.activeSessionIds.has(r.id) || false) : r.active,
+          date: displaySlotDate || "",
+          active: sessionActivity ? (sessionActivity.activeSessionIds.has(r.id) || false) : false,
+          hasSlotSchedule,
+          slotDate: activeSlotDate || displaySlotDate,
+          slotDates,
           jurorCount: r.juror_count,
           productCount: cfg?.products?.length || 0,
           questionCount: cfg?.questions?.length || 0,
@@ -290,7 +311,10 @@ export const useSenso = () => {
             if (a.id !== b.id || a.name !== b.name || a.date !== b.date ||
                 a.active !== b.active || a.jurorCount !== b.jurorCount ||
                 a.productCount !== b.productCount || a.questionCount !== b.questionCount ||
-                a.resultsVisible !== b.resultsVisible) {
+                a.resultsVisible !== b.resultsVisible ||
+                a.hasSlotSchedule !== b.hasSlotSchedule ||
+                a.slotDate !== b.slotDate ||
+                (a.slotDates || []).join("|") !== (b.slotDates || []).join("|")) {
               same = false; break;
             }
           }
@@ -298,8 +322,11 @@ export const useSenso = () => {
         }
         return next;
       });
+      if (!keepLoading) setLoading(false);
+      return next;
     }
     if (!keepLoading) setLoading(false);
+    return [];
   }, []);
 
   // Lecture du cache : on accepte une entrée fraîche (< TTL) sauf si `force` est demandé.
@@ -345,10 +372,12 @@ export const useSenso = () => {
     }
     return null;
   };
-  const loadSessionData = useCallback(async (id: string) => {
+  const loadSessionData = useCallback(async (id: string, displayDateOverride?: string | null) => {
     const cfg = await loadSessionConfig(id);
     if (!cfg) return null;
-    setCurSess(cfg);
+    const listedSession = stateRef.current.sessions.find(session => session.id === id);
+    const displayDate = displayDateOverride || listedSession?.slotDate || listedSession?.date || cfg.date;
+    setCurSess({ ...cfg, date: displayDate });
     const { data, error } = await supabase
       .from("answers")
       .select("juror_name, data")
@@ -368,11 +397,22 @@ export const useSenso = () => {
   }, [loadSessionConfig]);
 
   const handleSelectSession = useCallback(async (id: string) => {
-    const cfg = await loadSessionData(id);
+    let session = stateRef.current.sessions.find(item => item.id === id);
+    if (!session?.active) {
+      const refreshed = await loadSessions(true);
+      session = refreshed.find(item => item.id === id);
+    }
+    if (!session?.active) {
+      setCurSessId(null);
+      setCurSess(null);
+      setScreen("landing");
+      return;
+    }
+    const cfg = await loadSessionData(id, session.slotDate || session.date);
     if (!cfg) return;
     setCurSessId(id);
     setScreen("jury");
-  }, [loadSessionData]);
+  }, [loadSessionData, loadSessions]);
 
   const buildSteps = useCallback((cfg: SessionConfig, jurorName: string, jurorList?: string[], posteOverride?: Poste | null) => {
     const jl = jurorList || stateRef.current.jurors;

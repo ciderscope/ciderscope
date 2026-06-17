@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSlotDateLong } from "../slots/dates";
+import { chooseSessionSlotDate, formatSlotDateLong } from "../slots/dates";
 import { buildSlotIcs } from "../slots/ics";
 import { getEmailDomain, isValidDomain, normalizeDomain, normalizeEmail } from "../slots/validation";
 
@@ -16,6 +16,19 @@ describe("slot validation helpers", () => {
 describe("slot date helpers", () => {
   it("formats a civil slot date in France without shifting the day", () => {
     expect(formatSlotDateLong("2026-06-18")).toContain("18 juin 2026");
+  });
+
+  it("uses today's active slot before future or past scheduled dates", () => {
+    expect(chooseSessionSlotDate(["2026-06-16", "2026-06-17", "2026-06-18"], "2026-06-17", "2026-06-17"))
+      .toBe("2026-06-17");
+  });
+
+  it("uses the next scheduled slot, then the last past slot, for admin display", () => {
+    expect(chooseSessionSlotDate(["2026-06-16", "2026-06-18"], null, "2026-06-17"))
+      .toBe("2026-06-18");
+    expect(chooseSessionSlotDate(["2026-06-10", "2026-06-11"], null, "2026-06-17"))
+      .toBe("2026-06-11");
+    expect(chooseSessionSlotDate([], null, "2026-06-17")).toBeNull();
   });
 });
 

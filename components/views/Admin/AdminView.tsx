@@ -107,7 +107,6 @@ interface AdminViewProps {
   setAdminSection: (v: "seances" | "creneaux" | "analyse") => void;
   onNewSession: () => void;
   onEditSession: (id: string) => void;
-  onToggleActive: (id: string) => void;
   onToggleResultsVisible: (id: string) => void;
   onDuplicateSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
@@ -115,6 +114,7 @@ interface AdminViewProps {
   onSetEditTab: (tab: string) => void;
   onSaveEdit: () => Promise<SaveSessionResult | void> | SaveSessionResult | void;
   onSessionSaved: (result: SaveSessionResult) => void;
+  onRefreshSessions: () => Promise<unknown> | unknown;
   saveNotice: SaveNotice | null;
   onDismissSaveNotice: () => void;
   onGoBack: () => void;
@@ -133,8 +133,8 @@ interface AdminViewProps {
 export const AdminView = ({
   screen, sessions, editCfg, curEditTab, editSessId,
   adminSection, setAdminSection,
-  onNewSession, onEditSession, onToggleActive, onToggleResultsVisible, onDuplicateSession, onDeleteSession,
-  onSetEditCfg, onSetEditTab, onSaveEdit, onSessionSaved, saveNotice, onDismissSaveNotice, onGoBack, downloadCSV,
+  onNewSession, onEditSession, onToggleResultsVisible, onDuplicateSession, onDeleteSession,
+  onSetEditCfg, onSetEditTab, onSaveEdit, onSessionSaved, onRefreshSessions, saveNotice, onDismissSaveNotice, onGoBack, downloadCSV,
   listJurorsForSession, deleteJury,
   allAnswers, anSessId, anCfg, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
@@ -173,12 +173,12 @@ export const AdminView = ({
           ? date.year === currentYear
             ? `month-${date.year}-${String(date.month).padStart(2, "0")}`
             : `year-${date.year}`
-          : "undated";
+          : "unscheduled";
         const title = date
           ? date.year === currentYear
             ? getMonthGroupTitle(date.year, date.month)
             : String(date.year)
-          : "Sans date";
+          : "Sans créneau";
         const order = date
           ? date.year === currentYear
             ? date.year * 100 + date.month
@@ -225,6 +225,13 @@ export const AdminView = ({
   };
 
   const toggleSlotDate = (date: string) => {
+    const existingSlot = existingSlotsByDate.get(date);
+    if (existingSlot?.sessionId && existingSlot.sessionId !== editSessId) {
+      setSlotMessage({ kind: "error", text: "Ce créneau est déjà rattaché à une autre séance." });
+      return;
+    }
+
+    setSlotMessage(null);
     setSelectedSlotDates(prev => {
       const next = new Set(prev);
       if (next.has(date)) next.delete(date);
@@ -270,6 +277,11 @@ export const AdminView = ({
 
   const handleSaveWithSlots = async () => {
     setSlotMessage(null);
+    if (!editSessId && !skipSlotCreation && pendingSlotDates.length === 0) {
+      setSlotMessage({ kind: "error", text: "Choisissez au moins une date valide pour créer un créneau, ou cochez \"Ne pas assigner de créneau\"." });
+      return;
+    }
+
     const result = await onSaveEdit();
     if (!result?.success) return;
     if (skipSlotCreation) {
@@ -281,13 +293,14 @@ export const AdminView = ({
       return;
     }
     if (pendingSlotDates.length === 0) {
-      setSlotMessage({ kind: "error", text: "Choisissez au moins une date valide pour créer un créneau." });
+      onSessionSaved(result);
       return;
     }
 
     try {
       await createSlotsForSession(result.sessionId, result.sessionName);
       setSelectedSlotDates(new Set());
+      await onRefreshSessions();
       onSessionSaved(result);
     } catch (error) {
       setSlotMessage({
@@ -371,15 +384,20 @@ export const AdminView = ({
                     <div className="min-w-0">
                       <div className="text-base font-bold">
                         {s.name}
-                        {s.active ? <Badge variant="active">ACTIVE</Badge> : <Badge variant="inactive">INACTIVE</Badge>}
+                        {s.active ? (
+                          <Badge variant="active">AUJOURD&apos;HUI</Badge>
+                        ) : s.hasSlotSchedule ? (
+                          <Badge variant="inactive">PLANIFIÉE</Badge>
+                        ) : (
+                          <Badge variant="inactive">SANS CRÉNEAU</Badge>
+                        )}
                       </div>
-                      <div className="mt-0.5 font-mono text-[11px] text-[var(--mid)]">{s.date} · {s.productCount} éch. · {s.questionCount} Q · {s.jurorCount} jurys</div>
+                      <div className="mt-0.5 font-mono text-[11px] text-[var(--mid)]">
+                        {[s.date || "sans créneau", `${s.productCount} éch.`, `${s.questionCount} Q`, `${s.jurorCount} jurys`].join(" · ")}
+                      </div>
                     </div>
                     <div className="flex-1"></div>
                     <div className="flex flex-wrap gap-[5px]">
-                      {s.active
-                        ? <Button variant="ghost" size="sm" onClick={() => onToggleActive(s.id)}>Désactiver</Button>
-                        : <Button variant="ok" size="sm" onClick={() => onToggleActive(s.id)}>Activer</Button>}
                       <Button
                         variant={s.resultsVisible ? "ok" : "ghost"}
                         size="sm"
@@ -540,6 +558,14 @@ export const AdminView = ({
                           const selected = selectedSlotDates.has(day.date);
                           const existingSlot = existingSlotsByDate.get(day.date);
                           const isFull = existingSlot ? existingSlot.placesTaken >= existingSlot.capacity : false;
+                          const isAttachedElsewhere = !!existingSlot?.sessionId && existingSlot.sessionId !== editSessId;
+                          const slotMeta = isAttachedElsewhere
+                            ? "occupé"
+                            : existingSlot?.sessionId === editSessId
+                              ? "lié"
+                              : existingSlot
+                                ? `${existingSlot.placesTaken}/${existingSlot.capacity}`
+                                : day.month;
                           return (
                             <button
                               key={day.date}
@@ -551,14 +577,19 @@ export const AdminView = ({
                                 existingSlot && !selected && isFull ? "border-[rgba(198,40,40,.25)] bg-[rgba(198,40,40,.10)] text-[var(--ink)]" : "",
                                 !existingSlot && !selected ? "border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] hover:border-[var(--border-strong)] hover:bg-[var(--paper)]" : "",
                                 selected ? "border-[var(--primary)] bg-[var(--primary)] text-white shadow-[0_1px_4px_rgba(0,0,0,.12)]" : "",
+                                isAttachedElsewhere && !selected ? "cursor-not-allowed opacity-65" : "",
                               ].join(" ")}
                               aria-pressed={selected}
-                              title={existingSlot ? "Créneau déjà ouvert : la séance sera rattachée à cette date." : undefined}
+                              title={isAttachedElsewhere
+                                ? "Créneau déjà rattaché à une autre séance."
+                                : existingSlot
+                                  ? "Créneau déjà ouvert : la séance sera rattachée à cette date."
+                                  : undefined}
                             >
                               <span className="text-[10px] font-bold uppercase leading-none">{day.weekday}</span>
                               <span className="mt-1 text-base font-extrabold leading-none">{day.day}</span>
                               <span className="mt-1 truncate text-[10px] font-semibold uppercase leading-none opacity-75">
-                                {existingSlot ? `${existingSlot.placesTaken}/${existingSlot.capacity}` : day.month}
+                                {slotMeta}
                               </span>
                             </button>
                           );

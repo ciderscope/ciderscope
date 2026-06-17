@@ -83,7 +83,6 @@ export default function CiderScope() {
     deleteSession,
     deleteJury,
     listJurorsForSession,
-    toggleActive,
     toggleResultsVisible,
     loadSessions,
     loadSessionConfig,
@@ -223,7 +222,6 @@ export default function CiderScope() {
         setCurEditTab("session");
         setScreen("edit");
       }}
-      onToggleActive={toggleActive}
       onToggleResultsVisible={toggleResultsVisible}
       onDuplicateSession={async (id) => {
         const c = await loadSessionConfig(id);
@@ -241,6 +239,7 @@ export default function CiderScope() {
       onSetEditCfg={setEditCfg}
       onSetEditTab={setCurEditTab}
       onGoBack={goBack}
+      onRefreshSessions={loadSessions}
       onSaveEdit={async () => {
         if (!editCfg) return { success: false };
         const errs = validateSession(editCfg);
@@ -260,7 +259,7 @@ export default function CiderScope() {
         const wasCreated = !editSessId;
         const existing = sessions.find(s => s.id === id);
         const res = await saveSession(id, editCfg, {
-          active: existing ? existing.active : true,
+          active: false,
           jurorCount: existing?.jurorCount ?? 0,
           resultsVisible: existing?.resultsVisible ?? false,
         });
