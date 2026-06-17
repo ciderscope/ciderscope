@@ -17,7 +17,7 @@ export const SessionCard = ({ name, date, jurorCount, onClick, productCount = 0,
     onClick={onClick}
   >
     <h3 className="mb-1 text-lg font-bold leading-tight text-[var(--ink)] max-[480px]:text-[16.5px]">{name}</h3>
-    <div className="font-mono text-[13px] text-[var(--mid)]">{date}</div>
+    {date && <div className="font-mono text-[13px] text-[var(--mid)]">{date}</div>}
     <div className="mt-4 flex flex-wrap gap-2 max-[480px]:gap-1.5">
       <div className={countBadgeClass}>
         <strong className="text-xl font-bold tracking-normal text-[var(--ink)] max-[480px]:text-lg">{productCount}</strong>

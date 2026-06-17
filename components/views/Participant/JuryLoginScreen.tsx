@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { SessionConfig } from "../../../types";
+import { formatSlotDateLong } from "../../../lib/slots/dates";
 
 interface JuryLoginScreenProps {
   curSess: SessionConfig | null;
@@ -18,7 +19,7 @@ export const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onGoBack }: Jury
   return (
     <div className="mx-auto max-w-[480px] px-7 py-12 text-center max-[480px]:px-3.5 max-[480px]:py-6">
       <h2 className="mb-1.5 text-[26px] font-bold">Identifiez-vous</h2>
-      <p className="mb-6 text-[15px] text-[var(--mid)]">{curSess?.name}</p>
+      <p className="mb-6 text-[15px] text-[var(--mid)]">{curSess ? formatSlotDateLong(curSess.date) : ""}</p>
       <input
         type="text"
         placeholder="Votre prénom..."

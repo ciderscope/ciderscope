@@ -3,6 +3,7 @@ import React from "react";
 import { FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { SessionStep, SessionConfig } from "../../../types";
+import { formatSlotDateLong } from "../../../lib/slots/dates";
 
 interface OrderScreenProps {
   curSess: SessionConfig;
@@ -60,7 +61,7 @@ export const OrderScreen = ({
   return (
     <div className="mx-auto my-[30px] max-w-[720px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--paper)] px-[22px] py-[26px] shadow-[var(--shadow)] max-[480px]:mx-2 max-[480px]:my-3.5 max-[480px]:px-3.5 max-[480px]:py-[18px]">
       <h2 className="mb-1 text-2xl font-bold tracking-normal">Ordre de service</h2>
-      <p className="m-0 text-sm text-[var(--mid)]">{curSess.name} — {cj}</p>
+      <p className="m-0 text-sm text-[var(--mid)]">{formatSlotDateLong(curSess.date)} — {cj}</p>
       <p className="text-[13.5px] text-[var(--mid)] mt-1 mb-5">
         Disposez vos échantillons devant vous dans l&apos;ordre indiqué ci-dessous,
         de gauche à droite.

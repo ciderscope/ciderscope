@@ -31,7 +31,6 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlotDates, setSelectedSlotDates] = useState<Set<string>>(() => new Set());
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
-  const [slotDate, setSlotDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [sessionId, setSessionId] = useState("");
   const [sessionName, setSessionName] = useState("");
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -50,9 +49,8 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
   }));
 
   const pendingSlotDates = useMemo(() => {
-    const dates = Array.from(selectedSlotDates).sort();
-    return dates.length > 0 ? dates : [slotDate];
-  }, [selectedSlotDates, slotDate]);
+    return Array.from(selectedSlotDates).sort();
+  }, [selectedSlotDates]);
 
   const loadAll = async () => {
     setBusy(true);
@@ -85,12 +83,17 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     setBusy(true);
     setMessage(null);
 
+    if (pendingSlotDates.length === 0) {
+      setMessage({ kind: "error", text: "Sélectionnez au moins une date dans le calendrier." });
+      setBusy(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/admin/slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          slotDate,
           slotDates: pendingSlotDates,
           sessionId: sessionId || null,
           sessionName,
@@ -105,7 +108,7 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
       const createdCount = payload.created?.length || 0;
       const attachedCount = payload.attached?.length || 0;
       setMessage({ kind: "ok", text: `${createdCount} créneau(x) créé(s), ${attachedCount} créneau(x) rattaché(s).` });
-      setSelectedDate(pendingSlotDates[0] || slotDate);
+      setSelectedDate(pendingSlotDates[0] || null);
       setSelectedSlotDates(new Set());
       await loadAll();
     } catch {
@@ -181,7 +184,6 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
               });
               setSelectedDate(date);
               setSelectedSlotId(slot?.id || null);
-              setSlotDate(date);
             }}
           />
         </div>
@@ -277,16 +279,6 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
                 </div>
               </div>
             )}
-            <div>
-              <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Date</label>
-              <input
-                type="date"
-                value={slotDate}
-                onChange={(event) => setSlotDate(event.target.value)}
-                required
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 outline-none focus:border-[var(--primary)]"
-              />
-            </div>
             <div>
               <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Séance existante optionnelle</label>
               <select

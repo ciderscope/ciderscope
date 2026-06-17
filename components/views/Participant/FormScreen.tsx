@@ -7,6 +7,7 @@ import { validateRadarAnswer } from "../../../lib/radarAnswer";
 import { stepShortLabel } from "./utils";
 import { ConfirmModal } from "./ConfirmModal";
 import { SessionStep, SessionConfig, JurorAnswers, Question, RadarAxis, RadarAnswer, Product } from "../../../types";
+import { formatSlotDateLong } from "../../../lib/slots/dates";
 
 type SetJa = (updater: JurorAnswers | ((prev: JurorAnswers) => JurorAnswers)) => void;
 
@@ -140,7 +141,7 @@ export const FormScreen = ({
         <div className="mb-7 flex items-center gap-3.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] px-[19px] py-[15px] shadow-[var(--shadow)]">
           <div>
             <div className="text-[17px] font-bold leading-[1.2]">{cj}</div>
-            <div className="mt-0.5 font-mono text-[12.5px] text-[var(--mid)]">{curSess.name}</div>
+            <div className="mt-0.5 font-mono text-[12.5px] text-[var(--mid)]">{formatSlotDateLong(curSess.date)}</div>
           </div>
           <div className="flex-1"></div>
           <Button

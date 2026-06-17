@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCalendarSlot } from "../../../../../../lib/server/slotData";
 import { buildSlotIcs } from "../../../../../../lib/slots/ics";
+import { formatSlotDateLong } from "../../../../../../lib/slots/dates";
 import { getSupabaseAdminIfConfigured } from "../../../../../../lib/server/supabaseAdmin";
 import { getCalendarSlotFromSql, registerSlotParticipantFromSql } from "../../../../../../lib/server/slotSql";
 import { normalizeEmail } from "../../../../../../lib/slots/validation";
@@ -70,7 +71,7 @@ export async function POST(
     const slot = supabase ? await getCalendarSlot(supabase, slotId) : await getCalendarSlotFromSql(slotId);
     const calendar = slot ? {
       filename: `seance-${slot.slotDate}.ics`,
-      content: buildSlotIcs(slot, {
+      content: buildSlotIcs({ ...slot, sessionName: formatSlotDateLong(slot.slotDate) }, {
         id: result.registration.id,
         participantEmail: result.registration.participant_email,
       }),

@@ -14,7 +14,12 @@ export async function GET(request: Request) {
     const slots = supabase
       ? await listSlots(supabase, { start, end, admin: false })
       : await listSlotsFromSql({ start, end, admin: false });
-    return NextResponse.json({ slots });
+    const publicSlots = slots.map(slot => ({
+      ...slot,
+      sessionId: null,
+      sessionName: "",
+    }));
+    return NextResponse.json({ slots: publicSlots });
   } catch (error) {
     console.error("Public slot list error:", error);
     return NextResponse.json({ error: "Impossible de charger les créneaux." }, { status: 500 });

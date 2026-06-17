@@ -14,7 +14,6 @@ type CalendarDownload = {
   filename: string;
   content: string;
   slotDate: string;
-  sessionName: string;
 };
 
 export const SlotSignupView = () => {
@@ -104,7 +103,6 @@ export const SlotSignupView = () => {
           filename: payload.calendar.filename,
           content: payload.calendar.content,
           slotDate: selectedSlot.slotDate,
-          sessionName: selectedSlot.sessionName,
         });
       }
       setMessage({ kind: "ok", text: "Inscription confirmée. Vous pouvez télécharger l'invitation calendrier." });
@@ -201,7 +199,6 @@ export const SlotSignupView = () => {
             <div className="space-y-5">
               <div>
                 <div className="text-base font-bold text-[var(--ink)]">{formatSlotDateLong(selectedSlot.slotDate)}</div>
-                <div className="mt-1 text-sm text-[var(--mid)]">{selectedSlot.sessionName}</div>
                 <div className="mt-3 flex flex-wrap gap-2 text-sm">
                   <span className="rounded-full border border-[var(--border)] bg-[var(--paper2)] px-3 py-1 font-semibold">
                     {selectedSlot.placesTaken}/{selectedSlot.capacity || SLOT_CAPACITY} places prises
@@ -323,9 +320,6 @@ export const SlotSignupView = () => {
                   Votre place est réservée pour le {formatSlotDateLong(calendarDownload.slotDate)}.
                   Téléchargez l&apos;invitation calendrier pour ajouter la séance à votre agenda.
                 </p>
-                <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 text-sm font-semibold text-[var(--ink)]">
-                  {calendarDownload.sessionName}
-                </div>
               </div>
               <button
                 type="button"

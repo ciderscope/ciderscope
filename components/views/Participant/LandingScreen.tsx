@@ -4,6 +4,7 @@ import { FiCalendar, FiClipboard } from "react-icons/fi";
 import { SessionCard } from "../../features/SessionCard";
 import { SessionListItem } from "../../../types";
 import { SlotSignupView } from "./SlotSignupView";
+import { formatSlotDateLong } from "../../../lib/slots/dates";
 
 interface LandingScreenProps {
   sessions: SessionListItem[];
@@ -66,8 +67,8 @@ export const LandingScreen = ({ sessions, onSelectSession }: LandingScreenProps)
               activeSessions.map(s => (
                 <SessionCard
                   key={s.id}
-                  name={s.name}
-                  date={s.date}
+                  name={formatSlotDateLong(s.date)}
+                  date=""
                   jurorCount={s.jurorCount}
                   productCount={s.productCount}
                   questionCount={s.questionCount}
