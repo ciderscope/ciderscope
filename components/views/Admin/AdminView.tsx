@@ -297,55 +297,6 @@ export const AdminView = ({
     }
   };
 
-  const renderSessionCard = (s: SessionListItem) => (
-    <div key={s.id} className={sessionCardClass}>
-      <div className="min-w-0">
-        <div className="text-base font-bold">
-          {s.name}
-          {s.active ? <Badge variant="active">ACTIVE</Badge> : <Badge variant="inactive">INACTIVE</Badge>}
-        </div>
-        <div className="mt-0.5 font-mono text-[11px] text-[var(--mid)]">{s.date} · {s.productCount} éch. · {s.questionCount} Q · {s.jurorCount} jurys</div>
-      </div>
-      <div className="flex-1"></div>
-      <div className="flex flex-wrap gap-[5px]">
-        {s.active
-          ? <Button variant="ghost" size="sm" onClick={() => onToggleActive(s.id)}>Désactiver</Button>
-          : <Button variant="ok" size="sm" onClick={() => onToggleActive(s.id)}>Activer</Button>}
-        <Button
-          variant={s.resultsVisible ? "ok" : "ghost"}
-          size="sm"
-          onClick={() => onToggleResultsVisible(s.id)}
-          title={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
-          aria-label={s.resultsVisible ? "Masquer le résumé aux participants" : "Afficher le résumé aux participants"}
-        >
-          <FiPieChart />
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            onAnSessChange(s.id);
-            setAdminSection("analyse");
-          }}
-          title="Voir l'analyse"
-          aria-label="Voir l'analyse de la séance"
-        >
-          <FiBarChart2 />
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => onEditSession(s.id)} title="Modifier" aria-label="Modifier la séance"><FiEdit2 /></Button>
-        <Button variant="ghost" size="sm" onClick={() => onDuplicateSession(s.id)} title="Dupliquer" aria-label="Dupliquer la séance"><FiCopy /></Button>
-        {confirmingId === s.id ? (
-          <div className="flex gap-1">
-            <Button variant="danger" size="sm" onClick={() => { onDeleteSession(s.id); setConfirmingId(null); }}>Confirmer ?</Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirmingId(null)}>Annuler</Button>
-          </div>
-        ) : (
-          <DangerGhostButton onClick={() => setConfirmingId(s.id)} title="Supprimer" aria-label="Supprimer la séance"><FiX /></DangerGhostButton>
-        )}
-      </div>
-    </div>
-  );
-
   if (screen === "landing") {
     return (
       <>
@@ -400,11 +351,22 @@ export const AdminView = ({
               <div className="flex-1"></div>
               <Button size="sm" onClick={onNewSession}>+ Nouvelle</Button>
             </div>
-            <div id="sessList" className={sessionListClass}>
+            <div id="sessList" className="grid gap-7">
               {sessions.length === 0 ? (
                 <div className="rounded-[var(--radius)] border-2 border-dashed border-[var(--border)] bg-[var(--paper2)] p-[42px] text-center text-[15px] text-[var(--mid)]">Aucune séance.</div>
               ) : (
-                sessions.map(s => (
+                groupedSessions.map(group => (
+                  <section key={group.key} className={sessionGroupClass} aria-labelledby={`session-group-${group.key}`}>
+                    <div className={sessionGroupHeaderClass}>
+                      <h3 id={`session-group-${group.key}`} className="text-[15px] font-extrabold text-[var(--ink)]">
+                        {group.title}
+                      </h3>
+                      <span className="rounded-full border border-[var(--border)] bg-[var(--paper2)] px-2 py-0.5 text-[11px] font-bold text-[var(--mid)]">
+                        {group.sessions.length}
+                      </span>
+                    </div>
+                    <div className={sessionListClass}>
+                      {group.sessions.map(s => (
                   <div key={s.id} className={sessionCardClass}>
                     <div className="min-w-0">
                       <div className="text-base font-bold">
@@ -451,6 +413,9 @@ export const AdminView = ({
                       )}
                     </div>
                   </div>
+                      ))}
+                    </div>
+                  </section>
                 ))
               )}
             </div>
