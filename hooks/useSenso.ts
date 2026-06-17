@@ -647,18 +647,26 @@ export const useSenso = () => {
   }, [loadSessionConfig]);
 
   const saveSession = useCallback(async (id: string, cfg: SessionConfig, meta: Partial<SessionListItem>) => {
-    const { error } = await supabase.from("sessions").upsert({
-      id,
-      name: meta.name ?? cfg.name,
-      date: meta.date ?? cfg.date,
-      active: meta.active ?? false,
-      juror_count: meta.jurorCount ?? 0,
-      config: cfg,
-      results_visible: meta.resultsVisible ?? false,
+    const response = await fetch("/api/admin/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ id, cfg, meta }),
     });
-    if (error) {
-      logDataError("Erreur lors de l'enregistrement de la séance:", error);
-      return { success: false, error };
+    const payload = await response.json().catch(() => ({})) as {
+      ok?: boolean;
+      error?: string;
+      detail?: string;
+      details?: string[];
+    };
+
+    if (!response.ok || !payload.ok) {
+      if (response.status === 401) {
+        sessionStorage.removeItem("admin_auth");
+        setAdminAuth(false);
+      }
+      logDataError("Erreur lors de l'enregistrement de la séance:", payload);
+      return { success: false, error: payload };
     }
     _configCache.set(id, { cfg, ts: Date.now() });
     return { success: true };

@@ -31,6 +31,15 @@ const fingerprint = (cfg: unknown) => hsh(JSON.stringify(cfg));
 type AdminSection = "seances" | "creneaux" | "analyse";
 type NavigationPoint = { mode: AppMode; screen: AppScreen; adminSection: AdminSection };
 
+const formatSaveError = (error: unknown) => {
+  const typed = error as { error?: string; detail?: string; details?: string[] } | undefined;
+  return [
+    typed?.error,
+    typed?.detail,
+    typed?.details?.length ? "• " + typed.details.join("\n• ") : "",
+  ].filter(Boolean).join("\n");
+};
+
 const sameNavigationPoint = (a: NavigationPoint, b: NavigationPoint) => (
   a.mode === b.mode && a.screen === b.screen && a.adminSection === b.adminSection
 );
@@ -221,7 +230,7 @@ export default function CiderScope() {
         const ni = "s" + Date.now();
         const res = await saveSession(ni, nc, { active: false, jurorCount: 0 });
         if (res.success) await loadSessions();
-        else alert("Erreur lors de la duplication.");
+        else alert(`Erreur lors de la duplication.${res.error ? "\n\n" + formatSaveError(res.error) : ""}`);
       }}
       onDeleteSession={async (id) => {
         await deleteSession(id);
@@ -257,7 +266,7 @@ export default function CiderScope() {
           await loadSessions();
           return { success: true, sessionId: id, sessionName: editCfg.name };
         } else {
-          alert("Erreur lors de l'enregistrement.");
+          alert(`Erreur lors de l'enregistrement.${res.error ? "\n\n" + formatSaveError(res.error) : ""}`);
           return { success: false };
         }
       }}
