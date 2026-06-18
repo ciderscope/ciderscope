@@ -38,6 +38,7 @@ type SessionActivityPayload = {
   activeSessionIds?: string[];
   slotDatesBySessionId?: Record<string, string[]>;
   activeSlotDateBySessionId?: Record<string, string>;
+  slotRegistrationCountBySessionDate?: Record<string, Record<string, number>>;
 };
 
 const loadSessionActivity = async () => {
@@ -51,6 +52,7 @@ const loadSessionActivity = async () => {
       activeSessionIds: new Set(payload.activeSessionIds || []),
       slotDatesBySessionId: new Map(Object.entries(payload.slotDatesBySessionId || {})),
       activeSlotDateBySessionId: new Map(Object.entries(payload.activeSlotDateBySessionId || {})),
+      slotRegistrationCountBySessionDate: new Map(Object.entries(payload.slotRegistrationCountBySessionDate || {})),
     };
   } catch (error) {
     console.warn("Calcul d'activite par creneaux indisponible:", error);
@@ -280,12 +282,37 @@ export const useSenso = () => {
         config: SessionConfig | null;
         results_visible: boolean | null;
       };
-      const next: SessionListItem[] = (data as SessionRow[]).map(r => {
+      const sessionRows = data as SessionRow[];
+      const answerCountsBySessionId = new Map<string, number>();
+      if (sessionRows.length > 0) {
+        const { data: answerRows, error: answerCountError } = await supabase
+          .from("answers")
+          .select("session_id")
+          .in("session_id", sessionRows.map(r => r.id));
+        if (answerCountError) {
+          logDataError("Erreur lors du comptage des participants:", answerCountError);
+        } else {
+          (answerRows || []).forEach((row: { session_id: string }) => {
+            answerCountsBySessionId.set(row.session_id, (answerCountsBySessionId.get(row.session_id) || 0) + 1);
+          });
+        }
+      }
+      const next: SessionListItem[] = sessionRows.map(r => {
         const cfg = r.config;
         const slotDates = sessionActivity?.slotDatesBySessionId.get(r.id) || [];
         const activeSlotDate = sessionActivity?.activeSlotDateBySessionId.get(r.id) || null;
         const displaySlotDate = chooseSessionSlotDate(slotDates, activeSlotDate, sessionActivity?.today);
         const hasSlotSchedule = slotDates.length > 0 || sessionActivity?.slottedSessionIds.has(r.id) || false;
+        const slotRegistrationCounts = sessionActivity?.slotRegistrationCountBySessionDate.get(r.id);
+        const slotRegistrationCount = displaySlotDate && slotRegistrationCounts
+          ? slotRegistrationCounts[displaySlotDate]
+          : undefined;
+        const answerCount = answerCountsBySessionId.get(r.id);
+        const participantCount = Math.max(
+          r.juror_count || 0,
+          typeof slotRegistrationCount === "number" ? slotRegistrationCount : 0,
+          typeof answerCount === "number" ? answerCount : 0
+        );
         return {
           id: r.id,
           name: r.name,
@@ -294,7 +321,7 @@ export const useSenso = () => {
           hasSlotSchedule,
           slotDate: activeSlotDate || displaySlotDate,
           slotDates,
-          jurorCount: r.juror_count,
+          jurorCount: participantCount,
           productCount: cfg?.products?.length || 0,
           questionCount: cfg?.questions?.length || 0,
           resultsVisible: !!r.results_visible,

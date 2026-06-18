@@ -18,6 +18,7 @@ export async function GET() {
     const activeSessionIds = new Set<string>();
     const slotDatesBySessionId: Record<string, string[]> = {};
     const activeSlotDateBySessionId: Record<string, string> = {};
+    const slotRegistrationCountBySessionDate: Record<string, Record<string, number>> = {};
 
     slots.forEach(slot => {
       if (!slot.sessionId) return;
@@ -26,6 +27,10 @@ export async function GET() {
         ...(slotDatesBySessionId[slot.sessionId] || []),
         slot.slotDate,
       ];
+      slotRegistrationCountBySessionDate[slot.sessionId] = {
+        ...(slotRegistrationCountBySessionDate[slot.sessionId] || {}),
+        [slot.slotDate]: slot.placesTaken,
+      };
       if (slot.slotDate === today) {
         activeSessionIds.add(slot.sessionId);
         activeSlotDateBySessionId[slot.sessionId] = slot.slotDate;
@@ -40,6 +45,7 @@ export async function GET() {
       activeSessionIds: Array.from(activeSessionIds),
       slotDatesBySessionId,
       activeSlotDateBySessionId,
+      slotRegistrationCountBySessionDate,
     });
   } catch (error) {
     console.error("Public session activity error:", error);

@@ -6,6 +6,7 @@ import { MutedText, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { Button } from "../../ui/Button";
 import { supabase } from "../../../lib/supabase";
 import type { SessionConfig, JurorAnswers, RadarAxis, RadarNodeAnswer, BetLevel } from "../../../types";
+import { AdminSlotListItem } from "../../../types/slots";
 
 const ENABLE_TEST_DATA = process.env.NEXT_PUBLIC_ENABLE_TEST_DATA === "1";
 
@@ -18,6 +19,7 @@ interface ParticipantsTabProps {
 
 export function ParticipantsTab({ sessionId, config, listJurorsForSession, deleteJury }: ParticipantsTabProps) {
   const [jurors, setJurors] = useState<string[] | null>(null);
+  const [registeredParticipants, setRegisteredParticipants] = useState<string[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -25,10 +27,29 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
   const reload = useCallback(async () => {
     if (!sessionId) {
       setJurors([]);
+      setRegisteredParticipants([]);
       return;
     }
+
+    // 1. Load answered jurors
     const list = await listJurorsForSession(sessionId);
     setJurors(list);
+
+    // 2. Load registered participants
+    try {
+      const response = await fetch("/api/admin/slots", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as { slots?: AdminSlotListItem[] };
+      if (response.ok && payload.slots) {
+        const sessionSlots = payload.slots.filter(s => s.sessionId === sessionId);
+        const registered = sessionSlots.flatMap(s => s.participants.map(p => p.participantName));
+        setRegisteredParticipants([...new Set(registered)]);
+      } else {
+        setRegisteredParticipants([]);
+      }
+    } catch (e) {
+      console.error("Failed to fetch slots for participants", e);
+      setRegisteredParticipants([]);
+    }
   }, [listJurorsForSession, sessionId]);
 
   useEffect(() => { 
@@ -194,7 +215,7 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
   };
 
   return (
-    <Card title="Participants ayant répondu">
+    <Card title="Participants">
       {ENABLE_TEST_DATA && (
         <div className="mb-4">
           <Button onClick={handleGenerateFakes} disabled={generating} className="gap-2">
@@ -203,36 +224,51 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
         </div>
       )}
 
-      {jurors === null ? (
+      {jurors === null || registeredParticipants === null ? (
         <MutedText>Chargement…</MutedText>
-      ) : jurors.length === 0 ? (
-        <MutedText>Aucun participant n&apos;a encore répondu à cette séance.</MutedText>
       ) : (
-        <>
-          <p className="mb-9 text-[12px] text-[var(--mid)]">
-            Cliquez sur la croix pour supprimer définitivement les réponses d&apos;un participant.
-          </p>
-          <div className="mt-7 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--paper)]">
-            <div className="border-b border-[var(--border)] bg-[var(--paper2)] px-[18px] py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--mid)]">
-              <span>{jurors.length} participant{jurors.length > 1 ? "s" : ""}</span>
+        <div className="flex flex-col gap-6">
+          <div className="flex gap-4">
+            <div className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--paper2)] p-4">
+              <div className="text-[11px] font-bold uppercase text-[var(--mid)]">Inscrits</div>
+              <div className="text-2xl font-extrabold text-[var(--ink)]">{registeredParticipants.length}</div>
             </div>
-            <ul className="flex max-h-[520px] list-none flex-col gap-1.5 overflow-y-auto p-2">
-              {jurors.map(n => (
-                <li key={n} className="flex items-center gap-3 rounded-[10px] border border-[var(--border)] bg-[var(--paper2)] px-4 py-3 hover:border-[var(--border-strong)]">
-                  <span className="flex-1 font-semibold text-[14px]">{n}</span>
-                  <button
-                    type="button"
-                    className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--danger)]/10 text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white transition-all"
-                    title="Supprimer ce participant"
-                    onClick={() => setConfirmDelete(n)}
-                  >
-                    <FiX size={16} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--paper2)] p-4">
+              <div className="text-[11px] font-bold uppercase text-[var(--mid)]">Ayant répondu</div>
+              <div className="text-2xl font-extrabold text-[var(--accent)]">{jurors.length}</div>
+            </div>
           </div>
-        </>
+
+          {jurors.length === 0 ? (
+            <MutedText>Aucun participant n&apos;a encore répondu à cette séance.</MutedText>
+          ) : (
+            <>
+              <p className="text-[12px] text-[var(--mid)]">
+                Cliquez sur la croix pour supprimer définitivement les réponses d&apos;un participant.
+              </p>
+              <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--paper)]">
+                <div className="border-b border-[var(--border)] bg-[var(--paper2)] px-[18px] py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--mid)]">
+                  <span>{jurors.length} ayant répondu</span>
+                </div>
+                <ul className="flex max-h-[520px] list-none flex-col gap-1.5 overflow-y-auto p-2">
+                  {jurors.map(n => (
+                    <li key={n} className="flex items-center gap-3 rounded-[10px] border border-[var(--border)] bg-[var(--paper2)] px-4 py-3 hover:border-[var(--border-strong)]">
+                      <span className="flex-1 font-semibold text-[14px]">{n}</span>
+                      <button
+                        type="button"
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--danger)]/10 text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white transition-all"
+                        title="Supprimer ce participant"
+                        onClick={() => setConfirmDelete(n)}
+                      >
+                        <FiX size={16} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {confirmDelete && (
