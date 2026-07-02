@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCalendarSlot } from "../../../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../../../lib/server/supabaseAdmin";
 import { cancelSlotRegistrationFromSql, getCalendarSlotFromSql, hasCancelledSlotRegistrationFromSql } from "../../../../../../lib/server/slotSql";
-import { cancelOutlookInvitationForRegistration } from "../../../../../../lib/server/outlookInvitations";
+import { cancelOutlookInvitationForRegistration, confirmOutlookInvitationForRegistration } from "../../../../../../lib/server/outlookInvitations";
 import { normalizeEmail } from "../../../../../../lib/slots/validation";
 
 export const runtime = "nodejs";
@@ -10,14 +10,17 @@ export const runtime = "nodejs";
 type CancelRpcResult = {
   ok: boolean;
   code?: string;
-  registration?: {
-    id: string;
-    slot_id: string;
-    participant_name: string;
-    participant_email: string;
-    cancelled_at: string;
-    outlook_event_id?: string | null;
-  };
+  registration?: RegistrationPayload & { cancelled_at: string };
+  promoted_registration?: RegistrationPayload | null;
+};
+
+type RegistrationPayload = {
+  id: string;
+  slot_id: string;
+  participant_name: string;
+  participant_email: string;
+  registration_status?: "confirmed" | "waitlist";
+  outlook_event_id?: string | null;
 };
 
 const messageForCode = (code?: string) => {
@@ -75,7 +78,31 @@ export async function POST(
           slotDate: slot?.slotDate,
         })
         : null;
-      return NextResponse.json({ ok: true, outlookCancellation });
+      const outlookPromotion = slot && result.promoted_registration
+        ? await confirmOutlookInvitationForRegistration({
+          supabase,
+          slot,
+          registration: {
+            id: result.promoted_registration.id,
+            slotId: result.promoted_registration.slot_id,
+            participantName: result.promoted_registration.participant_name,
+            participantEmail: result.promoted_registration.participant_email,
+            registrationStatus: "confirmed",
+            outlookEventId: result.promoted_registration.outlook_event_id || null,
+          },
+        })
+        : null;
+      return NextResponse.json({
+        ok: true,
+        outlookCancellation,
+        promotedRegistration: result.promoted_registration
+          ? {
+            id: result.promoted_registration.id,
+            participantName: result.promoted_registration.participant_name,
+          }
+          : null,
+        outlookPromotion,
+      });
     }
 
     if (result.code === "not_registered") {

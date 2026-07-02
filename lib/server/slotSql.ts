@@ -53,18 +53,20 @@ type RegisterSlotResult = {
   };
 };
 
+type RegistrationPayload = {
+  id: string;
+  slot_id: string;
+  participant_name: string;
+  participant_email: string;
+  registration_status?: "confirmed" | "waitlist";
+  outlook_event_id: string | null;
+};
+
 type CancelSlotResult = {
   ok: boolean;
   code?: string;
-  registration?: {
-    id: string;
-    slot_id: string;
-    participant_name: string;
-    participant_email: string;
-    registration_status?: "confirmed" | "waitlist";
-    cancelled_at: string;
-    outlook_event_id: string | null;
-  };
+  registration?: RegistrationPayload & { cancelled_at: string };
+  promoted_registration?: RegistrationPayload;
 };
 
 type CancelledRegistration = {
@@ -406,15 +408,9 @@ export const cancelSlotRegistrationFromSql = async ({
   if (!isValidEmail(email)) return { ok: false, code: "invalid_email" };
 
   return transaction(async client => {
-    const registration = await client.query<{
-      id: string;
-      slot_id: string;
-      participant_name: string;
-      participant_email: string;
-      registration_status: "confirmed" | "waitlist";
-      cancelled_at: string;
-      outlook_event_id: string | null;
-    }>(
+    await client.query("select id from session_slots where id = $1 for update", [slotId]);
+
+    const registration = await client.query<RegistrationPayload & { cancelled_at: string }>(
       `
         update slot_registrations
         set status = 'cancelled',
@@ -431,7 +427,44 @@ export const cancelSlotRegistrationFromSql = async ({
     );
 
     if (registration.rowCount === 0) return { ok: false, code: "not_registered" };
-    return { ok: true, registration: registration.rows[0] };
+
+    let promotedRegistration: RegistrationPayload | undefined;
+    if (registration.rows[0].registration_status === "confirmed") {
+      const promoted = await client.query<RegistrationPayload>(
+        `
+          with next_waitlist as (
+            select id
+            from slot_registrations
+            where slot_id = $1
+              and status = 'active'
+              and registration_status = 'waitlist'
+            order by created_at asc
+            for update skip locked
+            limit 1
+          )
+          update slot_registrations r
+          set registration_status = 'confirmed',
+              outlook_invite_last_error = null
+          from next_waitlist
+          where r.id = next_waitlist.id
+          returning
+            r.id::text,
+            r.slot_id::text,
+            r.participant_name,
+            r.participant_email,
+            r.registration_status,
+            r.outlook_event_id
+        `,
+        [slotId]
+      );
+      promotedRegistration = promoted.rows[0];
+    }
+
+    return {
+      ok: true,
+      registration: registration.rows[0],
+      promoted_registration: promotedRegistration,
+    };
   });
 };
 

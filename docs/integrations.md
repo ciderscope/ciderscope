@@ -29,6 +29,7 @@ Variables requises (sans valeurs secretes dans le depot) :
 
 Chaque inscription cree immediatement un evenement Outlook physique dedie au participant inscrit.
 Quand le creneau est complet, l'inscription est creee en liste d'attente et l'evenement Outlook est marque provisoire.
+Si une place confirmee est annulee, la premiere inscription en liste d'attente est promue et son evenement Outlook est remis en confirme.
 L'ancien fallback de fichier calendrier est retire : une inscription valide doit passer par l'invitation Outlook.
 Microsoft Graph expose un seul rappel natif par evenement (`reminderMinutesBeforeStart`) ; CiderScope le configure a 24 heures avant le creneau.
 

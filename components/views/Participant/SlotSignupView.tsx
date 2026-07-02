@@ -128,15 +128,18 @@ export const SlotSignupView = () => {
 
       setDuplicateEmail(null);
       setCancelEmail("");
+      const promotionText = payload.promotedRegistration
+        ? " Une personne en liste d'attente vient d'etre confirmee."
+        : "";
       setMessage({
         kind: "ok",
         text: payload.alreadyCancelled
           ? "Participation déjà annulée."
           : payload.outlookCancellation?.status === "cancelled"
-            ? "Participation annulée. L'invitation Outlook a été annulée."
+            ? `Participation annulée. L'invitation Outlook a été annulée.${promotionText}`
             : payload.outlookCancellation?.status === "failed" || payload.outlookCancellation?.status === "not_configured"
-              ? "Participation annulée, mais l'invitation Outlook n'a pas pu être annulée automatiquement."
-            : "Participation annulée.",
+              ? `Participation annulée, mais l'invitation Outlook n'a pas pu être annulée automatiquement.${promotionText}`
+            : `Participation annulée.${promotionText}`,
       });
       await loadSlots();
     } catch {

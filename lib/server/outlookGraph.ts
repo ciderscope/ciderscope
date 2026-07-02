@@ -223,6 +223,16 @@ export const updateOutlookSlotAttendees = async (eventId: string, attendees: Gra
   });
 };
 
+export const updateOutlookSlotEvent = async (eventId: string, slot: OutlookSlotEventInput) => {
+  const payload = { ...buildOutlookEventPayload(slot) };
+  delete (payload as { transactionId?: string }).transactionId;
+
+  return graphFetch<GraphEvent>(`${organizerPath()}/events/${encodeURIComponent(eventId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+};
+
 export const cancelOutlookSlotEvent = async (eventId: string, comment: string) => {
   await graphFetch<void>(`${organizerPath()}/events/${encodeURIComponent(eventId)}/cancel`, {
     method: "POST",

@@ -3,6 +3,7 @@ import {
   cancelOutlookSlotEvent,
   createOutlookSlotEvent,
   isOutlookGraphConfigured,
+  updateOutlookSlotEvent,
 } from "./outlookGraph";
 import {
   hasSlotSqlConfig,
@@ -160,6 +161,46 @@ export const sendOutlookInvitationForRegistration = async ({
     const message = errorMessage(error);
     await markInvitationFailed(supabase, registration.id, message).catch(markError => {
       console.error("Outlook invitation status update error:", markError);
+    });
+    return { status: "failed", error: message };
+  }
+};
+
+export const confirmOutlookInvitationForRegistration = async ({
+  supabase,
+  slot,
+  registration,
+}: {
+  supabase: SupabaseClient | null;
+  slot: OutlookSlot;
+  registration: OutlookRegistration;
+}): Promise<OutlookActionResult> => {
+  if (!isOutlookGraphConfigured()) {
+    return { status: "not_configured" };
+  }
+
+  try {
+    const eventInput = {
+      slotId: slot.id,
+      registrationId: registration.id,
+      slotDate: slot.slotDate,
+      sessionName: slot.sessionName,
+      waitlisted: false,
+      attendees: [{
+        name: registration.participantName,
+        email: normalizeEmail(registration.participantEmail),
+      }],
+    };
+    const event = registration.outlookEventId
+      ? await updateOutlookSlotEvent(registration.outlookEventId, eventInput)
+      : await createOutlookSlotEvent(eventInput);
+    const eventId = event?.id || registration.outlookEventId || "";
+    await markInvitationSent(supabase, registration.id, eventId);
+    return { status: "sent", eventId };
+  } catch (error) {
+    const message = errorMessage(error);
+    await markInvitationFailed(supabase, registration.id, message).catch(markError => {
+      console.error("Outlook promotion status update error:", markError);
     });
     return { status: "failed", error: message };
   }
