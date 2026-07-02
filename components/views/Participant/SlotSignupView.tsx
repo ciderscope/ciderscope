@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { FiCheck, FiDownload, FiRefreshCw, FiTrash2, FiUserPlus, FiX } from "react-icons/fi";
+import { FiCheck, FiClock, FiRefreshCw, FiTrash2, FiUserPlus, FiX } from "react-icons/fi";
 import { SlotCalendar, type SlotCalendarItem } from "../../features/SlotCalendar";
 import { Button } from "../../ui/Button";
 import type { SlotListItem } from "../../../types/slots";
@@ -10,10 +10,9 @@ import { normalizeEmail } from "../../../lib/slots/validation";
 
 const panelClass = "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-5 shadow-[var(--shadow)]";
 
-type CalendarDownload = {
-  filename: string;
-  content: string;
+type OutlookQueued = {
   slotDate: string;
+  batchDelayMinutes: number;
 };
 
 export const SlotSignupView = () => {
@@ -26,7 +25,7 @@ export const SlotSignupView = () => {
   const [cancelEmail, setCancelEmail] = useState("");
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [duplicateEmail, setDuplicateEmail] = useState<string | null>(null);
-  const [calendarDownload, setCalendarDownload] = useState<CalendarDownload | null>(null);
+  const [outlookQueued, setOutlookQueued] = useState<OutlookQueued | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadSlots = async () => {
@@ -58,18 +57,6 @@ export const SlotSignupView = () => {
     capacity: slot.capacity,
   }));
 
-  const downloadCalendar = (calendar: CalendarDownload) => {
-    const blob = new Blob([calendar.content], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = calendar.filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  };
-
   const register = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedSlot || busy) return;
@@ -81,6 +68,7 @@ export const SlotSignupView = () => {
     setBusy(true);
     setMessage(null);
     setDuplicateEmail(null);
+    setOutlookQueued(null);
 
     try {
       const response = await fetch(`/api/public/slots/${selectedSlot.id}/register`, {
@@ -98,14 +86,16 @@ export const SlotSignupView = () => {
         return;
       }
 
-      if (payload.calendar) {
-        setCalendarDownload({
-          filename: payload.calendar.filename,
-          content: payload.calendar.content,
+      if (payload.outlookInvitation?.status === "queued") {
+        setOutlookQueued({
           slotDate: selectedSlot.slotDate,
+          batchDelayMinutes: payload.outlookInvitation.batchDelayMinutes || 15,
         });
       }
-      setMessage({ kind: "ok", text: "Inscription confirmée. Vous pouvez télécharger l'invitation calendrier." });
+      setMessage({
+        kind: "ok",
+        text: "Inscription confirmée. L'invitation Outlook sera envoyée automatiquement.",
+      });
       setParticipantName("");
       setParticipantEmail("");
       await loadSlots();
@@ -138,7 +128,11 @@ export const SlotSignupView = () => {
       setCancelEmail("");
       setMessage({
         kind: "ok",
-        text: payload.alreadyCancelled ? "Participation déjà annulée." : "Participation annulée.",
+        text: payload.alreadyCancelled
+          ? "Participation déjà annulée."
+          : payload.outlookCancellation
+            ? "Participation annulée. L'invitation Outlook sera mise à jour automatiquement."
+            : "Participation annulée.",
       });
       await loadSlots();
     } catch {
@@ -176,6 +170,7 @@ export const SlotSignupView = () => {
                 setSelectedSlotId(slot?.id || null);
                 setMessage(null);
                 setDuplicateEmail(null);
+                setOutlookQueued(null);
               }}
             />
           )}
@@ -310,21 +305,23 @@ export const SlotSignupView = () => {
         </div>
       )}
 
-      {calendarDownload && (
+      {outlookQueued && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 px-4">
           <div className="w-full max-w-[500px] rounded-xl bg-[var(--paper)] p-6 shadow-[0_8px_24px_rgba(0,0,0,.2)]">
             <div className="mb-4 flex items-start gap-3">
               <div className="flex-1">
-                <div className="text-lg font-bold text-[var(--ink)]">Inscription confirmée</div>
+                <div className="flex items-center gap-2 text-lg font-bold text-[var(--ink)]">
+                  <FiClock /> Invitation Outlook programmée
+                </div>
                 <p className="mt-2 text-sm leading-relaxed text-[var(--mid)]">
-                  Votre place est réservée pour le {formatSlotDateLong(calendarDownload.slotDate)}.
-                  Téléchargez l&apos;invitation calendrier pour ajouter la séance à votre agenda.
+                  Votre place est réservée pour le {formatSlotDateLong(outlookQueued.slotDate)}.
+                  L&apos;invitation Outlook sera envoyée sous {outlookQueued.batchDelayMinutes} minutes environ.
                 </p>
               </div>
               <button
                 type="button"
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--mid)] hover:text-[var(--ink)]"
-                onClick={() => setCalendarDownload(null)}
+                onClick={() => setOutlookQueued(null)}
                 title="Fermer"
                 aria-label="Fermer"
               >
@@ -332,11 +329,8 @@ export const SlotSignupView = () => {
               </button>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setCalendarDownload(null)}>
-                Fermer
-              </Button>
-              <Button size="sm" onClick={() => downloadCalendar(calendarDownload)}>
-                <FiDownload /> Télécharger le .ics
+              <Button size="sm" onClick={() => setOutlookQueued(null)}>
+                <FiCheck /> OK
               </Button>
             </div>
           </div>

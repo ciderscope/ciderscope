@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminIfConfigured } from "../../../../../../lib/server/supabaseAdmin";
 import { cancelSlotRegistrationFromSql, hasCancelledSlotRegistrationFromSql } from "../../../../../../lib/server/slotSql";
+import { isOutlookGraphConfigured } from "../../../../../../lib/server/outlookGraph";
+import { processDueOutlookCancellations } from "../../../../../../lib/server/outlookInvitations";
 import { normalizeEmail } from "../../../../../../lib/slots/validation";
 
 export const runtime = "nodejs";
@@ -61,7 +63,17 @@ export async function POST(
       : await cancelSlotRegistrationFromSql({ slotId, participantEmail });
 
     if (result.ok) {
-      return NextResponse.json({ ok: true });
+      let outlookCancellation: { status: "queued" | "processed" } | null = null;
+      if (isOutlookGraphConfigured()) {
+        try {
+          const summary = await processDueOutlookCancellations(10);
+          outlookCancellation = { status: summary.cancelled > 0 ? "processed" : "queued" };
+        } catch (error) {
+          console.error("Outlook cancellation processing error:", error);
+          outlookCancellation = { status: "queued" };
+        }
+      }
+      return NextResponse.json({ ok: true, outlookCancellation });
     }
 
     if (result.code === "not_registered") {

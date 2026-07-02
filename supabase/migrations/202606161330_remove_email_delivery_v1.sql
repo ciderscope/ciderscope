@@ -1,4 +1,4 @@
--- V1 no longer sends emails. The participant downloads the .ics after signup.
+-- V1 no longer stores email-delivery flags on slot registrations.
 
 drop table if exists email_logs;
 

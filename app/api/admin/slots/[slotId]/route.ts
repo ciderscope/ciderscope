@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "../../../../../lib/server/adminAuth";
+import { getCalendarSlot } from "../../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../../lib/server/supabaseAdmin";
-import { deleteSlotFromSql } from "../../../../../lib/server/slotSql";
+import { deleteSlotFromSql, getCalendarSlotFromSql } from "../../../../../lib/server/slotSql";
+import { cancelWholeOutlookSlotEvent, getSlotOutlookEventId } from "../../../../../lib/server/outlookInvitations";
 
 export const runtime = "nodejs";
 
@@ -23,6 +25,15 @@ type DeleteSlotRpcResult = {
   }>;
 };
 
+const tryCancelOutlookEvent = async (eventId: string | null, slotDate?: string | null) => {
+  if (!eventId || !slotDate) return;
+  try {
+    await cancelWholeOutlookSlotEvent(eventId, slotDate);
+  } catch (error) {
+    console.error("Outlook slot event cancellation error:", error);
+  }
+};
+
 export async function DELETE(
   _request: Request,
   context: { params: Promise<{ slotId: string }> }
@@ -33,11 +44,15 @@ export async function DELETE(
   try {
     const { slotId } = await context.params;
     const supabase = getSupabaseAdminIfConfigured();
+    const slotForOutlook = supabase ? await getCalendarSlot(supabase, slotId) : await getCalendarSlotFromSql(slotId);
+    const outlookEventId = await getSlotOutlookEventId(slotId, supabase);
+
     if (!supabase) {
       const result = await deleteSlotFromSql(slotId);
       if (!result.ok) {
         return NextResponse.json({ ok: false, code: result.code }, { status: 404 });
       }
+      await tryCancelOutlookEvent(result.outlookEventId || outlookEventId, slotForOutlook?.slotDate);
       return NextResponse.json({ ok: true, cancelledCount: result.cancelledCount });
     }
 
@@ -51,6 +66,7 @@ export async function DELETE(
     if (!result.ok) {
       return NextResponse.json({ ok: false, code: result.code }, { status: 404 });
     }
+    await tryCancelOutlookEvent(outlookEventId, result.slot?.slot_date || slotForOutlook?.slotDate);
     return NextResponse.json({
       ok: true,
       cancelledCount: result.registrations?.length || 0,

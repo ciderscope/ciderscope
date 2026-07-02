@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chooseSessionSlotDate, formatSlotDateLong } from "../slots/dates";
-import { buildSlotIcs } from "../slots/ics";
+import { buildOutlookEventPayload } from "../server/outlookGraph";
 import { getEmailDomain, isValidDomain, normalizeDomain, normalizeEmail } from "../slots/validation";
 
 describe("slot validation helpers", () => {
@@ -32,20 +32,22 @@ describe("slot date helpers", () => {
   });
 });
 
-describe("slot ICS generation", () => {
-  it("generates a calendar invitation at the fixed slot time", () => {
-    const ics = buildSlotIcs(
-      { id: "slot-1", slotDate: "2026-06-18", sessionName: "Pomme" },
-      { id: "registration-1", participantEmail: "jury@ifpc.eu" },
-      new Date("2026-06-16T09:00:00Z")
-    );
+describe("Outlook event generation", () => {
+  it("builds a physical Outlook invitation for the slot", () => {
+    const event = buildOutlookEventPayload({
+      slotId: "slot-1",
+      slotDate: "2026-06-18",
+      sessionName: "Pomme",
+      attendees: [{ name: "Jury IFPC", email: "jury@ifpc.eu" }],
+    });
 
-    expect(ics).toContain("BEGIN:VCALENDAR");
-    expect(ics).toContain("DTSTART;TZID=Europe/Paris:20260618T113000");
-    expect(ics).toContain("DTEND;TZID=Europe/Paris:20260618T123000");
-    expect(ics).toContain("LOCATION:salle d'analyse sensorielle");
-    expect(ics).toContain("UID:ciderscope-slot-slot-1-registration-1@ifpc.eu");
-    expect(ics).toContain("TRIGGER:-P1D");
-    expect(ics).toContain("TRIGGER:-PT1H");
+    expect(event.start).toEqual({ dateTime: "2026-06-18T11:30:00", timeZone: "Romance Standard Time" });
+    expect(event.end).toEqual({ dateTime: "2026-06-18T12:30:00", timeZone: "Romance Standard Time" });
+    expect(event.location.displayName).toBe("salle d'analyse sensorielle");
+    expect(event.hideAttendees).toBe(true);
+    expect(event.isReminderOn).toBe(true);
+    expect(event.reminderMinutesBeforeStart).toBe(1440);
+    expect(event.attendees).toHaveLength(1);
+    expect(event).not.toHaveProperty("isOnlineMeeting");
   });
 });
