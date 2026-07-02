@@ -564,7 +564,7 @@ export const AdminView = ({
                             : existingSlot?.sessionId === editSessId
                               ? "lié"
                               : existingSlot
-                                ? `${existingSlot.placesTaken}/${existingSlot.capacity}`
+                                ? `${existingSlot.placesTaken}/${existingSlot.capacity}${existingSlot.waitlistCount > 0 ? ` +${existingSlot.waitlistCount}` : ""}`
                                 : day.month;
                           return (
                             <button

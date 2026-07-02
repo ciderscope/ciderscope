@@ -50,6 +50,23 @@ describe("Outlook event generation", () => {
     expect(event.reminderMinutesBeforeStart).toBe(1440);
     expect(event.attendees).toHaveLength(1);
     expect(event.transactionId).toBe("ciderscope-slot-registration-registration-1");
+    expect(event.showAs).toBe("busy");
     expect(event).not.toHaveProperty("isOnlineMeeting");
+  });
+
+  it("marks waitlist Outlook invitations as tentative", () => {
+    const event = buildOutlookEventPayload({
+      slotId: "slot-1",
+      registrationId: "registration-2",
+      slotDate: "2026-06-18",
+      sessionName: "Pomme",
+      waitlisted: true,
+      attendees: [{ name: "Jury IFPC", email: "jury@ifpc.eu" }],
+    });
+
+    expect(event.subject).toContain("[Liste d'attente]");
+    expect(event.body.content).toContain("liste d'attente");
+    expect(event.showAs).toBe("tentative");
+    expect(event.transactionId).toBe("ciderscope-slot-registration-registration-2");
   });
 });

@@ -43,21 +43,25 @@ export const SlotSignupView = () => {
     () => slots.find(slot => slot.id === selectedSlotId) || null,
     [slots, selectedSlotId]
   );
+  const selectedSlotIsWaitlist = selectedSlot ? selectedSlot.placesTaken >= selectedSlot.capacity : false;
+  const confirmedParticipants = selectedSlot?.participants.filter(participant => (
+    participant.registrationStatus === "confirmed"
+  )) || [];
+  const waitlistParticipants = selectedSlot?.participants.filter(participant => (
+    participant.registrationStatus === "waitlist"
+  )) || [];
 
   const calendarSlots: SlotCalendarItem[] = slots.map(slot => ({
     id: slot.id,
     slotDate: slot.slotDate,
     placesTaken: slot.placesTaken,
     capacity: slot.capacity,
+    waitlistCount: slot.waitlistCount,
   }));
 
   const register = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedSlot || busy) return;
-    if (selectedSlot.placesTaken >= selectedSlot.capacity) {
-      setMessage({ kind: "error", text: "Ce créneau est complet." });
-      return;
-    }
 
     setBusy(true);
     setMessage(null);
@@ -79,13 +83,20 @@ export const SlotSignupView = () => {
       }
 
       const outlookStatus = payload.outlookInvitation?.status;
+      const isWaitlisted = payload.registration?.registrationStatus === "waitlist";
       setMessage({
         kind: outlookStatus === "failed" || outlookStatus === "not_configured" ? "error" : "ok",
-        text: outlookStatus === "sent"
-          ? "Inscription confirmée. L'invitation Outlook vient d'être envoyée."
+        text: outlookStatus === "sent" && isWaitlisted
+          ? "Inscription en liste d'attente. L'invitation Outlook provisoire vient d'etre envoyee."
+          : outlookStatus === "sent"
+            ? "Inscription confirmée. L'invitation Outlook vient d'être envoyée."
           : outlookStatus === "failed" || outlookStatus === "not_configured"
-            ? "Inscription confirmée, mais l'invitation Outlook n'a pas pu être envoyée automatiquement."
-            : "Inscription confirmée.",
+            ? isWaitlisted
+              ? "Inscription en liste d'attente, mais l'invitation Outlook n'a pas pu etre envoyee automatiquement."
+              : "Inscription confirmée, mais l'invitation Outlook n'a pas pu être envoyée automatiquement."
+            : isWaitlisted
+              ? "Inscription en liste d'attente."
+              : "Inscription confirmée.",
       });
       setParticipantName("");
       setParticipantEmail("");
@@ -190,6 +201,11 @@ export const SlotSignupView = () => {
                   <span className="rounded-full border border-[var(--border)] bg-[var(--paper2)] px-3 py-1 font-semibold">
                     {selectedSlot.placesTaken}/{selectedSlot.capacity || SLOT_CAPACITY} places prises
                   </span>
+                  {selectedSlot.waitlistCount > 0 && (
+                    <span className="rounded-full border border-[rgba(238,140,0,.28)] bg-[rgba(238,140,0,.10)] px-3 py-1 font-semibold text-[var(--accent)]">
+                      {selectedSlot.waitlistCount} en liste d&apos;attente
+                    </span>
+                  )}
                   <span className="rounded-full border border-[var(--border)] bg-[var(--paper2)] px-3 py-1 font-semibold">
                     {SLOT_TIME_LABEL}
                   </span>
@@ -198,16 +214,28 @@ export const SlotSignupView = () => {
 
               <div>
                 <div className="mb-2 text-sm font-bold text-[var(--ink)]">Inscrits</div>
-                {selectedSlot.participants.length === 0 ? (
+                {confirmedParticipants.length === 0 ? (
                   <div className="text-sm text-[var(--mid)]">Aucun inscrit pour le moment.</div>
                 ) : (
                   <ul className="grid gap-1.5 text-sm text-[var(--ink)]">
-                    {selectedSlot.participants.map(participant => (
+                    {confirmedParticipants.map(participant => (
                       <li key={participant.id} className="rounded-lg bg-[var(--paper2)] px-3 py-2">
                         {participant.participantName}
                       </li>
                     ))}
                   </ul>
+                )}
+                {waitlistParticipants.length > 0 && (
+                  <div className="mt-3">
+                    <div className="mb-2 text-xs font-bold uppercase text-[var(--mid)]">Liste d&apos;attente</div>
+                    <ul className="grid gap-1.5 text-sm text-[var(--ink)]">
+                      {waitlistParticipants.map(participant => (
+                        <li key={participant.id} className="rounded-lg border border-[rgba(238,140,0,.22)] bg-[rgba(238,140,0,.08)] px-3 py-2">
+                          {participant.participantName}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
 
@@ -221,7 +249,12 @@ export const SlotSignupView = () => {
                 </div>
               )}
 
-              {selectedSlot.placesTaken < selectedSlot.capacity ? (
+              {selectedSlotIsWaitlist && (
+                <div className="rounded-lg border border-[rgba(238,140,0,.22)] bg-[rgba(238,140,0,.08)] px-3 py-2 text-sm font-medium text-[var(--ink)]">
+                  Ce creneau est complet. Vous pouvez vous inscrire en liste d&apos;attente ; l&apos;invitation Outlook sera envoyee en provisoire.
+                </div>
+              )}
+
                 <form className="space-y-3" onSubmit={register}>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
@@ -245,14 +278,9 @@ export const SlotSignupView = () => {
                     </div>
                   </div>
                   <Button type="submit" disabled={busy}>
-                    <FiUserPlus /> S&apos;inscrire
+                    <FiUserPlus /> {selectedSlotIsWaitlist ? "Rejoindre la liste d'attente" : "S'inscrire"}
                   </Button>
                 </form>
-              ) : (
-                <div className="rounded-lg border border-[rgba(198,40,40,.22)] bg-[rgba(198,40,40,.08)] px-3 py-2 text-sm font-medium text-[var(--danger)]">
-                  Ce créneau est complet.
-                </div>
-              )}
 
               <div className="border-t border-[var(--border)] pt-4">
                 <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Annuler avec mon email</label>

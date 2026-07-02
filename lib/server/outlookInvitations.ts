@@ -25,6 +25,7 @@ type OutlookRegistration = {
   slotId: string;
   participantName: string;
   participantEmail: string;
+  registrationStatus?: "confirmed" | "waitlist";
   outlookEventId?: string | null;
 };
 
@@ -147,6 +148,7 @@ export const sendOutlookInvitationForRegistration = async ({
       registrationId: registration.id,
       slotDate: slot.slotDate,
       sessionName: slot.sessionName,
+      waitlisted: registration.registrationStatus === "waitlist",
       attendees: [{
         name: registration.participantName,
         email: normalizeEmail(registration.participantEmail),

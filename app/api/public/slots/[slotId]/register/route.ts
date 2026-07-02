@@ -19,6 +19,7 @@ type RegisterRpcResult = {
     slot_id: string;
     participant_name: string;
     participant_email: string;
+    registration_status?: "confirmed" | "waitlist";
     created_at: string;
     token: string;
     outlook_event_id?: string | null;
@@ -78,6 +79,7 @@ export async function POST(
           slotId: result.registration.slot_id,
           participantName: result.registration.participant_name,
           participantEmail: result.registration.participant_email,
+          registrationStatus: result.registration.registration_status || "confirmed",
           outlookEventId: result.registration.outlook_event_id || null,
         },
       })
@@ -88,7 +90,10 @@ export async function POST(
       registration: {
         id: result.registration.id,
         participantName: result.registration.participant_name,
+        registrationStatus: result.registration.registration_status || "confirmed",
       },
+      placesTaken: result.places_taken,
+      capacity: result.capacity,
       outlookInvitation,
     });
   } catch (error) {

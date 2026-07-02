@@ -15,6 +15,7 @@ type RegistrationRow = {
   slot_id: string;
   participant_name: string;
   participant_email: string;
+  registration_status?: "confirmed" | "waitlist";
   created_at: string;
 };
 
@@ -52,9 +53,10 @@ export const listSlots = async (
   const slotIds = slotRows.map(slot => slot.id);
   const { data: registrations, error: registrationsError } = await supabase
     .from("slot_registrations")
-    .select("id, slot_id, participant_name, participant_email, created_at")
+    .select("id, slot_id, participant_name, participant_email, registration_status, created_at")
     .eq("status", "active")
     .in("slot_id", slotIds)
+    .order("registration_status", { ascending: true })
     .order("created_at", { ascending: true });
 
   if (registrationsError) throw registrationsError;
@@ -68,13 +70,18 @@ export const listSlots = async (
 
   return slotRows.map(slot => {
     const participants = registrationsBySlot.get(slot.id) || [];
+    const confirmedParticipants = participants.filter(participant => (
+      (participant.registration_status || "confirmed") === "confirmed"
+    ));
+    const waitlistCount = participants.filter(participant => participant.registration_status === "waitlist").length;
     const base = {
       id: slot.id,
       slotDate: slot.slot_date,
       capacity: slot.capacity,
       sessionId: slot.session_id,
       sessionName: slot.session_name,
-      placesTaken: participants.length,
+      placesTaken: confirmedParticipants.length,
+      waitlistCount,
     };
 
     if (admin) {
@@ -85,6 +92,7 @@ export const listSlots = async (
           id: participant.id,
           participantName: participant.participant_name,
           participantEmail: participant.participant_email,
+          registrationStatus: participant.registration_status || "confirmed",
           createdAt: participant.created_at,
         })),
       } satisfies AdminSlotListItem;
@@ -95,6 +103,7 @@ export const listSlots = async (
       participants: participants.map(participant => ({
         id: participant.id,
         participantName: participant.participant_name,
+        registrationStatus: participant.registration_status || "confirmed",
       })),
     } satisfies SlotListItem;
   });

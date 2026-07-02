@@ -1,8 +1,10 @@
 export type SlotRegistrationStatus = "active" | "cancelled";
+export type SlotRegistrationSeatStatus = "confirmed" | "waitlist";
 
 export type PublicSlotParticipant = {
   id: string;
   participantName: string;
+  registrationStatus: SlotRegistrationSeatStatus;
 };
 
 export type AdminSlotParticipant = PublicSlotParticipant & {
@@ -17,6 +19,7 @@ export type SlotListItem = {
   sessionId: string | null;
   sessionName: string;
   placesTaken: number;
+  waitlistCount: number;
   participants: PublicSlotParticipant[];
 };
 

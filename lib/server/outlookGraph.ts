@@ -43,6 +43,7 @@ export type OutlookSlotEventInput = {
   registrationId?: string;
   slotDate: string;
   sessionName?: string | null;
+  waitlisted?: boolean;
   attendees: Array<{
     name: string;
     email: string;
@@ -79,15 +80,23 @@ const slotTitle = (slot: Pick<OutlookSlotEventInput, "slotDate" | "sessionName">
   return `Seance d'analyse sensorielle - ${label}`;
 };
 
-const buildOutlookBody = (slot: Pick<OutlookSlotEventInput, "slotDate" | "sessionName">) => {
+const buildOutlookBody = (slot: Pick<OutlookSlotEventInput, "slotDate" | "sessionName" | "waitlisted">) => {
   const dateLabel = formatSlotDateLong(slot.slotDate);
   const sessionLine = slot.sessionName?.trim()
     ? `<li><strong>Seance :</strong> ${escapeHtml(slot.sessionName.trim())}</li>`
     : "";
+  const intro = slot.waitlisted
+    ? [
+      "<p>Votre demande d'inscription est en liste d'attente.</p>",
+      "<p>Le creneau est complet : cette invitation Outlook est envoyee en statut provisoire et votre presence reste a confirmer par l'equipe si une place se libere.</p>",
+    ]
+    : [
+      "<p>Votre session d'analyse sensorielle est confirmee.</p>",
+    ];
 
   return [
     "<p>Bonjour,</p>",
-    "<p>Votre session d'analyse sensorielle est confirmee.</p>",
+    ...intro,
     "<ul>",
     `<li><strong>Date :</strong> ${escapeHtml(dateLabel)}</li>`,
     `<li><strong>Horaire :</strong> ${SLOT_TIME_LABEL}</li>`,
@@ -108,7 +117,7 @@ const normalizeGraphAttendee = (attendee: { name: string; email: string }): Grap
 });
 
 export const buildOutlookEventPayload = (slot: OutlookSlotEventInput) => ({
-  subject: slotTitle(slot),
+  subject: slot.waitlisted ? `[Liste d'attente] ${slotTitle(slot)}` : slotTitle(slot),
   body: {
     contentType: "HTML",
     content: buildOutlookBody(slot),
@@ -130,7 +139,7 @@ export const buildOutlookEventPayload = (slot: OutlookSlotEventInput) => ({
   isReminderOn: true,
   reminderMinutesBeforeStart: OUTLOOK_REMINDER_MINUTES_BEFORE_START,
   responseRequested: true,
-  showAs: "busy",
+  showAs: slot.waitlisted ? "tentative" : "busy",
   transactionId: `ciderscope-slot-registration-${slot.registrationId || slot.slotId}`,
 });
 

@@ -41,7 +41,10 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
       const payload = await response.json().catch(() => ({})) as { slots?: AdminSlotListItem[] };
       if (response.ok && payload.slots) {
         const sessionSlots = payload.slots.filter(s => s.sessionId === sessionId);
-        const registered = sessionSlots.flatMap(s => s.participants.map(p => p.participantName));
+        const registered = sessionSlots.flatMap(s => s.participants
+          .filter(p => p.registrationStatus === "confirmed")
+          .map(p => p.participantName)
+        );
         setRegisteredParticipants([...new Set(registered)]);
       } else {
         setRegisteredParticipants([]);

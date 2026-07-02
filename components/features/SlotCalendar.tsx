@@ -9,6 +9,7 @@ export type SlotCalendarItem = {
   slotDate: string;
   placesTaken: number;
   capacity: number;
+  waitlistCount?: number;
 };
 
 type SlotCalendarProps = {
@@ -20,12 +21,12 @@ type SlotCalendarProps = {
 
 const dayLabels = ["L", "M", "M", "J", "V", "S", "D"];
 
-const cellClass = (state: "available" | "full" | "empty", selected: boolean, inMonth: boolean) => [
+const cellClass = (state: "available" | "waitlist" | "empty", selected: boolean, inMonth: boolean) => [
   "relative flex aspect-square min-h-14 w-full flex-col items-start justify-between rounded-lg border p-2 text-left transition-[border-color,box-shadow,transform,background] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]",
   selected ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--paper)]" : "",
   inMonth ? "opacity-100" : "opacity-40",
   state === "available" ? "border-[rgba(98,141,23,.28)] bg-[rgba(98,141,23,.11)] text-[var(--ink)] hover:border-[var(--primary)]" : "",
-  state === "full" ? "border-[rgba(198,40,40,.25)] bg-[rgba(198,40,40,.10)] text-[var(--ink)] hover:border-[var(--danger)]" : "",
+  state === "waitlist" ? "border-[rgba(238,140,0,.35)] bg-[rgba(238,140,0,.12)] text-[var(--ink)] hover:border-[var(--accent)]" : "",
   state === "empty" ? "border-[var(--border)] bg-[var(--paper2)] text-[var(--mid)] hover:border-[var(--border-strong)]" : "",
 ].filter(Boolean).join(" ");
 
@@ -84,8 +85,9 @@ export const SlotCalendar = ({ slots, selectedDate, selectedDates, onSelectDate 
       <div className="grid grid-cols-7 gap-1">
         {days.map(day => {
           const slot = slotsByDate.get(day.date) || null;
-          const state = slot ? (slot.placesTaken >= slot.capacity ? "full" : "available") : "empty";
+          const state = slot ? (slot.placesTaken >= slot.capacity ? "waitlist" : "available") : "empty";
           const selected = selectedDates ? selectedDates.has(day.date) : selectedDate === day.date;
+          const waitlistCount = slot?.waitlistCount || 0;
           return (
             <button
               type="button"
@@ -100,6 +102,11 @@ export const SlotCalendar = ({ slots, selectedDate, selectedDates, onSelectDate 
                   {slot.placesTaken}/{slot.capacity}
                 </span>
               )}
+              {waitlistCount > 0 && (
+                <span className="absolute bottom-1 left-1 rounded-full bg-[var(--paper)] px-1.5 py-0.5 text-[9px] font-bold uppercase text-[var(--accent)] shadow-[var(--shadow)]">
+                  +{waitlistCount}
+                </span>
+              )}
             </button>
           );
         })}
@@ -107,7 +114,7 @@ export const SlotCalendar = ({ slots, selectedDate, selectedDates, onSelectDate 
 
       <div className="mt-3 flex flex-wrap gap-3 text-[12px] text-[var(--mid)]">
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" /> ouvert</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--danger)]" /> complet</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" /> liste d&apos;attente</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--paper3)]" /> sans créneau</span>
       </div>
     </div>

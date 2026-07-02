@@ -40,12 +40,16 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     () => slots.find(slot => slot.id === selectedSlotId) || null,
     [slots, selectedSlotId]
   );
+  const selectedConfirmedParticipants = selectedSlot?.participants.filter(participant => (
+    participant.registrationStatus === "confirmed"
+  )) || [];
 
   const calendarSlots: SlotCalendarItem[] = slots.map(slot => ({
     id: slot.id,
     slotDate: slot.slotDate,
     placesTaken: slot.placesTaken,
     capacity: slot.capacity,
+    waitlistCount: slot.waitlistCount,
   }));
 
   const pendingSlotDates = useMemo(() => {
@@ -204,6 +208,11 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
                   <span className="rounded-full border border-[var(--border)] bg-[var(--paper2)] px-3 py-1 font-semibold">
                     {selectedSlot.placesTaken}/{selectedSlot.capacity || SLOT_CAPACITY} places prises
                   </span>
+                  {selectedSlot.waitlistCount > 0 && (
+                    <span className="rounded-full border border-[rgba(238,140,0,.28)] bg-[rgba(238,140,0,.10)] px-3 py-1 font-semibold text-[var(--accent)]">
+                      {selectedSlot.waitlistCount} en liste d&apos;attente
+                    </span>
+                  )}
                   <span className="rounded-full border border-[var(--border)] bg-[var(--paper2)] px-3 py-1 font-semibold">
                     {SLOT_TIME_LABEL}
                   </span>
@@ -218,11 +227,12 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
                   </div>
                 ) : (
                   <div className="max-h-[190px] overflow-auto rounded-lg border border-[var(--border)]">
-                    <table className="w-full min-w-[420px] text-left text-sm">
+                    <table className="w-full min-w-[560px] text-left text-sm">
                       <thead className="bg-[var(--paper2)] text-xs uppercase text-[var(--mid)]">
                         <tr>
                           <th className="px-3 py-2">Nom</th>
                           <th className="px-3 py-2">Email</th>
+                          <th className="px-3 py-2">Statut</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -230,6 +240,9 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
                           <tr key={participant.id} className="border-t border-[var(--border)]">
                             <td className="px-3 py-2 font-medium">{participant.participantName}</td>
                             <td className="px-3 py-2 font-mono text-xs text-[var(--mid)]">{participant.participantEmail}</td>
+                            <td className="px-3 py-2 text-xs font-semibold">
+                              {participant.registrationStatus === "waitlist" ? "Liste d'attente" : "Confirme"}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -335,13 +348,13 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
               </tr>
             </thead>
             <tbody>
-              {selectedSlot.participants.map(participant => (
+              {selectedConfirmedParticipants.map(participant => (
                 <tr key={participant.id}>
                   <td>{participant.participantName}</td>
                   <td />
                 </tr>
               ))}
-              {selectedSlot.participants.length === 0 && (
+              {selectedConfirmedParticipants.length === 0 && (
                 <tr>
                   <td colSpan={2}>Aucun participant inscrit.</td>
                 </tr>

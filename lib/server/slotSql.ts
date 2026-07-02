@@ -16,6 +16,7 @@ type RegistrationRow = QueryResultRow & {
   slot_id: string;
   participant_name: string;
   participant_email: string;
+  registration_status: "confirmed" | "waitlist";
   created_at: string;
 };
 
@@ -45,6 +46,7 @@ type RegisterSlotResult = {
     slot_id: string;
     participant_name: string;
     participant_email: string;
+    registration_status?: "confirmed" | "waitlist";
     created_at: string;
     token: string;
     outlook_event_id?: string | null;
@@ -59,6 +61,7 @@ type CancelSlotResult = {
     slot_id: string;
     participant_name: string;
     participant_email: string;
+    registration_status?: "confirmed" | "waitlist";
     cancelled_at: string;
     outlook_event_id: string | null;
   };
@@ -140,11 +143,11 @@ export const listSlotsFromSql = async (
 
   const { rows: registrations } = await getPool().query<RegistrationRow>(
     `
-      select id::text, slot_id::text, participant_name, participant_email, created_at::text
+      select id::text, slot_id::text, participant_name, participant_email, registration_status, created_at::text
       from slot_registrations
       where status = 'active'
         and slot_id = any($1::uuid[])
-      order by created_at asc
+      order by registration_status asc, created_at asc
     `,
     [slotRows.map(slot => slot.id)]
   );
@@ -158,13 +161,18 @@ export const listSlotsFromSql = async (
 
   return slotRows.map(slot => {
     const participants = registrationsBySlot.get(slot.id) || [];
+    const confirmedParticipants = participants.filter(participant => (
+      (participant.registration_status || "confirmed") === "confirmed"
+    ));
+    const waitlistCount = participants.filter(participant => participant.registration_status === "waitlist").length;
     const base = {
       id: slot.id,
       slotDate: slot.slot_date,
       capacity: slot.capacity,
       sessionId: slot.session_id,
       sessionName: slot.session_name,
-      placesTaken: participants.length,
+      placesTaken: confirmedParticipants.length,
+      waitlistCount,
     };
 
     if (admin) {
@@ -175,6 +183,7 @@ export const listSlotsFromSql = async (
           id: participant.id,
           participantName: participant.participant_name,
           participantEmail: participant.participant_email,
+          registrationStatus: participant.registration_status || "confirmed",
           createdAt: asIsoString(participant.created_at),
         })),
       } satisfies AdminSlotListItem;
@@ -185,6 +194,7 @@ export const listSlotsFromSql = async (
       participants: participants.map(participant => ({
         id: participant.id,
         participantName: participant.participant_name,
+        registrationStatus: participant.registration_status || "confirmed",
       })),
     } satisfies SlotListItem;
   });
@@ -341,14 +351,18 @@ export const registerSlotParticipantFromSql = async ({
     }
 
     const count = await client.query<{ count: string }>(
-      "select count(*)::text from slot_registrations where slot_id = $1 and status = 'active'",
+      `
+        select count(*)::text
+        from slot_registrations
+        where slot_id = $1
+          and status = 'active'
+          and registration_status = 'confirmed'
+      `,
       [slotId]
     );
     const placesTaken = Number.parseInt(count.rows[0]?.count || "0", 10);
     const capacity = slot.rows[0].capacity;
-    if (placesTaken >= capacity) {
-      return { ok: false, code: "slot_full", places_taken: placesTaken, capacity };
-    }
+    const registrationStatus = placesTaken >= capacity ? "waitlist" : "confirmed";
 
     try {
       const registration = await client.query<{
@@ -356,18 +370,24 @@ export const registerSlotParticipantFromSql = async ({
         slot_id: string;
         participant_name: string;
         participant_email: string;
+        registration_status: "confirmed" | "waitlist";
         created_at: string;
         token: string;
       }>(
         `
-          insert into slot_registrations (slot_id, participant_name, participant_email)
-          values ($1, $2, $3)
-          returning id::text, slot_id::text, participant_name, participant_email, created_at::text, token
+          insert into slot_registrations (slot_id, participant_name, participant_email, registration_status)
+          values ($1, $2, $3, $4)
+          returning id::text, slot_id::text, participant_name, participant_email, registration_status, created_at::text, token
         `,
-        [slotId, name, email]
+        [slotId, name, email, registrationStatus]
       );
 
-      return { ok: true, registration: registration.rows[0] };
+      return {
+        ok: true,
+        places_taken: placesTaken,
+        capacity,
+        registration: registration.rows[0],
+      };
     } catch (error) {
       if ((error as PgError).code === "23505") return { ok: false, code: "already_registered" };
       throw error;
@@ -391,6 +411,7 @@ export const cancelSlotRegistrationFromSql = async ({
       slot_id: string;
       participant_name: string;
       participant_email: string;
+      registration_status: "confirmed" | "waitlist";
       cancelled_at: string;
       outlook_event_id: string | null;
     }>(
@@ -404,7 +425,7 @@ export const cancelSlotRegistrationFromSql = async ({
             end,
             outlook_invite_due_at = null
         where slot_id = $1 and participant_email = $2 and status = 'active'
-        returning id::text, slot_id::text, participant_name, participant_email, cancelled_at::text, outlook_event_id
+        returning id::text, slot_id::text, participant_name, participant_email, registration_status, cancelled_at::text, outlook_event_id
       `,
       [slotId, email]
     );

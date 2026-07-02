@@ -166,11 +166,13 @@ La fonctionnalite d'inscription utilise les routes serveur Next.js. Elles utilis
 puis basculent en local sur `DIRECT_URL` ou `DATABASE_URL` si `SUPABASE_SERVICE_ROLE_KEY` n'est pas renseignee. Appliquer la migration
 `supabase/migrations/202606161130_session_slots.sql`, puis `supabase/migrations/202607021200_outlook_calendar_invitations.sql`
 et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
-`supabase/migrations/202607021500_immediate_outlook_invitations.sql`, avant de l'utiliser.
+`supabase/migrations/202607021500_immediate_outlook_invitations.sql`, puis
+`supabase/migrations/202607021700_slot_waitlist.sql`, avant de l'utiliser.
 
 - `SUPABASE_SERVICE_ROLE_KEY` reste uniquement cote serveur et permet aux API de faire respecter les controles metier.
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD` et `ADMIN_SESSION_SECRET` pilotent le cookie admin HTTP-only utilise par les nouvelles API admin.
 - Si Microsoft Graph est configure, chaque inscription cree immediatement une invitation Outlook dediee dans le calendrier de `OUTLOOK_ORGANIZER_EMAIL`.
+- Si un creneau est complet, l'inscription reste possible en liste d'attente et l'invitation Outlook est envoyee en provisoire.
 - L'application Entra doit avoir la permission Microsoft Graph `Calendars.ReadWrite` en application permission, avec admin consent.
 - Les participants peuvent accepter ou refuser l'invitation depuis Outlook. Les annulations Senso annulent l'invitation Outlook de l'inscription.
 - Le rappel Outlook natif est configure 24 heures avant le creneau. Microsoft Graph ne permet qu'un rappel natif par evenement.
