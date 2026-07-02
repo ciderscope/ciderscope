@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { FiCheck, FiClock, FiRefreshCw, FiTrash2, FiUserPlus, FiX } from "react-icons/fi";
+import { FiCheck, FiRefreshCw, FiTrash2, FiUserPlus } from "react-icons/fi";
 import { SlotCalendar, type SlotCalendarItem } from "../../features/SlotCalendar";
 import { Button } from "../../ui/Button";
 import type { SlotListItem } from "../../../types/slots";
@@ -9,11 +9,6 @@ import { formatSlotDateLong, SLOT_CAPACITY, SLOT_TIME_LABEL } from "../../../lib
 import { normalizeEmail } from "../../../lib/slots/validation";
 
 const panelClass = "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-5 shadow-[var(--shadow)]";
-
-type OutlookQueued = {
-  slotDate: string;
-  batchDelayMinutes: number;
-};
 
 export const SlotSignupView = () => {
   const [slots, setSlots] = useState<SlotListItem[]>([]);
@@ -25,7 +20,6 @@ export const SlotSignupView = () => {
   const [cancelEmail, setCancelEmail] = useState("");
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [duplicateEmail, setDuplicateEmail] = useState<string | null>(null);
-  const [outlookQueued, setOutlookQueued] = useState<OutlookQueued | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadSlots = async () => {
@@ -68,8 +62,6 @@ export const SlotSignupView = () => {
     setBusy(true);
     setMessage(null);
     setDuplicateEmail(null);
-    setOutlookQueued(null);
-
     try {
       const response = await fetch(`/api/public/slots/${selectedSlot.id}/register`, {
         method: "POST",
@@ -86,15 +78,14 @@ export const SlotSignupView = () => {
         return;
       }
 
-      if (payload.outlookInvitation?.status === "queued") {
-        setOutlookQueued({
-          slotDate: selectedSlot.slotDate,
-          batchDelayMinutes: payload.outlookInvitation.batchDelayMinutes || 15,
-        });
-      }
+      const outlookStatus = payload.outlookInvitation?.status;
       setMessage({
-        kind: "ok",
-        text: "Inscription confirmée. L'invitation Outlook sera envoyée automatiquement.",
+        kind: outlookStatus === "failed" || outlookStatus === "not_configured" ? "error" : "ok",
+        text: outlookStatus === "sent"
+          ? "Inscription confirmée. L'invitation Outlook vient d'être envoyée."
+          : outlookStatus === "failed" || outlookStatus === "not_configured"
+            ? "Inscription confirmée, mais l'invitation Outlook n'a pas pu être envoyée automatiquement."
+            : "Inscription confirmée.",
       });
       setParticipantName("");
       setParticipantEmail("");
@@ -130,8 +121,10 @@ export const SlotSignupView = () => {
         kind: "ok",
         text: payload.alreadyCancelled
           ? "Participation déjà annulée."
-          : payload.outlookCancellation
-            ? "Participation annulée. L'invitation Outlook sera mise à jour automatiquement."
+          : payload.outlookCancellation?.status === "cancelled"
+            ? "Participation annulée. L'invitation Outlook a été annulée."
+            : payload.outlookCancellation?.status === "failed" || payload.outlookCancellation?.status === "not_configured"
+              ? "Participation annulée, mais l'invitation Outlook n'a pas pu être annulée automatiquement."
             : "Participation annulée.",
       });
       await loadSlots();
@@ -170,7 +163,6 @@ export const SlotSignupView = () => {
                 setSelectedSlotId(slot?.id || null);
                 setMessage(null);
                 setDuplicateEmail(null);
-                setOutlookQueued(null);
               }}
             />
           )}
@@ -299,38 +291,6 @@ export const SlotSignupView = () => {
               </Button>
               <Button variant="danger" size="sm" onClick={() => void cancelRegistration(duplicateEmail)} disabled={busy}>
                 <FiCheck /> Annuler ma participation
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {outlookQueued && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 px-4">
-          <div className="w-full max-w-[500px] rounded-xl bg-[var(--paper)] p-6 shadow-[0_8px_24px_rgba(0,0,0,.2)]">
-            <div className="mb-4 flex items-start gap-3">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 text-lg font-bold text-[var(--ink)]">
-                  <FiClock /> Invitation Outlook programmée
-                </div>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--mid)]">
-                  Votre place est réservée pour le {formatSlotDateLong(outlookQueued.slotDate)}.
-                  L&apos;invitation Outlook sera envoyée sous {outlookQueued.batchDelayMinutes} minutes environ.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--mid)] hover:text-[var(--ink)]"
-                onClick={() => setOutlookQueued(null)}
-                title="Fermer"
-                aria-label="Fermer"
-              >
-                <FiX />
-              </button>
-            </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button size="sm" onClick={() => setOutlookQueued(null)}>
-                <FiCheck /> OK
               </Button>
             </div>
           </div>

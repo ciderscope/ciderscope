@@ -1,6 +1,5 @@
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import type { AdminSlotListItem, SlotListItem } from "../../types/slots";
-import type { ClaimedOutlookCancellation, ClaimedOutlookInvitation } from "./outlookInvitationTypes";
 import { getEmailDomain, isValidEmail, normalizeEmail } from "../slots/validation";
 
 type SlotRow = QueryResultRow & {
@@ -26,10 +25,6 @@ type CalendarSlotRow = QueryResultRow & {
   session_name: string;
 };
 
-type SlotOutlookEventRow = QueryResultRow & {
-  outlook_event_id: string | null;
-};
-
 type PgError = Error & { code?: string };
 
 type ListSlotOptions = {
@@ -52,6 +47,7 @@ type RegisterSlotResult = {
     participant_email: string;
     created_at: string;
     token: string;
+    outlook_event_id?: string | null;
   };
 };
 
@@ -64,7 +60,13 @@ type CancelSlotResult = {
     participant_name: string;
     participant_email: string;
     cancelled_at: string;
+    outlook_event_id: string | null;
   };
+};
+
+type CancelledRegistration = {
+  id: string;
+  outlookEventId: string | null;
 };
 
 let pool: Pool | null = null;
@@ -254,21 +256,21 @@ export const createSlotFromSql = async ({
 
 export const deleteSlotFromSql = async (
   slotId: string
-): Promise<{ ok: boolean; code?: string; cancelledCount: number; outlookEventId?: string | null }> => {
+): Promise<{ ok: boolean; code?: string; cancelledCount: number; registrations: CancelledRegistration[] }> => {
   return transaction(async client => {
-    const slot = await client.query<{ id: string; deleted_at: string | null; outlook_event_id: string | null }>(
-      "select id::text, deleted_at::text, outlook_event_id from session_slots where id = $1 for update",
+    const slot = await client.query<{ id: string; deleted_at: string | null }>(
+      "select id::text, deleted_at::text from session_slots where id = $1 for update",
       [slotId]
     );
 
-    if (slot.rowCount === 0) return { ok: false, code: "slot_not_found", cancelledCount: 0 };
-    if (slot.rows[0].deleted_at) return { ok: false, code: "slot_already_deleted", cancelledCount: 0 };
+    if (slot.rowCount === 0) return { ok: false, code: "slot_not_found", cancelledCount: 0, registrations: [] };
+    if (slot.rows[0].deleted_at) return { ok: false, code: "slot_already_deleted", cancelledCount: 0, registrations: [] };
 
     await client.query(
       "update session_slots set deleted_at = now(), created_by = coalesce(created_by, 'admin') where id = $1",
       [slotId]
     );
-    const cancelled = await client.query(
+    const cancelled = await client.query<{ id: string; outlook_event_id: string | null }>(
       `
         update slot_registrations
         set status = 'cancelled',
@@ -277,17 +279,21 @@ export const deleteSlotFromSql = async (
               when outlook_event_id is not null then 'cancel_pending'
               else 'cancelled'
             end,
-            outlook_invite_due_at = case
-              when outlook_event_id is not null then now()
-              else outlook_invite_due_at
-            end
+            outlook_invite_due_at = null
         where slot_id = $1 and status = 'active'
-        returning id
+        returning id::text, outlook_event_id
       `,
       [slotId]
     );
 
-    return { ok: true, cancelledCount: cancelled.rowCount || 0, outlookEventId: slot.rows[0].outlook_event_id };
+    return {
+      ok: true,
+      cancelledCount: cancelled.rowCount || 0,
+      registrations: cancelled.rows.map(row => ({
+        id: row.id,
+        outlookEventId: row.outlook_event_id || null,
+      })),
+    };
   });
 };
 
@@ -386,6 +392,7 @@ export const cancelSlotRegistrationFromSql = async ({
       participant_name: string;
       participant_email: string;
       cancelled_at: string;
+      outlook_event_id: string | null;
     }>(
       `
         update slot_registrations
@@ -395,12 +402,9 @@ export const cancelSlotRegistrationFromSql = async ({
               when outlook_event_id is not null then 'cancel_pending'
               else 'cancelled'
             end,
-            outlook_invite_due_at = case
-              when outlook_event_id is not null then now()
-              else outlook_invite_due_at
-            end
+            outlook_invite_due_at = null
         where slot_id = $1 and participant_email = $2 and status = 'active'
-        returning id::text, slot_id::text, participant_name, participant_email, cancelled_at::text
+        returning id::text, slot_id::text, participant_name, participant_email, cancelled_at::text, outlook_event_id
       `,
       [slotId, email]
     );
@@ -449,154 +453,62 @@ export const getCalendarSlotFromSql = async (slotId: string) => {
   };
 };
 
-const asStringOrNull = (value: unknown) => typeof value === "string" && value ? value : null;
-
-const mapClaimedInvitation = (value: unknown): ClaimedOutlookInvitation => {
-  const item = value as Record<string, unknown>;
-  const slot = item.slot as Record<string, unknown>;
-  return {
-    id: String(item.id),
-    slotId: String(item.slotId),
-    participantName: String(item.participantName),
-    participantEmail: String(item.participantEmail),
-    outlookEventId: asStringOrNull(item.outlookEventId),
-    attempts: Number(item.attempts || 0),
-    slot: {
-      id: String(slot.id),
-      slotDate: String(slot.slotDate),
-      sessionName: String(slot.sessionName || ""),
-      outlookEventId: asStringOrNull(slot.outlookEventId),
-    },
-  };
-};
-
-const mapClaimedCancellation = (value: unknown): ClaimedOutlookCancellation => {
-  const item = value as Record<string, unknown>;
-  const slot = item.slot as Record<string, unknown>;
-  return {
-    id: String(item.id),
-    slotId: String(item.slotId),
-    participantName: String(item.participantName),
-    participantEmail: String(item.participantEmail),
-    outlookEventId: String(item.outlookEventId),
-    attempts: Number(item.attempts || 0),
-    slot: {
-      id: String(slot.id),
-      slotDate: String(slot.slotDate),
-      sessionName: String(slot.sessionName || ""),
-      outlookEventId: asStringOrNull(slot.outlookEventId),
-    },
-  };
-};
-
-export const claimDueOutlookInvitationsFromSql = async (limit: number) => {
-  const { rows } = await getPool().query<{ result: unknown }>(
-    "select claim_due_outlook_invitations($1) as result",
-    [limit]
-  );
-  const result = Array.isArray(rows[0]?.result) ? rows[0].result as unknown[] : [];
-  return result.map(mapClaimedInvitation);
-};
-
-export const claimDueOutlookCancellationsFromSql = async (limit: number) => {
-  const { rows } = await getPool().query<{ result: unknown }>(
-    "select claim_due_outlook_cancellations($1) as result",
-    [limit]
-  );
-  const result = Array.isArray(rows[0]?.result) ? rows[0].result as unknown[] : [];
-  return result.map(mapClaimedCancellation);
-};
-
-export const markOutlookInvitationsSentFromSql = async ({
-  registrationIds,
-  slotId,
+export const markOutlookInvitationSentFromSql = async ({
+  registrationId,
   eventId,
 }: {
-  registrationIds: string[];
-  slotId: string;
+  registrationId: string;
   eventId: string;
 }) => {
-  if (registrationIds.length === 0) return;
-  await transaction(async client => {
-    await client.query(
-      `
-        update session_slots
-        set outlook_event_id = $2,
-            outlook_event_created_at = coalesce(outlook_event_created_at, now()),
-            outlook_event_updated_at = now()
-        where id = $1
-      `,
-      [slotId, eventId]
-    );
-    await client.query(
-      `
-        update slot_registrations
-        set outlook_invite_status = case
-              when status = 'cancelled' then 'cancel_pending'
-              else 'sent'
-            end,
-            outlook_event_id = $2,
-            outlook_invite_sent_at = case
-              when status = 'active' then now()
-              else outlook_invite_sent_at
-            end,
-            outlook_invite_due_at = case
-              when status = 'cancelled' then now()
-              else outlook_invite_due_at
-            end,
-            outlook_invite_last_error = null
-        where id = any($1::uuid[])
-      `,
-      [registrationIds, eventId]
-    );
-  });
+  await getPool().query(
+    `
+      update slot_registrations
+      set outlook_invite_status = 'sent',
+          outlook_event_id = $2,
+          outlook_invite_sent_at = now(),
+          outlook_invite_due_at = null,
+          outlook_invite_last_error = null
+      where id = $1
+    `,
+    [registrationId, eventId]
+  );
 };
 
-export const markOutlookInvitationsFailedFromSql = async (registrationIds: string[], message: string) => {
-  if (registrationIds.length === 0) return;
+export const markOutlookInvitationFailedFromSql = async (registrationId: string, message: string) => {
   await getPool().query(
     `
       update slot_registrations
       set outlook_invite_status = 'failed',
-          outlook_invite_due_at = now() + (least(360, greatest(15, outlook_invite_attempts * 15)) || ' minutes')::interval,
+          outlook_invite_due_at = null,
           outlook_invite_last_error = left($2, 500)
-      where id = any($1::uuid[])
+      where id = $1
     `,
-    [registrationIds, message]
+    [registrationId, message]
   );
 };
 
-export const markOutlookCancellationsDoneFromSql = async (registrationIds: string[]) => {
-  if (registrationIds.length === 0) return;
+export const markOutlookCancellationDoneFromSql = async (registrationId: string) => {
   await getPool().query(
     `
       update slot_registrations
       set outlook_invite_status = 'cancelled',
+          outlook_invite_due_at = null,
           outlook_invite_last_error = null
-      where id = any($1::uuid[])
+      where id = $1
     `,
-    [registrationIds]
+    [registrationId]
   );
 };
 
-export const markOutlookCancellationsFailedFromSql = async (registrationIds: string[], message: string) => {
-  if (registrationIds.length === 0) return;
+export const markOutlookCancellationFailedFromSql = async (registrationId: string, message: string) => {
   await getPool().query(
     `
       update slot_registrations
       set outlook_invite_status = 'cancel_failed',
-          outlook_invite_due_at = now() + (least(360, greatest(15, outlook_invite_attempts * 15)) || ' minutes')::interval,
+          outlook_invite_due_at = null,
           outlook_invite_last_error = left($2, 500)
-      where id = any($1::uuid[])
+      where id = $1
     `,
-    [registrationIds, message]
+    [registrationId, message]
   );
-};
-
-export const getSlotOutlookEventIdFromSql = async (slotId: string) => {
-  const { rows } = await getPool().query<SlotOutlookEventRow>(
-    "select outlook_event_id from session_slots where id = $1",
-    [slotId]
-  );
-  return rows[0]?.outlook_event_id || null;
 };

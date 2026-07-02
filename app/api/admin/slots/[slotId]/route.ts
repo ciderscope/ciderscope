@@ -3,7 +3,7 @@ import { requireAdmin } from "../../../../../lib/server/adminAuth";
 import { getCalendarSlot } from "../../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../../lib/server/supabaseAdmin";
 import { deleteSlotFromSql, getCalendarSlotFromSql } from "../../../../../lib/server/slotSql";
-import { cancelWholeOutlookSlotEvent, getSlotOutlookEventId } from "../../../../../lib/server/outlookInvitations";
+import { cancelOutlookInvitationsForRegistrations } from "../../../../../lib/server/outlookInvitations";
 
 export const runtime = "nodejs";
 
@@ -22,15 +22,20 @@ type DeleteSlotRpcResult = {
     participant_name: string;
     participant_email: string;
     cancelled_at: string;
+    outlook_event_id?: string | null;
   }>;
 };
 
-const tryCancelOutlookEvent = async (eventId: string | null, slotDate?: string | null) => {
-  if (!eventId || !slotDate) return;
+const tryCancelOutlookRegistrations = async (
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdminIfConfigured>> | null,
+  registrations: Array<{ id: string; outlookEventId: string | null }>,
+  slotDate?: string | null
+) => {
+  if (registrations.length === 0) return;
   try {
-    await cancelWholeOutlookSlotEvent(eventId, slotDate);
+    await cancelOutlookInvitationsForRegistrations({ supabase, registrations, slotDate });
   } catch (error) {
-    console.error("Outlook slot event cancellation error:", error);
+    console.error("Outlook registration event cancellation error:", error);
   }
 };
 
@@ -45,14 +50,13 @@ export async function DELETE(
     const { slotId } = await context.params;
     const supabase = getSupabaseAdminIfConfigured();
     const slotForOutlook = supabase ? await getCalendarSlot(supabase, slotId) : await getCalendarSlotFromSql(slotId);
-    const outlookEventId = await getSlotOutlookEventId(slotId, supabase);
 
     if (!supabase) {
       const result = await deleteSlotFromSql(slotId);
       if (!result.ok) {
         return NextResponse.json({ ok: false, code: result.code }, { status: 404 });
       }
-      await tryCancelOutlookEvent(result.outlookEventId || outlookEventId, slotForOutlook?.slotDate);
+      await tryCancelOutlookRegistrations(null, result.registrations, slotForOutlook?.slotDate);
       return NextResponse.json({ ok: true, cancelledCount: result.cancelledCount });
     }
 
@@ -66,7 +70,14 @@ export async function DELETE(
     if (!result.ok) {
       return NextResponse.json({ ok: false, code: result.code }, { status: 404 });
     }
-    await tryCancelOutlookEvent(outlookEventId, result.slot?.slot_date || slotForOutlook?.slotDate);
+    await tryCancelOutlookRegistrations(
+      supabase,
+      (result.registrations || []).map(registration => ({
+        id: registration.id,
+        outlookEventId: registration.outlook_event_id || null,
+      })),
+      result.slot?.slot_date || slotForOutlook?.slotDate
+    );
     return NextResponse.json({
       ok: true,
       cancelledCount: result.registrations?.length || 0,

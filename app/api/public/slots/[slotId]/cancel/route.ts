@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { getCalendarSlot } from "../../../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../../../lib/server/supabaseAdmin";
-import { cancelSlotRegistrationFromSql, hasCancelledSlotRegistrationFromSql } from "../../../../../../lib/server/slotSql";
-import { isOutlookGraphConfigured } from "../../../../../../lib/server/outlookGraph";
-import { processDueOutlookCancellations } from "../../../../../../lib/server/outlookInvitations";
+import { cancelSlotRegistrationFromSql, getCalendarSlotFromSql, hasCancelledSlotRegistrationFromSql } from "../../../../../../lib/server/slotSql";
+import { cancelOutlookInvitationForRegistration } from "../../../../../../lib/server/outlookInvitations";
 import { normalizeEmail } from "../../../../../../lib/slots/validation";
 
 export const runtime = "nodejs";
@@ -16,6 +16,7 @@ type CancelRpcResult = {
     participant_name: string;
     participant_email: string;
     cancelled_at: string;
+    outlook_event_id?: string | null;
   };
 };
 
@@ -63,16 +64,17 @@ export async function POST(
       : await cancelSlotRegistrationFromSql({ slotId, participantEmail });
 
     if (result.ok) {
-      let outlookCancellation: { status: "queued" | "processed" } | null = null;
-      if (isOutlookGraphConfigured()) {
-        try {
-          const summary = await processDueOutlookCancellations(10);
-          outlookCancellation = { status: summary.cancelled > 0 ? "processed" : "queued" };
-        } catch (error) {
-          console.error("Outlook cancellation processing error:", error);
-          outlookCancellation = { status: "queued" };
-        }
-      }
+      const slot = supabase ? await getCalendarSlot(supabase, slotId) : await getCalendarSlotFromSql(slotId);
+      const outlookCancellation = result.registration
+        ? await cancelOutlookInvitationForRegistration({
+          supabase,
+          registration: {
+            id: result.registration.id,
+            outlookEventId: result.registration.outlook_event_id || null,
+          },
+          slotDate: slot?.slotDate,
+        })
+        : null;
       return NextResponse.json({ ok: true, outlookCancellation });
     }
 

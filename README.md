@@ -150,8 +150,6 @@ MICROSOFT_GRAPH_TENANT_ID=
 MICROSOFT_GRAPH_CLIENT_ID=
 MICROSOFT_GRAPH_CLIENT_SECRET=
 OUTLOOK_ORGANIZER_EMAIL=lucas.semaan@ifpc.eu
-OUTLOOK_INVITE_BATCH_DELAY_MINUTES=15
-CRON_SECRET=
 ```
 
 Option de developpement :
@@ -167,14 +165,14 @@ Cette option affiche le bouton de generation de participants fictifs dans l'admi
 La fonctionnalite d'inscription utilise les routes serveur Next.js. Elles utilisent d'abord le service role Supabase,
 puis basculent en local sur `DIRECT_URL` ou `DATABASE_URL` si `SUPABASE_SERVICE_ROLE_KEY` n'est pas renseignee. Appliquer la migration
 `supabase/migrations/202606161130_session_slots.sql`, puis `supabase/migrations/202607021200_outlook_calendar_invitations.sql`
-et `supabase/migrations/202607021330_remove_ics_fallback.sql`, avant de l'utiliser.
+et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
+`supabase/migrations/202607021500_immediate_outlook_invitations.sql`, avant de l'utiliser.
 
 - `SUPABASE_SERVICE_ROLE_KEY` reste uniquement cote serveur et permet aux API de faire respecter les controles metier.
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD` et `ADMIN_SESSION_SECRET` pilotent le cookie admin HTTP-only utilise par les nouvelles API admin.
-- Si Microsoft Graph est configure, une vraie invitation Outlook est creee dans le calendrier de `OUTLOOK_ORGANIZER_EMAIL`.
+- Si Microsoft Graph est configure, chaque inscription cree immediatement une invitation Outlook dediee dans le calendrier de `OUTLOOK_ORGANIZER_EMAIL`.
 - L'application Entra doit avoir la permission Microsoft Graph `Calendars.ReadWrite` en application permission, avec admin consent.
-- Les invitations sont regroupees par creneau via `/api/cron/outlook-invitations` toutes les 15 minutes pour eviter les envois en rafale.
-- Les participants peuvent accepter ou refuser l'invitation depuis Outlook. Les annulations Senso retirent le participant de l'invitation Outlook.
+- Les participants peuvent accepter ou refuser l'invitation depuis Outlook. Les annulations Senso annulent l'invitation Outlook de l'inscription.
 - Le rappel Outlook natif est configure 24 heures avant le creneau. Microsoft Graph ne permet qu'un rappel natif par evenement.
 - L'ancien fallback de fichier calendrier a ete retire : les inscriptions aux creneaux utilisent uniquement les invitations Outlook.
 

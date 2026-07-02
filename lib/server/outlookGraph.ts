@@ -10,7 +10,6 @@ const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 const GRAPH_SCOPE = "https://graph.microsoft.com/.default";
 const OUTLOOK_TIMEZONE = "Romance Standard Time";
 const DEFAULT_ORGANIZER_EMAIL = "lucas.semaan@ifpc.eu";
-const DEFAULT_BATCH_DELAY_MINUTES = 15;
 const OUTLOOK_REMINDER_MINUTES_BEFORE_START = 24 * 60;
 
 type AccessToken = {
@@ -41,6 +40,7 @@ export type GraphEvent = {
 
 export type OutlookSlotEventInput = {
   slotId: string;
+  registrationId?: string;
   slotDate: string;
   sessionName?: string | null;
   attendees: Array<{
@@ -60,11 +60,6 @@ const requiredConfig = () => ({
 export const getOutlookOrganizerEmail = () => (
   process.env.OUTLOOK_ORGANIZER_EMAIL || DEFAULT_ORGANIZER_EMAIL
 ).trim();
-
-export const getOutlookBatchDelayMinutes = () => {
-  const raw = Number.parseInt(process.env.OUTLOOK_INVITE_BATCH_DELAY_MINUTES || "", 10);
-  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_BATCH_DELAY_MINUTES;
-};
 
 export const isOutlookGraphConfigured = () => {
   const config = requiredConfig();
@@ -136,7 +131,7 @@ export const buildOutlookEventPayload = (slot: OutlookSlotEventInput) => ({
   reminderMinutesBeforeStart: OUTLOOK_REMINDER_MINUTES_BEFORE_START,
   responseRequested: true,
   showAs: "busy",
-  transactionId: `ciderscope-slot-${slot.slotId}`,
+  transactionId: `ciderscope-slot-registration-${slot.registrationId || slot.slotId}`,
 });
 
 const getToken = async () => {

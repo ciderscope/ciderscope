@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { getCalendarSlot } from "../../../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../../../lib/server/supabaseAdmin";
-import { registerSlotParticipantFromSql } from "../../../../../../lib/server/slotSql";
-import { getOutlookQueuedResponse } from "../../../../../../lib/server/outlookInvitations";
+import { getCalendarSlotFromSql, registerSlotParticipantFromSql } from "../../../../../../lib/server/slotSql";
+import { sendOutlookInvitationForRegistration } from "../../../../../../lib/server/outlookInvitations";
 import { normalizeEmail } from "../../../../../../lib/slots/validation";
 
 export const runtime = "nodejs";
@@ -20,6 +21,7 @@ type RegisterRpcResult = {
     participant_email: string;
     created_at: string;
     token: string;
+    outlook_event_id?: string | null;
   };
 };
 
@@ -66,13 +68,28 @@ export async function POST(
       }, { status: result.code === "already_registered" ? 409 : 400 });
     }
 
+    const slot = supabase ? await getCalendarSlot(supabase, slotId) : await getCalendarSlotFromSql(slotId);
+    const outlookInvitation = slot
+      ? await sendOutlookInvitationForRegistration({
+        supabase,
+        slot,
+        registration: {
+          id: result.registration.id,
+          slotId: result.registration.slot_id,
+          participantName: result.registration.participant_name,
+          participantEmail: result.registration.participant_email,
+          outlookEventId: result.registration.outlook_event_id || null,
+        },
+      })
+      : { status: "failed" as const, error: "Slot not found after registration." };
+
     return NextResponse.json({
       ok: true,
       registration: {
         id: result.registration.id,
         participantName: result.registration.participant_name,
       },
-      outlookInvitation: getOutlookQueuedResponse(),
+      outlookInvitation,
     });
   } catch (error) {
     console.error("Slot registration error:", error);
