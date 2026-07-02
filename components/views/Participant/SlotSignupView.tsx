@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { FiCheck, FiRefreshCw, FiTrash2, FiUserPlus } from "react-icons/fi";
+import { FiRefreshCw, FiUserPlus } from "react-icons/fi";
 import { SlotCalendar, type SlotCalendarItem } from "../../features/SlotCalendar";
 import { Button } from "../../ui/Button";
 import type { SlotListItem } from "../../../types/slots";
 import { formatSlotDateLong, SLOT_CAPACITY, SLOT_TIME_LABEL } from "../../../lib/slots/dates";
-import { normalizeEmail } from "../../../lib/slots/validation";
 
 const panelClass = "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-5 shadow-[var(--shadow)]";
 
@@ -17,9 +16,7 @@ export const SlotSignupView = () => {
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [participantName, setParticipantName] = useState("");
   const [participantEmail, setParticipantEmail] = useState("");
-  const [cancelEmail, setCancelEmail] = useState("");
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  const [duplicateEmail, setDuplicateEmail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadSlots = async () => {
@@ -65,7 +62,6 @@ export const SlotSignupView = () => {
 
     setBusy(true);
     setMessage(null);
-    setDuplicateEmail(null);
     try {
       const response = await fetch(`/api/public/slots/${selectedSlot.id}/register`, {
         method: "POST",
@@ -75,9 +71,6 @@ export const SlotSignupView = () => {
       const payload = await response.json();
 
       if (!response.ok || !payload.ok) {
-        if (payload.code === "already_registered") {
-          setDuplicateEmail(normalizeEmail(participantEmail));
-        }
         setMessage({ kind: "error", text: payload.message || "Inscription impossible." });
         return;
       }
@@ -103,47 +96,6 @@ export const SlotSignupView = () => {
       await loadSlots();
     } catch {
       setMessage({ kind: "error", text: "Erreur lors de l'inscription." });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const cancelRegistration = async (email: string) => {
-    if (!selectedSlot || busy) return;
-    setBusy(true);
-    setMessage(null);
-
-    try {
-      const response = await fetch(`/api/public/slots/${selectedSlot.id}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participantEmail: email }),
-      });
-      const payload = await response.json();
-
-      if (!response.ok || !payload.ok) {
-        setMessage({ kind: "error", text: payload.message || "Annulation impossible." });
-        return;
-      }
-
-      setDuplicateEmail(null);
-      setCancelEmail("");
-      const promotionText = payload.promotedRegistration
-        ? " Une personne en liste d'attente vient d'etre confirmee."
-        : "";
-      setMessage({
-        kind: "ok",
-        text: payload.alreadyCancelled
-          ? "Participation déjà annulée."
-          : payload.outlookCancellation?.status === "cancelled"
-            ? `Participation annulée. L'invitation Outlook a été annulée.${promotionText}`
-            : payload.outlookCancellation?.status === "failed" || payload.outlookCancellation?.status === "not_configured"
-              ? `Participation annulée, mais l'invitation Outlook n'a pas pu être annulée automatiquement.${promotionText}`
-            : `Participation annulée.${promotionText}`,
-      });
-      await loadSlots();
-    } catch {
-      setMessage({ kind: "error", text: "Erreur lors de l'annulation." });
     } finally {
       setBusy(false);
     }
@@ -176,7 +128,6 @@ export const SlotSignupView = () => {
                 setSelectedDate(date);
                 setSelectedSlotId(slot?.id || null);
                 setMessage(null);
-                setDuplicateEmail(null);
               }}
             />
           )}
@@ -285,48 +236,10 @@ export const SlotSignupView = () => {
                   </Button>
                 </form>
 
-              <div className="border-t border-[var(--border)] pt-4">
-                <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Annuler avec mon email</label>
-                <div className="flex gap-2 max-[520px]:flex-col">
-                  <input
-                    type="email"
-                    value={cancelEmail}
-                    onChange={(event) => setCancelEmail(event.target.value)}
-                    className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2 outline-none focus:border-[var(--primary)]"
-                  />
-                  <Button
-                    type="button"
-                    variant="dangerGhost"
-                    disabled={busy || !cancelEmail}
-                    onClick={() => void cancelRegistration(cancelEmail)}
-                  >
-                    <FiTrash2 /> Annuler
-                  </Button>
-                </div>
-              </div>
             </div>
           )}
         </div>
       </div>
-
-      {duplicateEmail && selectedSlot && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 px-4">
-          <div className="w-full max-w-[480px] rounded-xl bg-[var(--paper)] p-6 shadow-[0_8px_24px_rgba(0,0,0,.2)]">
-            <div className="mb-2 text-lg font-bold text-[var(--ink)]">Email déjà inscrit</div>
-            <p className="mb-5 text-sm leading-relaxed text-[var(--mid)]">
-              {duplicateEmail} est déjà inscrit sur le créneau du {formatSlotDateLong(selectedSlot.slotDate)}.
-            </p>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setDuplicateEmail(null)} disabled={busy}>
-                Garder l&apos;inscription
-              </Button>
-              <Button variant="danger" size="sm" onClick={() => void cancelRegistration(duplicateEmail)} disabled={busy}>
-                <FiCheck /> Annuler ma participation
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 };
