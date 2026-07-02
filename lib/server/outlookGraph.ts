@@ -29,13 +29,29 @@ export type GraphAttendee = {
     address: string;
     name?: string;
   };
+  status?: {
+    response?: string;
+    time?: string;
+  };
   type: "required";
 };
 
 export type GraphEvent = {
   id: string;
+  isCancelled?: boolean;
+  lastModifiedDateTime?: string;
+  subject?: string;
   attendees?: GraphAttendee[];
   webLink?: string;
+};
+
+export type GraphSubscription = {
+  id: string;
+  changeType: string;
+  resource: string;
+  notificationUrl: string;
+  expirationDateTime: string;
+  clientState?: string;
 };
 
 export type OutlookSlotEventInput = {
@@ -203,6 +219,8 @@ const graphFetch = async <T>(path: string, init: RequestInit = {}) => {
 
 const organizerPath = () => `/users/${encodeURIComponent(getOutlookOrganizerEmail())}`;
 
+export const outlookEventSubscriptionResource = () => `users/${getOutlookOrganizerEmail()}/events`;
+
 export const createOutlookSlotEvent = async (slot: OutlookSlotEventInput) => {
   return graphFetch<GraphEvent>(`${organizerPath()}/events`, {
     method: "POST",
@@ -212,7 +230,7 @@ export const createOutlookSlotEvent = async (slot: OutlookSlotEventInput) => {
 
 export const getOutlookSlotEvent = async (eventId: string) => {
   return graphFetch<GraphEvent>(
-    `${organizerPath()}/events/${encodeURIComponent(eventId)}?$select=id,attendees,webLink`
+    `${organizerPath()}/events/${encodeURIComponent(eventId)}?$select=id,attendees,isCancelled,lastModifiedDateTime,subject,webLink`
   );
 };
 
@@ -237,5 +255,39 @@ export const cancelOutlookSlotEvent = async (eventId: string, comment: string) =
   await graphFetch<void>(`${organizerPath()}/events/${encodeURIComponent(eventId)}/cancel`, {
     method: "POST",
     body: JSON.stringify({ comment }),
+  });
+};
+
+export const listGraphSubscriptions = async () => {
+  const payload = await graphFetch<{ value?: GraphSubscription[] }>("/subscriptions");
+  return payload.value || [];
+};
+
+export const createOutlookEventSubscription = async ({
+  notificationUrl,
+  clientState,
+  expirationDateTime,
+}: {
+  notificationUrl: string;
+  clientState: string;
+  expirationDateTime: string;
+}) => {
+  return graphFetch<GraphSubscription>("/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({
+      changeType: "updated,deleted",
+      notificationUrl,
+      resource: outlookEventSubscriptionResource(),
+      expirationDateTime,
+      clientState,
+      latestSupportedTlsVersion: "v1_2",
+    }),
+  });
+};
+
+export const renewGraphSubscription = async (subscriptionId: string, expirationDateTime: string) => {
+  return graphFetch<GraphSubscription>(`/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ expirationDateTime }),
   });
 };

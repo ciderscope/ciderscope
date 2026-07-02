@@ -150,6 +150,9 @@ MICROSOFT_GRAPH_TENANT_ID=
 MICROSOFT_GRAPH_CLIENT_ID=
 MICROSOFT_GRAPH_CLIENT_SECRET=
 OUTLOOK_ORGANIZER_EMAIL=lucas.semaan@ifpc.eu
+OUTLOOK_WEBHOOK_NOTIFICATION_URL=https://votre-domaine.vercel.app/api/outlook/webhook
+OUTLOOK_WEBHOOK_CLIENT_STATE=
+CRON_SECRET=
 ```
 
 Option de developpement :
@@ -168,7 +171,8 @@ puis basculent en local sur `DIRECT_URL` ou `DATABASE_URL` si `SUPABASE_SERVICE_
 et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
 `supabase/migrations/202607021500_immediate_outlook_invitations.sql`, puis
 `supabase/migrations/202607021700_slot_waitlist.sql`, puis
-`supabase/migrations/202607021730_promote_waitlist_on_cancel.sql`, avant de l'utiliser.
+`supabase/migrations/202607021730_promote_waitlist_on_cancel.sql`, puis
+`supabase/migrations/202607021800_outlook_decline_webhook.sql`, avant de l'utiliser.
 
 - `SUPABASE_SERVICE_ROLE_KEY` reste uniquement cote serveur et permet aux API de faire respecter les controles metier.
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD` et `ADMIN_SESSION_SECRET` pilotent le cookie admin HTTP-only utilise par les nouvelles API admin.
@@ -176,7 +180,10 @@ et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
 - Si un creneau est complet, l'inscription reste possible en liste d'attente et l'invitation Outlook est envoyee en provisoire.
 - Quand une inscription confirmee est annulee, la premiere personne en liste d'attente est automatiquement confirmee.
 - L'application Entra doit avoir la permission Microsoft Graph `Calendars.ReadWrite` en application permission, avec admin consent.
+- `OUTLOOK_WEBHOOK_NOTIFICATION_URL` doit pointer vers l'URL publique HTTPS `/api/outlook/webhook`.
+- Le cron Vercel `/api/cron/outlook-webhook` renouvelle une fois par jour l'abonnement Graph aux changements du calendrier Outlook.
 - Les participants peuvent accepter ou refuser l'invitation depuis Outlook. Les annulations Senso annulent l'invitation Outlook de l'inscription.
+- Si un participant refuse l'invitation Outlook, le webhook Graph annule son inscription Senso sans action supplementaire dans l'app.
 - Le rappel Outlook natif est configure 24 heures avant le creneau. Microsoft Graph ne permet qu'un rappel natif par evenement.
 - L'ancien fallback de fichier calendrier a ete retire : les inscriptions aux creneaux utilisent uniquement les invitations Outlook.
 

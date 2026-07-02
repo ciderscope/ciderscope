@@ -12,7 +12,8 @@ Variables requises (sans valeurs) :
 ## 2. Vercel (Hebergement)
 Le deploiement est prevu sur Vercel, comme indique par le fichier `vercel.json`. L'integration se fait en connectant le depot GitHub a Vercel.
 
-Aucun cron Vercel n'est requis pour les invitations Outlook : elles sont envoyees directement pendant l'inscription au creneau.
+Les invitations Outlook sont envoyees directement pendant l'inscription au creneau.
+Un cron Vercel quotidien renouvelle uniquement l'abonnement Microsoft Graph qui detecte les refus Outlook.
 
 ## 3. Microsoft Graph / Outlook
 Les inscriptions aux creneaux peuvent creer de vraies invitations Outlook depuis la boite organisatrice `lucas.semaan@ifpc.eu`.
@@ -26,10 +27,14 @@ Variables requises (sans valeurs secretes dans le depot) :
 - `MICROSOFT_GRAPH_CLIENT_ID`
 - `MICROSOFT_GRAPH_CLIENT_SECRET`
 - `OUTLOOK_ORGANIZER_EMAIL`
+- `OUTLOOK_WEBHOOK_NOTIFICATION_URL`
+- `OUTLOOK_WEBHOOK_CLIENT_STATE`
+- `CRON_SECRET`
 
 Chaque inscription cree immediatement un evenement Outlook physique dedie au participant inscrit.
 Quand le creneau est complet, l'inscription est creee en liste d'attente et l'evenement Outlook est marque provisoire.
 Si une place confirmee est annulee, la premiere inscription en liste d'attente est promue et son evenement Outlook est remis en confirme.
+Si un participant refuse l'invitation Outlook, Microsoft Graph appelle `/api/outlook/webhook`; CiderScope annule alors son inscription et promeut la premiere personne en liste d'attente.
 L'ancien fallback de fichier calendrier est retire : une inscription valide doit passer par l'invitation Outlook.
 Microsoft Graph expose un seul rappel natif par evenement (`reminderMinutesBeforeStart`) ; CiderScope le configure a 24 heures avant le creneau.
 
