@@ -27,7 +27,7 @@ type RegisterRpcResult = {
 };
 
 const messageForCode = (code?: string, domain?: string) => {
-  if (code === "invalid_name") return "Veuillez saisir votre nom.";
+  if (code === "invalid_name") return "Veuillez saisir une adresse email valide.";
   if (code === "invalid_email") return "Veuillez saisir une adresse email valide.";
   if (code === "domain_not_allowed") return `Le domaine ${domain || "email"} n'est pas autorisé pour cette inscription.`;
   if (code === "slot_not_found") return "Ce créneau n'est plus disponible.";
@@ -43,8 +43,8 @@ export async function POST(
   try {
     const { slotId } = await context.params;
     const body = await request.json().catch(() => null) as { participantName?: string; participantEmail?: string } | null;
-    const participantName = body?.participantName || "";
     const participantEmail = normalizeEmail(body?.participantEmail || "");
+    const participantName = body?.participantName || participantEmail;
     const supabase = getSupabaseAdminIfConfigured();
 
     const result = supabase

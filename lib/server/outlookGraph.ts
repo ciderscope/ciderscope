@@ -234,13 +234,6 @@ export const getOutlookSlotEvent = async (eventId: string) => {
   );
 };
 
-export const updateOutlookSlotAttendees = async (eventId: string, attendees: GraphAttendee[]) => {
-  return graphFetch<GraphEvent>(`${organizerPath()}/events/${encodeURIComponent(eventId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ attendees }),
-  });
-};
-
 export const updateOutlookSlotEvent = async (eventId: string, slot: OutlookSlotEventInput) => {
   const payload = { ...buildOutlookEventPayload(slot) };
   delete (payload as { transactionId?: string }).transactionId;

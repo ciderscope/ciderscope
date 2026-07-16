@@ -62,13 +62,6 @@ type RegistrationPayload = {
   outlook_event_id: string | null;
 };
 
-type CancelSlotResult = {
-  ok: boolean;
-  code?: string;
-  registration?: RegistrationPayload & { cancelled_at: string };
-  promoted_registration?: RegistrationPayload;
-};
-
 type OutlookDeclineResult = {
   ok: boolean;
   code?: string;
@@ -326,9 +319,8 @@ export const registerSlotParticipantFromSql = async ({
   participantEmail: string;
 }): Promise<RegisterSlotResult> => {
   const email = normalizeEmail(participantEmail);
-  const name = participantName.trim();
+  const name = participantName.trim() || email;
 
-  if (!name) return { ok: false, code: "invalid_name" };
   if (!isValidEmail(email)) return { ok: false, code: "invalid_email" };
 
   return transaction(async client => {
@@ -402,102 +394,6 @@ export const registerSlotParticipantFromSql = async ({
       throw error;
     }
   });
-};
-
-export const cancelSlotRegistrationFromSql = async ({
-  slotId,
-  participantEmail,
-}: {
-  slotId: string;
-  participantEmail: string;
-}): Promise<CancelSlotResult> => {
-  const email = normalizeEmail(participantEmail);
-  if (!isValidEmail(email)) return { ok: false, code: "invalid_email" };
-
-  return transaction(async client => {
-    await client.query("select id from session_slots where id = $1 for update", [slotId]);
-
-    const registration = await client.query<RegistrationPayload & { cancelled_at: string }>(
-      `
-        update slot_registrations
-        set status = 'cancelled',
-            cancelled_at = now(),
-            outlook_invite_status = case
-              when outlook_event_id is not null then 'cancel_pending'
-              else 'cancelled'
-            end,
-            outlook_invite_due_at = null
-        where slot_id = $1 and participant_email = $2 and status = 'active'
-        returning id::text, slot_id::text, participant_name, participant_email, registration_status, cancelled_at::text, outlook_event_id
-      `,
-      [slotId, email]
-    );
-
-    if (registration.rowCount === 0) return { ok: false, code: "not_registered" };
-
-    let promotedRegistration: RegistrationPayload | undefined;
-    if (registration.rows[0].registration_status === "confirmed") {
-      const promoted = await client.query<RegistrationPayload>(
-        `
-          with next_waitlist as (
-            select id
-            from slot_registrations
-            where slot_id = $1
-              and status = 'active'
-              and registration_status = 'waitlist'
-            order by created_at asc
-            for update skip locked
-            limit 1
-          )
-          update slot_registrations r
-          set registration_status = 'confirmed',
-              outlook_invite_last_error = null
-          from next_waitlist
-          where r.id = next_waitlist.id
-          returning
-            r.id::text,
-            r.slot_id::text,
-            r.participant_name,
-            r.participant_email,
-            r.registration_status,
-            r.outlook_event_id
-        `,
-        [slotId]
-      );
-      promotedRegistration = promoted.rows[0];
-    }
-
-    return {
-      ok: true,
-      registration: registration.rows[0],
-      promoted_registration: promotedRegistration,
-    };
-  });
-};
-
-export const hasCancelledSlotRegistrationFromSql = async ({
-  slotId,
-  participantEmail,
-}: {
-  slotId: string;
-  participantEmail: string;
-}): Promise<boolean> => {
-  const email = normalizeEmail(participantEmail);
-  if (!isValidEmail(email)) return false;
-
-  const { rowCount } = await getPool().query(
-    `
-      select 1
-      from slot_registrations
-      where slot_id = $1
-        and participant_email = $2
-        and status = 'cancelled'
-      limit 1
-    `,
-    [slotId, email]
-  );
-
-  return (rowCount || 0) > 0;
 };
 
 export const handleOutlookAttendeeDeclineFromSql = async (

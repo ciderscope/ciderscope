@@ -182,7 +182,7 @@ et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
 - L'application Entra doit avoir la permission Microsoft Graph `Calendars.ReadWrite` en application permission, avec admin consent.
 - `OUTLOOK_WEBHOOK_NOTIFICATION_URL` doit pointer vers l'URL publique HTTPS `/api/outlook/webhook`.
 - Le cron Vercel `/api/cron/outlook-webhook` renouvelle une fois par jour l'abonnement Graph aux changements du calendrier Outlook.
-- Les participants peuvent accepter ou refuser l'invitation depuis Outlook. Les annulations Senso annulent l'invitation Outlook de l'inscription.
+- Les participants acceptent ou refusent l'invitation depuis Outlook. Les suppressions de creneau cote admin annulent les invitations Outlook.
 - Si un participant refuse l'invitation Outlook, le webhook Graph annule son inscription Senso sans action supplementaire dans l'app.
 - Le rappel Outlook natif est configure 24 heures avant le creneau. Microsoft Graph ne permet qu'un rappel natif par evenement.
 - L'ancien fallback de fichier calendrier a ete retire : les inscriptions aux creneaux utilisent uniquement les invitations Outlook.
