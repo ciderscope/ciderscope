@@ -16,13 +16,15 @@ type SlotCalendarProps = {
   slots: SlotCalendarItem[];
   selectedDate?: string | null;
   selectedDates?: Set<string>;
+  compact?: boolean;
   onSelectDate: (date: string, slot: SlotCalendarItem | null) => void;
 };
 
 const dayLabels = ["L", "M", "M", "J", "V", "S", "D"];
 
-const cellClass = (state: "available" | "waitlist" | "empty", selected: boolean, inMonth: boolean) => [
-  "relative flex aspect-square min-h-14 w-full flex-col items-start justify-between rounded-lg border p-2 text-left transition-[border-color,box-shadow,transform,background] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]",
+const cellClass = (state: "available" | "waitlist" | "empty", selected: boolean, inMonth: boolean, compact: boolean) => [
+  "relative flex w-full flex-col items-start justify-between rounded-lg border text-left transition-[border-color,box-shadow,transform,background] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]",
+  compact ? "h-[clamp(3rem,4vw,4rem)] min-h-12 p-1.5" : "aspect-square min-h-14 p-2",
   selected ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--paper)]" : "",
   inMonth ? "opacity-100" : "opacity-40",
   state === "available" ? "border-[rgba(98,141,23,.28)] bg-[rgba(98,141,23,.11)] text-[var(--ink)] hover:border-[var(--primary)]" : "",
@@ -30,7 +32,7 @@ const cellClass = (state: "available" | "waitlist" | "empty", selected: boolean,
   state === "empty" ? "border-[var(--border)] bg-[var(--paper2)] text-[var(--mid)] hover:border-[var(--border-strong)]" : "",
 ].filter(Boolean).join(" ");
 
-export const SlotCalendar = ({ slots, selectedDate, selectedDates, onSelectDate }: SlotCalendarProps) => {
+export const SlotCalendar = ({ slots, selectedDate, selectedDates, compact = false, onSelectDate }: SlotCalendarProps) => {
   const today = new Date();
   const [visibleMonth, setVisibleMonth] = useState(() => ({
     year: today.getFullYear(),
@@ -55,7 +57,7 @@ export const SlotCalendar = ({ slots, selectedDate, selectedDates, onSelectDate 
 
   return (
     <div className="min-w-0">
-      <div className="mb-3 flex items-center gap-2">
+      <div className={`${compact ? "mb-2" : "mb-3"} flex items-center gap-2`}>
         <button
           type="button"
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--mid)] hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
@@ -92,9 +94,10 @@ export const SlotCalendar = ({ slots, selectedDate, selectedDates, onSelectDate 
             <button
               type="button"
               key={day.date}
-              className={cellClass(state, selected, day.inMonth)}
+              className={cellClass(state, selected, day.inMonth, compact)}
               onClick={() => onSelectDate(day.date, slot)}
               aria-label={slot ? `${day.date}, ${slot.placesTaken} places prises sur ${slot.capacity}` : `${day.date}, pas de créneau`}
+              aria-pressed={selected}
             >
               <span className="text-sm font-bold leading-none">{day.day}</span>
               {slot && (
@@ -112,7 +115,7 @@ export const SlotCalendar = ({ slots, selectedDate, selectedDates, onSelectDate 
         })}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-3 text-[12px] text-[var(--mid)]">
+      <div className={`${compact ? "mt-2 gap-x-3 gap-y-1" : "mt-3 gap-3"} flex flex-wrap text-[12px] text-[var(--mid)]`}>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" /> ouvert</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" /> liste d&apos;attente</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[var(--paper3)]" /> sans créneau</span>
