@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPrinter, FiRefreshCw, FiTrash2, FiUserPlus } from "react-icons/fi";
 import { SlotCalendar, type SlotCalendarItem } from "../../features/SlotCalendar";
 import { Button } from "../../ui/Button";
@@ -13,6 +13,7 @@ type SlotAdminViewProps = {
 };
 
 const panelClass = "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-4 shadow-[var(--shadow)]";
+const SLOT_REFRESH_INTERVAL_MS = 15_000;
 
 const readApiError = async (response: Response, fallback: string) => {
   const statusLabel = `HTTP ${response.status}`;
@@ -34,6 +35,7 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
   const [sessionId, setSessionId] = useState("");
   const [sessionName, setSessionName] = useState("");
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const refreshInFlightRef = useRef(false);
   const [busy, setBusy] = useState(false);
 
   const selectedSlot = useMemo(
@@ -56,11 +58,14 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     return Array.from(selectedSlotDates).sort();
   }, [selectedSlotDates]);
 
-  const loadAll = async () => {
-    setBusy(true);
+  const loadAll = useCallback(async (silent = false) => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    if (!silent) setBusy(true);
     try {
       const slotsResponse = await fetch("/api/admin/slots", { cache: "no-store" });
       if (!slotsResponse.ok) {
+        if (silent) return;
         const text = slotsResponse.status === 401
           ? "Session admin expirée. Déconnectez-vous puis reconnectez-vous. (HTTP 401)"
           : await readApiError(slotsResponse, "Impossible de charger les créneaux admin.");
@@ -71,15 +76,31 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
       const slotsPayload = await slotsResponse.json();
       setSlots(slotsPayload.slots || []);
     } catch {
-      setMessage({ kind: "error", text: "Impossible de charger les créneaux admin." });
+      if (!silent) {
+        setMessage({ kind: "error", text: "Impossible de charger les créneaux admin." });
+      }
     } finally {
-      setBusy(false);
+      refreshInFlightRef.current = false;
+      if (!silent) setBusy(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadAll();
-  }, []);
+
+    const refreshVisibleSlots = () => {
+      if (document.visibilityState === "visible") void loadAll(true);
+    };
+    const intervalId = window.setInterval(refreshVisibleSlots, SLOT_REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refreshVisibleSlots);
+    document.addEventListener("visibilitychange", refreshVisibleSlots);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleSlots);
+      document.removeEventListener("visibilitychange", refreshVisibleSlots);
+    };
+  }, [loadAll]);
 
   const createSlot = async (event: React.FormEvent) => {
     event.preventDefault();

@@ -78,7 +78,7 @@ Deux exports CSV sont disponibles depuis l'administration :
 ### Participant
 
 1. Selectionner une seance active.
-2. S'identifier par prenom ou reprendre un jury existant.
+2. S'identifier par prenom ; la reprise sur le meme navigateur est automatique et ne demande aucun mot de passe.
 3. Choisir un poste de degustation disponible.
 4. Lire l'ordre de service personnalise.
 5. Remplir les questions et valider chaque etape complete.
@@ -92,7 +92,7 @@ Deux exports CSV sont disponibles depuis l'administration :
 4. Suivre ou supprimer les jurys associes a une seance.
 5. Ouvrir les analyses et exporter les resultats.
 
-Les indentifiants actuels sont en dur dans le code car il n'y a pas de besoin fort de sécurité pour notre usage interne. Une identification sécurisée serait nécessaire en fonction des besoins.
+Les identifiants admin restent volontairement simples pour l'usage local. Ils peuvent être remplacés par `ADMIN_USERNAME` et `ADMIN_PASSWORD`; le cookie de session est signé côté serveur.
 
 ## Documentation
 
@@ -110,7 +110,7 @@ Les indentifiants actuels sont en dur dans le code car il n'y a pas de besoin fo
 - React 19
 - TypeScript strict
 - Tailwind CSS
-- Supabase client
+  - Supabase via les routes serveur
 - Chart.js et react-chartjs-2
 - Vitest
 - GitHub Actions
@@ -172,9 +172,11 @@ et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
 `supabase/migrations/202607021500_immediate_outlook_invitations.sql`, puis
 `supabase/migrations/202607021700_slot_waitlist.sql`, puis
 `supabase/migrations/202607021730_promote_waitlist_on_cancel.sql`, puis
-`supabase/migrations/202607021800_outlook_decline_webhook.sql`, avant de l'utiliser.
+`supabase/migrations/202607021800_outlook_decline_webhook.sql`, puis
+`supabase/migrations/202607171200_security_hardening.sql`, avant de l'utiliser.
 
 - `SUPABASE_SERVICE_ROLE_KEY` reste uniquement cote serveur et permet aux API de faire respecter les controles metier.
+- La migration de durcissement ferme l'accès navigateur direct aux séances/réponses, ajoute un jeton local transparent pour la reprise et limite à 20 les demandes d'inscription quotidiennes par adresse.
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD` et `ADMIN_SESSION_SECRET` pilotent le cookie admin HTTP-only utilise par les nouvelles API admin.
 - Si Microsoft Graph est configure, chaque inscription cree immediatement une invitation Outlook dediee dans le calendrier de `OUTLOOK_ORGANIZER_EMAIL`.
 - Si un creneau est complet, l'inscription reste possible en liste d'attente et l'invitation Outlook est envoyee en provisoire.
@@ -183,7 +185,7 @@ et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
 - `OUTLOOK_WEBHOOK_NOTIFICATION_URL` doit pointer vers l'URL publique HTTPS `/api/outlook/webhook`.
 - Le cron Vercel `/api/cron/outlook-webhook` renouvelle une fois par jour l'abonnement Graph aux changements du calendrier Outlook.
 - Les participants acceptent ou refusent l'invitation depuis Outlook. Les suppressions de creneau cote admin annulent les invitations Outlook.
-- Si un participant refuse l'invitation Outlook, le webhook Graph annule son inscription Senso sans action supplementaire dans l'app.
+- Si un participant refuse l'invitation Outlook, le webhook Graph annule son inscription Senso et les écrans se réactualisent automatiquement.
 - Le rappel Outlook natif est configure 24 heures avant le creneau. Microsoft Graph ne permet qu'un rappel natif par evenement.
 - L'ancien fallback de fichier calendrier a ete retire : les inscriptions aux creneaux utilisent uniquement les invitations Outlook.
 
@@ -195,7 +197,7 @@ Le schema Supabase est documente dans `supabase-schema.sql`. Il cree :
 - `answers` : reponses par couple seance / jury.
 - `session_slots`, `slot_registrations` et `email_domain_whitelist` via la migration des creneaux d'inscription.
 
-Il faudra penser à restreindre les politiques RLS avant production. Le fichier SQL contient actuellement des politiques publiques a adapter selon l'authentification retenue.
+Les politiques publiques historiques de `sessions` et `answers` sont retirées par la migration de durcissement. Les accès sensibles passent par les API serveur protégées.
 
 ## Commandes
 

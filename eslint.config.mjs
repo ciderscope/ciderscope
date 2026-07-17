@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local legacy checkout ignored by Git; never lint generated files inside it.
+    "ciderscope/**",
   ]),
 ]);
 

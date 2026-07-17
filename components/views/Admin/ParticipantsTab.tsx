@@ -4,11 +4,19 @@ import { FiX, FiUserPlus } from "react-icons/fi";
 import { Card } from "../../ui/Card";
 import { MutedText, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { Button } from "../../ui/Button";
-import { supabase } from "../../../lib/supabase";
 import type { SessionConfig, JurorAnswers, RadarAxis, RadarNodeAnswer, BetLevel } from "../../../types";
 import { AdminSlotListItem } from "../../../types/slots";
 
 const ENABLE_TEST_DATA = process.env.NEXT_PUBLIC_ENABLE_TEST_DATA === "1";
+
+const shuffledCopy = <T,>(values: T[]) => {
+  const next = [...values];
+  for (let index = next.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+};
 
 interface ParticipantsTabProps {
   sessionId: string | null;
@@ -165,7 +173,7 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
           if (q.type === "classement" || q.type === "seuil") {
             if (!answers["_rank"]) answers["_rank"] = {};
             const targetCodes = q.codes?.length ? q.codes : config.products.map(p => p.code);
-            const shuffled = [...targetCodes].sort(() => Math.random() - 0.5);
+            const shuffled = shuffledCopy(targetCodes);
             (answers["_rank"] as Record<string, string[]>)[q.id] = shuffled;
           } else {
             if (!answers["_discrim"]) answers["_discrim"] = {};
@@ -190,23 +198,20 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
         }
       });
 
-      const { error } = await supabase.from("answers").insert({
-        session_id: realSessionId,
-        juror_name: newJurorName,
-        data: answers
+      const response = await fetch(`/api/admin/sessions/${encodeURIComponent(realSessionId)}/answers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          jurorName: newJurorName,
+          data: answers,
+        }),
       });
-
-      if (error) {
-        console.error("Erreur Supabase insert:", error);
-        throw new Error(error.message || "Erreur de base de données");
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(payload.error || "Erreur de base de données");
       }
       await reload();
-
-      // Mettre à jour le juror_count de la session
-      const { data: allJurors } = await supabase.from("answers").select("juror_name").eq("session_id", realSessionId);
-      if (allJurors) {
-        await supabase.from("sessions").update({ juror_count: allJurors.length }).eq("id", realSessionId);
-      }
       
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erreur inconnue";

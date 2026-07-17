@@ -45,6 +45,7 @@ describe("sessionSteps", () => {
     });
 
     expect(posteToPresentationIndex({ day: "mardi", num: 2 })).toBe(1);
+    expect(posteToPresentationIndex({ day: "jeudi", num: 1 })).toBe(12);
     expect(byPoste[0]).toMatchObject({ type: "product", product: { code: "B" } });
   });
 

@@ -188,6 +188,7 @@ export const processOutlookWebhookPayload = async (
 ) => {
   const notifications = payload.value || [];
   const processed = [];
+  const seenEventIds = new Set<string>();
 
   for (const notification of notifications) {
     if (!isValidOutlookWebhookClientState(notification.clientState)) {
@@ -200,6 +201,11 @@ export const processOutlookWebhookPayload = async (
       processed.push({ status: "skipped" as const, reason: "missing_event_id" });
       continue;
     }
+    if (seenEventIds.has(eventId)) {
+      processed.push({ status: "skipped" as const, eventId, reason: "duplicate_notification" });
+      continue;
+    }
+    seenEventIds.add(eventId);
 
     if ((notification.changeType || "").toLowerCase() === "deleted") {
       processed.push({ status: "skipped" as const, eventId, reason: "deleted_event" });

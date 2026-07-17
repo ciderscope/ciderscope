@@ -1,6 +1,15 @@
 import { SessionConfig, Question } from "../types";
 import { isANonAStatus, parseANonAAnswer } from "./answers";
 
+const MAX_SESSION_NAME_LENGTH = 200;
+const MAX_PRODUCTS = 200;
+const MAX_QUESTIONS = 500;
+const MAX_LABEL_LENGTH = 1_000;
+const MAX_CODE_LENGTH = 100;
+const MAX_OPTIONS = 100;
+const MAX_RADAR_DEPTH = 8;
+const MAX_RADAR_AXES = 1_000;
+
 const duplicates = (values: string[]): string[] =>
   [...new Set(values.filter((value, index) => values.indexOf(value) !== index))];
 
@@ -8,6 +17,8 @@ export const validateQuestion = (q: Question, codes: string[]): string[] => {
   const errs: string[] = [];
   const label = q.label?.trim() || `(question ${q.type})`;
   if (!q.label?.trim()) errs.push(`Une question de type "${q.type}" n'a pas d'intitulé.`);
+  if ((q.label || "").length > MAX_LABEL_LENGTH) errs.push(`"${label}" : l'intitulé est trop long.`);
+  if ((q.codes || []).some(code => code.length > MAX_CODE_LENGTH)) errs.push(`"${label}" : un code est trop long.`);
 
   if (q.scope === "per-product" && q.codes && q.codes.length > 0) {
     const unknown = q.codes.filter(c => !codes.includes(c));
@@ -83,12 +94,31 @@ export const validateQuestion = (q: Question, codes: string[]): string[] => {
 
   if (q.type === "qcm") {
     const trimmedOptions = (q.options || []).map(o => o.trim()).filter(Boolean);
+    if (trimmedOptions.length > MAX_OPTIONS) errs.push(`"${label}" : trop d'options QCM.`);
+    if (trimmedOptions.some(option => option.length > MAX_LABEL_LENGTH)) errs.push(`"${label}" : une option QCM est trop longue.`);
     if (trimmedOptions.length < 2) errs.push(`"${label}" : un QCM doit avoir au moins 2 options non vides.`);
     const duplicateOptions = duplicates(trimmedOptions);
     if (duplicateOptions.length > 0) errs.push(`"${label}" : option(s) QCM en doublon : ${duplicateOptions.join(", ")}.`);
     if (q.correctAnswer && !trimmedOptions.includes(q.correctAnswer)) {
       errs.push(`"${label}" : la bonne réponse QCM doit correspondre à une option existante.`);
     }
+  }
+
+  if (q.type === "radar") {
+    let axisCount = 0;
+    const visit = (axes: NonNullable<NonNullable<Question["radarGroups"]>[number]["axes"]>, depth: number) => {
+      if (depth > MAX_RADAR_DEPTH) {
+        errs.push(`"${label}" : l'arbre radar dépasse ${MAX_RADAR_DEPTH} niveaux.`);
+        return;
+      }
+      axes.forEach(axis => {
+        axisCount++;
+        if (axis.label.length > MAX_LABEL_LENGTH) errs.push(`"${label}" : un axe radar est trop long.`);
+        if (axis.children?.length) visit(axis.children, depth + 1);
+      });
+    };
+    (q.radarGroups || []).forEach(group => visit(group.axes || [], 1));
+    if (axisCount > MAX_RADAR_AXES) errs.push(`"${label}" : trop d'axes radar.`);
   }
 
   if ((q.type === "classement" || q.type === "seuil") && codes.length > 0) {
@@ -103,17 +133,21 @@ export const validateQuestion = (q: Question, codes: string[]): string[] => {
 export const validateSession = (cfg: SessionConfig): string[] => {
   const errs: string[] = [];
   if (!cfg.name?.trim()) errs.push("Le nom de la séance est requis.");
+  if ((cfg.name || "").length > MAX_SESSION_NAME_LENGTH) errs.push("Le nom de la séance est trop long.");
   if (!cfg.date?.trim()) errs.push("La date de la séance est requise.");
 
   const products = cfg.products || [];
+  if (products.length > MAX_PRODUCTS) errs.push(`Une séance ne peut pas dépasser ${MAX_PRODUCTS} échantillons.`);
   if (products.length === 0) errs.push("Ajoutez au moins un échantillon.");
   const codes = products.map(p => p.code?.trim()).filter(Boolean) as string[];
+  if (codes.some(code => code.length > MAX_CODE_LENGTH)) errs.push("Un code d'échantillon est trop long.");
   const dupCodes = duplicates(codes);
   if (dupCodes.length > 0) errs.push(`Code(s) d'échantillon en doublon : ${dupCodes.join(", ")}.`);
   const emptyCode = products.some(p => !p.code?.trim());
   if (emptyCode) errs.push("Un échantillon a un code vide.");
 
   const questions = cfg.questions || [];
+  if (questions.length > MAX_QUESTIONS) errs.push(`Une séance ne peut pas dépasser ${MAX_QUESTIONS} questions.`);
   if (questions.length === 0) errs.push("Ajoutez au moins une question.");
   const questionIds = questions.map(q => q.id).filter(Boolean);
   const dupQuestionIds = duplicates(questionIds);

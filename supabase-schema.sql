@@ -25,12 +25,14 @@ create table if not exists answers (
   primary key (session_id, juror_name)
 );
 
--- Activer Row Level Security (optionnel : à configurer selon vos besoins)
+-- Les navigateurs n'accèdent jamais directement à ces tables. Les routes serveur
+-- utilisent la clé service_role et les RPC de la migration de durcissement.
 alter table sessions enable row level security;
 alter table answers enable row level security;
 
--- Politique ouverte (à restreindre selon vos besoins d'authentification)
-create policy "Lecture publique sessions" on sessions for select using (true);
-create policy "Écriture publique sessions" on sessions for all using (true);
-create policy "Lecture publique answers" on answers for select using (true);
-create policy "Écriture publique answers" on answers for all using (true);
+revoke all on table sessions from anon, authenticated;
+revoke all on table answers from anon, authenticated;
+
+-- Appliquer ensuite toutes les migrations de `supabase/migrations`, notamment
+-- `202607171200_security_hardening.sql` (jetons de reprise, verrouillage optimiste,
+-- quota d'inscription et RPC serveur).

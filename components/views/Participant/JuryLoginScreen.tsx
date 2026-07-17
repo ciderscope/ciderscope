@@ -12,7 +12,7 @@ interface JuryLoginScreenProps {
   onGoBack: () => void;
 }
 
-export const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onGoBack }: JuryLoginScreenProps) => {
+export const JuryLoginScreen = ({ curSess, onLoginJury, onGoBack }: JuryLoginScreenProps) => {
   const [name, setName] = useState("");
   const submit = () => { if (name.trim()) onLoginJury(name.trim()); };
   
@@ -32,16 +32,6 @@ export const JuryLoginScreen = ({ curSess, jurors, onLoginJury, onGoBack }: Jury
       <Button onClick={submit}>
         Commencer <FiArrowRight />
       </Button>
-      {jurors.length > 0 && (
-        <div className="mt-6 text-left">
-          <div className="mb-2.5 font-mono text-xs uppercase tracking-[0.5px] text-[var(--mid)]">Reprendre :</div>
-          <div className="flex flex-wrap gap-2">
-            {jurors.map(n => (
-              <button key={n} className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-[18px] py-[11px] text-[15px] font-semibold transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => onLoginJury(n)}>{n}</button>
-            ))}
-          </div>
-        </div>
-      )}
       <Button variant="ghost" size="sm" className="mt-4" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
     </div>
   );

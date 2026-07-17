@@ -13,8 +13,8 @@ type SlotRow = {
 type RegistrationRow = {
   id: string;
   slot_id: string;
-  participant_name: string;
-  participant_email: string;
+  participant_name?: string;
+  participant_email?: string;
   registration_status?: "confirmed" | "waitlist";
   created_at: string;
 };
@@ -51,13 +51,22 @@ export const listSlots = async (
   if (slotRows.length === 0) return [];
 
   const slotIds = slotRows.map(slot => slot.id);
-  const { data: registrations, error: registrationsError } = await supabase
-    .from("slot_registrations")
-    .select("id, slot_id, participant_name, participant_email, registration_status, created_at")
-    .eq("status", "active")
-    .in("slot_id", slotIds)
-    .order("registration_status", { ascending: true })
-    .order("created_at", { ascending: true });
+  const registrationResult = admin
+    ? await supabase
+      .from("slot_registrations")
+      .select("id, slot_id, participant_name, participant_email, registration_status, created_at")
+      .eq("status", "active")
+      .in("slot_id", slotIds)
+      .order("registration_status", { ascending: true })
+      .order("created_at", { ascending: true })
+    : await supabase
+      .from("slot_registrations")
+      .select("id, slot_id, registration_status, created_at")
+      .eq("status", "active")
+      .in("slot_id", slotIds)
+      .order("registration_status", { ascending: true })
+      .order("created_at", { ascending: true });
+  const { data: registrations, error: registrationsError } = registrationResult;
 
   if (registrationsError) throw registrationsError;
 
@@ -90,8 +99,8 @@ export const listSlots = async (
         createdAt: slot.created_at,
         participants: participants.map(participant => ({
           id: participant.id,
-          participantName: participant.participant_name,
-          participantEmail: participant.participant_email,
+          participantName: participant.participant_name || "",
+          participantEmail: participant.participant_email || "",
           registrationStatus: participant.registration_status || "confirmed",
           createdAt: participant.created_at,
         })),
@@ -100,9 +109,11 @@ export const listSlots = async (
 
     return {
       ...base,
-      participants: participants.map(participant => ({
+      participants: participants.map((participant, index) => ({
         id: participant.id,
-        participantName: participant.participant_name,
+        participantName: participant.registration_status === "waitlist"
+          ? `Liste d'attente ${index + 1}`
+          : `Participant ${index + 1}`,
         registrationStatus: participant.registration_status || "confirmed",
       })),
     } satisfies SlotListItem;

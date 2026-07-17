@@ -1,6 +1,7 @@
 import type { BetLevel, JurorAnswers, Product, Question, SessionConfig, SessionStep, Poste } from "../types";
 import { isANonAStatus } from "./answers";
 import { hsh, wlm } from "./utils";
+import { POSTES_PER_DAY } from "./postes";
 
 export const asRecord = (value: unknown): Record<string, unknown> => {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -135,7 +136,7 @@ export const isStepValidated = (step: SessionStep | undefined, answers: JurorAns
 
 export const posteToPresentationIndex = (poste: Poste | null): number | null => {
   if (!poste) return null;
-  return (poste.day === "jeudi" ? 10 : 0) + (poste.num - 1);
+  return (poste.day === "jeudi" ? POSTES_PER_DAY : 0) + (poste.num - 1);
 };
 
 const getJurorIndex = (name: string, jurorList: string[]): number => {

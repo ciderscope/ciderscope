@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiRefreshCw, FiUserPlus, FiX } from "react-icons/fi";
 import { SlotCalendar, type SlotCalendarItem } from "../../features/SlotCalendar";
 import { Button } from "../../ui/Button";
@@ -8,6 +8,7 @@ import type { SlotListItem } from "../../../types/slots";
 import { formatSlotDateLong, SLOT_CAPACITY, SLOT_TIME_LABEL } from "../../../lib/slots/dates";
 
 const panelClass = "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-5 shadow-[var(--shadow)]";
+const SLOT_REFRESH_INTERVAL_MS = 15_000;
 
 type BatchRegistrationResult = {
   ok: boolean;
@@ -29,23 +30,43 @@ export const SlotSignupView = () => {
   const [participantEmail, setParticipantEmail] = useState("");
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const refreshInFlightRef = useRef(false);
 
-  const loadSlots = async () => {
-    setLoading(true);
+  const loadSlots = useCallback(async (silent = false) => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    if (!silent) setLoading(true);
     try {
       const response = await fetch("/api/public/slots", { cache: "no-store" });
+      if (!response.ok) throw new Error("Slot refresh failed.");
       const payload = await response.json();
       setSlots(payload.slots || []);
     } catch {
-      setMessage({ kind: "error", text: "Impossible de charger les créneaux." });
+      if (!silent) {
+        setMessage({ kind: "error", text: "Impossible de charger les créneaux." });
+      }
     } finally {
-      setLoading(false);
+      refreshInFlightRef.current = false;
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadSlots();
-  }, []);
+
+    const refreshVisibleSlots = () => {
+      if (document.visibilityState === "visible") void loadSlots(true);
+    };
+    const intervalId = window.setInterval(refreshVisibleSlots, SLOT_REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refreshVisibleSlots);
+    document.addEventListener("visibilitychange", refreshVisibleSlots);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleSlots);
+      document.removeEventListener("visibilitychange", refreshVisibleSlots);
+    };
+  }, [loadSlots]);
 
   const selectedSlotIdSet = useMemo(() => new Set(selectedSlotIds), [selectedSlotIds]);
   const selectedSlot = useMemo(

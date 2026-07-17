@@ -90,7 +90,7 @@ const getPool = () => {
   const needsSsl = /sslmode=require/i.test(connectionString) || /supabase\.(co|com)/i.test(connectionString);
   pool = new Pool({
     connectionString,
-    ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+    ssl: needsSsl ? { rejectUnauthorized: true } : undefined,
     max: 3,
   });
   return pool;
@@ -114,6 +114,33 @@ const transaction = async <T>(handler: (client: PoolClient) => Promise<T>): Prom
   } finally {
     client.release();
   }
+};
+
+export const consumeSlotRegistrationQuotaFromSql = async ({
+  participantEmail,
+  requested,
+  dailyLimit = 20,
+}: {
+  participantEmail: string;
+  requested: number;
+  dailyLimit?: number;
+}) => {
+  const { rows } = await getPool().query<{ allowed: boolean }>(`
+    with cleanup as (
+      delete from slot_registration_rate_limits
+      where rate_date < (now() at time zone 'Europe/Paris')::date - 31
+    ), consumed as (
+      insert into slot_registration_rate_limits (rate_date, participant_email, attempts)
+      values ((now() at time zone 'Europe/Paris')::date, lower(btrim($1)), $2)
+      on conflict (rate_date, participant_email) do update
+        set attempts = slot_registration_rate_limits.attempts + excluded.attempts,
+            updated_at = now()
+        where slot_registration_rate_limits.attempts + excluded.attempts <= $3
+      returning 1
+    )
+    select exists(select 1 from consumed) as allowed
+  `, [participantEmail, requested, dailyLimit]);
+  return rows[0]?.allowed === true;
 };
 
 export const listSlotsFromSql = async (
@@ -145,7 +172,9 @@ export const listSlotsFromSql = async (
 
   const { rows: registrations } = await getPool().query<RegistrationRow>(
     `
-      select id::text, slot_id::text, participant_name, participant_email, registration_status, created_at::text
+      select id::text, slot_id::text,
+             ${admin ? "participant_name, participant_email" : "''::text as participant_name, ''::text as participant_email"},
+             registration_status, created_at::text
       from slot_registrations
       where status = 'active'
         and slot_id = any($1::uuid[])
@@ -193,9 +222,11 @@ export const listSlotsFromSql = async (
 
     return {
       ...base,
-      participants: participants.map(participant => ({
+      participants: participants.map((participant, index) => ({
         id: participant.id,
-        participantName: participant.participant_name,
+        participantName: participant.registration_status === "waitlist"
+          ? `Liste d'attente ${index + 1}`
+          : `Participant ${index + 1}`,
         registrationStatus: participant.registration_status || "confirmed",
       })),
     } satisfies SlotListItem;

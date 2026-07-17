@@ -18,6 +18,13 @@ export async function GET(request: Request) {
       ...slot,
       sessionId: null,
       sessionName: "",
+      participants: slot.participants.map((participant, index) => ({
+        id: `participant-${index + 1}`,
+        participantName: participant.registrationStatus === "waitlist"
+          ? `Liste d'attente ${index + 1}`
+          : `Participant ${index + 1}`,
+        registrationStatus: participant.registrationStatus,
+      })),
     }));
     return NextResponse.json({ slots: publicSlots });
   } catch (error) {

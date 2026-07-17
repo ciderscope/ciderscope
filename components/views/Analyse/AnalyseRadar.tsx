@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState, Fragment } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Radar, Scatter } from "react-chartjs-2";
 import type { TooltipItem } from "chart.js";
 import { FiDownload } from "react-icons/fi";
@@ -21,7 +21,6 @@ import { rvCoefficient, dravnieksScore, pcaCovariance } from "../../../lib/stats
 import { analyzeAttributes, HrataObservation } from "../../../lib/hrata";
 import type { SessionConfig, AllAnswers, Question, Product, RadarAxis, RadarAnswer } from "../../../types";
 import { getChartColors, pearson, flattenRadarAnswers } from "./utils";
-import { supabase } from "../../../lib/supabase";
 import { applyRadarAxisCorrection, buildRadarDisplayAxes, FRUITY_RADAR_DISPLAY_PRESET, type RadarDisplayAxis } from "../../../lib/radarDisplayPreset";
 import { buildDelimitedText, downloadTextFile } from "../../../lib/csv";
 
@@ -312,20 +311,21 @@ export function AnalyseRadar({ config, allAnswers, sessionId, participantMode, c
 
     let cancelled = false;
     const loadCorrections = async () => {
-      const { data, error } = await supabase
-        .from("sessions")
-        .select("analysis_settings")
-        .eq("id", sessionId)
-        .maybeSingle();
+      const response = await fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        analysisSettings?: unknown;
+      };
       if (cancelled) return;
-      if (error) {
-        console.error("Erreur lors du chargement des corrections radar:", error);
+      if (!response.ok) {
+        console.error("Erreur lors du chargement des corrections radar.");
         setCorrectionSaveStatus("error");
         return;
       }
 
-      const row = data as { analysis_settings?: unknown } | null;
-      const settings = isRecord(row?.analysis_settings) ? row.analysis_settings : {};
+      const settings = isRecord(payload.analysisSettings) ? payload.analysisSettings : {};
       const nextCorrections = normalizeCorrectionSettings(settings[RADAR_CORRECTIONS_SETTINGS_KEY]);
       analysisSettingsRef.current = settings;
       radarCorrectionsRef.current = nextCorrections;
@@ -355,19 +355,20 @@ export function AnalyseRadar({ config, allAnswers, sessionId, participantMode, c
         [RADAR_CORRECTIONS_SETTINGS_KEY]: nextCorrections,
       };
 
-      void supabase
-        .from("sessions")
-        .update({ analysis_settings: nextSettings })
-        .eq("id", sessionId)
-        .then(({ error }) => {
-          if (error) {
-            console.error("Erreur lors de l'enregistrement des corrections radar:", error);
-            setCorrectionSaveStatus("error");
-            return;
-          }
-          analysisSettingsRef.current = nextSettings;
-          setCorrectionSaveStatus("saved");
-        });
+      void fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ analysisSettings: nextSettings }),
+      }).then(response => {
+        if (!response.ok) {
+          console.error("Erreur lors de l'enregistrement des corrections radar.");
+          setCorrectionSaveStatus("error");
+          return;
+        }
+        analysisSettingsRef.current = nextSettings;
+        setCorrectionSaveStatus("saved");
+      });
     }, 400);
   };
 
@@ -481,7 +482,7 @@ function RadarQuestionAnalysis({
   const adaptiveScale = true;
   const levelDepth: Record<PcaLevel, number> = { famille: 1, classe: 2, descripteur: 3 };
   const levelLabel: Record<PcaLevel, string> = { famille: "Famille", classe: "Classe", descripteur: "Descripteur" };
-  const depthOf = (c: string) => c.split(" > ").length;
+  const depthOf = useCallback((c: string) => c.split(" > ").length, []);
   const isProductVisible = (chartKey: string, productCode: string) => hiddenProductsByChart[chartKey]?.[productCode] !== true;
   const isCriteriaVisible = (chartKey: string, criteriaId: string) => hiddenCriteriaByChart[chartKey]?.[criteriaId] !== true;
   const legendItemsFor = (chartKey: string): ChartLegendItem[] => products.map((p, pi) => ({
@@ -564,7 +565,7 @@ function RadarQuestionAnalysis({
       minPositiveSelections: 2,
       maxIntensityScale: 10
     });
-  }, [jurors, products, criteria, noteMap]);
+  }, [jurors, products, criteria, noteMap, depthOf]);
 
   // Imputation HRATA : seuls les attributs cités (> 0) définissent le sous-panel
   // qui a réellement considéré l'attribut. Les zéros par défaut restent NC.
@@ -585,12 +586,12 @@ function RadarQuestionAnalysis({
     return map;
   }, [criteria, jurors, products, noteMap]);
 
-  const getNote = (j: string, p: string, crit: string): number | null => {
+  const getNote = useCallback((j: string, p: string, crit: string): number | null => {
     const v = noteMap[j]?.[p]?.[crit];
     if (v != null) return v;
     if (depthOf(crit) !== 3 || citedAtLeastOnce[crit]?.has(j)) return 0; // Imputation
     return null;
-  };
+  }, [noteMap, depthOf, citedAtLeastOnce]);
 
   // Stats agrégées pré-calculées
   const productStats = useMemo(() => {
@@ -614,11 +615,11 @@ function RadarQuestionAnalysis({
     return stats;
   }, [products, jurors, noteMap, criteria, citedAtLeastOnce]);
 
-  const avg = (p: string, crit: string) => productStats[p]?.[crit]?.mean ?? 0;
-  const sd = (p: string, crit: string) => productStats[p]?.[crit]?.sd ?? 0;
+  const avg = useCallback((p: string, crit: string) => productStats[p]?.[crit]?.mean ?? 0, [productStats]);
+  const sd = useCallback((p: string, crit: string) => productStats[p]?.[crit]?.sd ?? 0, [productStats]);
 
   // Performance individuelle
-  const juryPerf = jurors.map(j => {
+  const juryPerf = useMemo(() => jurors.map(j => {
     const paired: Array<{ self: number; panel: number }> = [];
     const selfAll: number[] = [];
     
@@ -644,7 +645,7 @@ function RadarQuestionAnalysis({
     const conf = paired.length >= 2 ? pearson(paired.map(x => x.self), paired.map(x => x.panel)) : 0;
     const range = selfAll.length ? Math.max(...selfAll) - Math.min(...selfAll) : 0;
     return { jury: j, conf, rv, range, n: selfAll.length };
-  }).sort((a, b) => b.conf - a.conf);
+  }).sort((a, b) => b.conf - a.conf), [jurors, products, criteria, getNote, avg]);
 
   // ACP — groupe (toile des arômes / profil gustatif / …)
   const activeGroup = groups.find(g => g.id === pcaGroupId) || groups[0];

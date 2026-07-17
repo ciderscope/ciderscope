@@ -12,7 +12,9 @@ const isStringRecord = (value: unknown): value is Record<string, string> =>
   && Object.values(value).every(item => typeof item === "string");
 
 const csvCell = (value: unknown, separator = CSV_SEPARATOR): string => {
-  const text = String(value ?? "");
+  const raw = String(value ?? "");
+  // Spreadsheet applications may execute cells beginning with formula markers.
+  const text = /^[\t\r ]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
   return text.includes(separator) || /["\r\n]/.test(text)
     ? `"${text.replace(/"/g, '""')}"`
     : text;

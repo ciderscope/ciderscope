@@ -1,18 +1,62 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SessionListItem, SessionConfig, JurorAnswers, SessionStep, AllAnswers, AppMode, AppScreen, SaveStatus, Poste, PosteDay } from "../types";
-import { supabase } from "../lib/supabase";
 import { queuePending, clearPending, listPending, countPending } from "../lib/offlineQueue";
 import { asRecord, buildSessionSteps, isStepDone, isStepValidated } from "../lib/sessionSteps";
 import { appendHelpRequest, createHelpRequest } from "../lib/helpRequests";
-import { chooseSessionSlotDate } from "../lib/slots/dates";
+import { isPosteDay, isValidPosteNumber } from "../lib/postes";
 
 // Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
 // et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
 // d'autres clients qui auraient modifié la séance entre-temps.
-type ConfigCacheEntry = { cfg: SessionConfig; ts: number };
+type ConfigCacheEntry = { cfg: SessionConfig; ts: number; revision: number };
 const _configCache = new Map<string, ConfigCacheEntry>();
 const CONFIG_CACHE_TTL_MS = 60_000;
+const PARTICIPANT_TOKEN_PREFIX = "senso_participant_token_v1";
+
+const configCacheKey = (id: string, admin: boolean) => `${admin ? "admin" : "public"}:${id}`;
+const participantIdentityKey = (sessionId: string, jurorName: string) => `${sessionId}:${jurorName.trim()}`;
+const participantTokenKey = (sessionId: string, jurorName: string) => (
+  `${PARTICIPANT_TOKEN_PREFIX}:${encodeURIComponent(sessionId)}:${encodeURIComponent(jurorName.trim())}`
+);
+
+const getParticipantToken = (sessionId: string, jurorName: string) => {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(participantTokenKey(sessionId, jurorName)) || "";
+};
+
+const storeParticipantToken = (sessionId: string, jurorName: string, token: string) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(participantTokenKey(sessionId, jurorName), token);
+};
+
+type ParticipantAccessPayload = {
+  ok?: boolean;
+  code?: string;
+  message?: string;
+  token?: string;
+  data?: JurorAnswers;
+  revision?: number;
+  takenPostes?: Record<string, string>;
+};
+
+const accessParticipantAnswers = async (sessionId: string, jurorName: string) => {
+  const response = await fetch("/api/public/answers/access", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId,
+      jurorName,
+      token: getParticipantToken(sessionId, jurorName) || undefined,
+    }),
+  });
+  const payload = await response.json().catch(() => ({})) as ParticipantAccessPayload;
+  if (!response.ok || !payload.ok || !payload.token) {
+    throw new Error(payload.message || "Identification impossible.");
+  }
+  storeParticipantToken(sessionId, jurorName, payload.token);
+  return payload;
+};
 
 const APP_MODES = ["home", "participant", "admin"] as const satisfies readonly AppMode[];
 const APP_SCREENS = ["landing", "jury", "poste", "order", "form", "done", "summary", "edit"] as const satisfies readonly AppScreen[];
@@ -30,34 +74,6 @@ const parseStoredStep = (value: string | null): number | null => {
 
 const logDataError = (message: string, error: unknown) => {
   console.error(message, error);
-};
-
-type SessionActivityPayload = {
-  today?: string;
-  slottedSessionIds?: string[];
-  activeSessionIds?: string[];
-  slotDatesBySessionId?: Record<string, string[]>;
-  activeSlotDateBySessionId?: Record<string, string>;
-  slotRegistrationCountBySessionDate?: Record<string, Record<string, number>>;
-};
-
-const loadSessionActivity = async () => {
-  try {
-    const response = await fetch("/api/public/session-activity", { cache: "no-store" });
-    if (!response.ok) return null;
-    const payload = await response.json() as SessionActivityPayload;
-    return {
-      today: payload.today || null,
-      slottedSessionIds: new Set(payload.slottedSessionIds || []),
-      activeSessionIds: new Set(payload.activeSessionIds || []),
-      slotDatesBySessionId: new Map(Object.entries(payload.slotDatesBySessionId || {})),
-      activeSlotDateBySessionId: new Map(Object.entries(payload.activeSlotDateBySessionId || {})),
-      slotRegistrationCountBySessionDate: new Map(Object.entries(payload.slotRegistrationCountBySessionDate || {})),
-    };
-  } catch (error) {
-    console.warn("Calcul d'activite par creneaux indisponible:", error);
-    return null;
-  }
 };
 
 export const useSenso = () => {
@@ -92,7 +108,7 @@ export const useSenso = () => {
   // Mis à jour à chaque render avant l'effect — les callbacks lisent toujours
   // la valeur fraîche via stateRef.current sans avoir à se rebuilder.
   type SensoStateSnapshot = {
-    mode: AppMode; screen: AppScreen; sessions: SessionListItem[];
+    mode: AppMode; screen: AppScreen; sessions: SessionListItem[]; adminAuth: boolean;
     curSessId: string | null; curSess: SessionConfig | null;
     jurors: string[]; takenPostes: Record<string, string>;
     cj: string; poste: Poste | null; ja: JurorAnswers; cs: number;
@@ -102,15 +118,16 @@ export const useSenso = () => {
     saveStatus: SaveStatus; pendingCount: number;
   };
   const stateRef = useRef<SensoStateSnapshot>({
-    mode, screen, sessions, curSessId, curSess, jurors, takenPostes,
+    mode, screen, sessions, adminAuth, curSessId, curSess, jurors, takenPostes,
     cj, poste, ja, cs, editCfg, editSessId, curEditTab,
     anSessId, anCfg, allAnswers, curAnT, adminSection, saveStatus, pendingCount,
   });
   stateRef.current = {
-    mode, screen, sessions, curSessId, curSess, jurors, takenPostes,
+    mode, screen, sessions, adminAuth, curSessId, curSess, jurors, takenPostes,
     cj, poste, ja, cs, editCfg, editSessId, curEditTab,
     anSessId, anCfg, allAnswers, curAnT, adminSection, saveStatus, pendingCount,
   };
+  const answerRevisionRef = useRef<Map<string, number>>(new Map());
 
   // Persistence unifiée : un seul effect debouncé écrit toutes les clés en bloc.
   // Évite la cascade de 11 setItem synchrones à chaque transition d'étape, et coalesce
@@ -248,88 +265,36 @@ export const useSenso = () => {
   }, []);
 
   const reloadJuryData = useCallback(async (sessionId: string, jurorName: string) => {
-    const { data } = await supabase
-      .from("answers")
-      .select("data")
-      .eq("session_id", sessionId)
-      .eq("juror_name", jurorName)
-      .maybeSingle();
-    const answers = (data?.data || {}) as JurorAnswers;
-    setJa(answers);
-    const p = readPoste(answers);
-    if (p) setPoste(p);
+    try {
+      const payload = await accessParticipantAnswers(sessionId, jurorName);
+      const answers = payload.data || {};
+      answerRevisionRef.current.set(participantIdentityKey(sessionId, jurorName), payload.revision || 0);
+      setJa(answers);
+      setTakenPostes(payload.takenPostes || {});
+      const p = readPoste(answers);
+      if (p) setPoste(p);
+    } catch (error) {
+      logDataError("Erreur lors de la reprise du questionnaire:", error);
+      setCj("");
+      setJa({});
+      setPoste(null);
+      setScreen("jury");
+    }
   }, []);
 
   const loadSessions = useCallback(async (keepLoading?: boolean): Promise<SessionListItem[]> => {
     if (!keepLoading) setLoading(true);
-    const { data, error } = await supabase
-      .from("sessions")
-      .select("id, name, date, active, juror_count, config, results_visible")
-      .order("created_at", { ascending: false });
-    if (error) {
-      console.error("Erreur lors du chargement des séances:", error);
-      console.error("Détails sérialisés:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      setOnline(false);
-    } else if (data) {
-      setOnline(true);
-      const sessionActivity = await loadSessionActivity();
-      type SessionRow = {
-        id: string;
-        name: string;
-        date: string;
-        active: boolean;
-        juror_count: number;
-        config: SessionConfig | null;
-        results_visible: boolean | null;
-      };
-      const sessionRows = data as SessionRow[];
-      const answerCountsBySessionId = new Map<string, number>();
-      if (sessionRows.length > 0) {
-        const { data: answerRows, error: answerCountError } = await supabase
-          .from("answers")
-          .select("session_id")
-          .in("session_id", sessionRows.map(r => r.id));
-        if (answerCountError) {
-          logDataError("Erreur lors du comptage des participants:", answerCountError);
-        } else {
-          (answerRows || []).forEach((row: { session_id: string }) => {
-            answerCountsBySessionId.set(row.session_id, (answerCountsBySessionId.get(row.session_id) || 0) + 1);
-          });
-        }
-      }
-      const next: SessionListItem[] = sessionRows.map(r => {
-        const cfg = r.config;
-        const slotDates = sessionActivity?.slotDatesBySessionId.get(r.id) || [];
-        const activeSlotDate = sessionActivity?.activeSlotDateBySessionId.get(r.id) || null;
-        const displaySlotDate = chooseSessionSlotDate(slotDates, activeSlotDate, sessionActivity?.today);
-        const hasSlotSchedule = slotDates.length > 0 || sessionActivity?.slottedSessionIds.has(r.id) || false;
-        const slotRegistrationCounts = sessionActivity?.slotRegistrationCountBySessionDate.get(r.id);
-        const slotRegistrationCount = displaySlotDate && slotRegistrationCounts
-          ? slotRegistrationCounts[displaySlotDate]
-          : undefined;
-        const answerCount = answerCountsBySessionId.get(r.id);
-        const participantCount = Math.max(
-          r.juror_count || 0,
-          typeof slotRegistrationCount === "number" ? slotRegistrationCount : 0,
-          typeof answerCount === "number" ? answerCount : 0
-        );
-        return {
-          id: r.id,
-          name: r.name,
-          date: displaySlotDate || "",
-          active: sessionActivity ? (sessionActivity.activeSessionIds.has(r.id) || false) : false,
-          hasSlotSchedule,
-          slotDate: activeSlotDate || displaySlotDate,
-          slotDates,
-          jurorCount: participantCount,
-          productCount: cfg?.products?.length || 0,
-          questionCount: cfg?.questions?.length || 0,
-          resultsVisible: !!r.results_visible,
-        };
+    try {
+      const savedMode = typeof window !== "undefined" ? localStorage.getItem("senso_mode") : null;
+      const admin = stateRef.current.mode === "admin" || (stateRef.current.mode === "home" && savedMode === "admin");
+      const response = await fetch(admin ? "/api/admin/sessions" : "/api/public/sessions", {
+        cache: "no-store",
+        credentials: "same-origin",
       });
-      // En polling, évite de remplacer la liste (et de re-render tout l'arbre)
-      // quand rien n'a changé. Comparaison structurelle peu profonde sur les
-      // champs affichés.
+      const payload = await response.json().catch(() => ({})) as { sessions?: SessionListItem[]; error?: string };
+      if (!response.ok || !payload.sessions) throw new Error(payload.error || "Chargement impossible.");
+      const next = payload.sessions;
+      setOnline(true);
       setSessions(prev => {
         if (prev.length === next.length) {
           let same = true;
@@ -342,7 +307,8 @@ export const useSenso = () => {
                 a.hasSlotSchedule !== b.hasSlotSchedule ||
                 a.slotDate !== b.slotDate ||
                 (a.slotDates || []).join("|") !== (b.slotDates || []).join("|")) {
-              same = false; break;
+              same = false;
+              break;
             }
           }
           if (same) return prev;
@@ -351,9 +317,12 @@ export const useSenso = () => {
       });
       if (!keepLoading) setLoading(false);
       return next;
+    } catch (error) {
+      logDataError("Erreur lors du chargement des séances:", error);
+      setOnline(false);
+      if (!keepLoading) setLoading(false);
+      return [];
     }
-    if (!keepLoading) setLoading(false);
-    return [];
   }, []);
 
   // Lecture du cache : on accepte une entrée fraîche (< TTL) sauf si `force` est demandé.
@@ -362,30 +331,34 @@ export const useSenso = () => {
     id: string,
     opts?: { force?: boolean }
   ): Promise<SessionConfig | null> => {
-    const cached = _configCache.get(id);
+    const savedMode = typeof window !== "undefined" ? localStorage.getItem("senso_mode") : null;
+    const admin = stateRef.current.mode === "admin" || (stateRef.current.mode === "home" && savedMode === "admin");
+    const cacheKey = configCacheKey(id, admin);
+    const cached = _configCache.get(cacheKey);
     const now = Date.now();
     if (!opts?.force && cached && (now - cached.ts) < CONFIG_CACHE_TTL_MS) {
       return cached.cfg;
     }
     if (cached && (now - cached.ts) >= CONFIG_CACHE_TTL_MS) {
-      _configCache.delete(id);
+      _configCache.delete(cacheKey);
     }
-    const { data, error } = await supabase
-      .from("sessions")
-      .select("config")
-      .eq("id", id)
-      .maybeSingle();
-    if (error) {
-      console.error("Erreur lors du chargement de la config:", error);
-      console.error("Détails sérialisés config:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    const endpoint = admin
+      ? `/api/admin/sessions/${encodeURIComponent(id)}`
+      : `/api/public/sessions/${encodeURIComponent(id)}`;
+    const response = await fetch(endpoint, { cache: "no-store", credentials: "same-origin" });
+    const payload = await response.json().catch(() => ({})) as {
+      config?: SessionConfig;
+      revision?: number;
+      takenPostes?: Record<string, string>;
+      error?: string;
+    };
+    if (!response.ok || !payload.config) {
+      logDataError("Erreur lors du chargement de la config:", payload.error || response.statusText);
       return null;
     }
-    if (!data) {
-      console.warn(`Configuration introuvable pour la séance (id: ${id}). Ceci est normal si la séance a été supprimée.`);
-      return null;
-    }
-    const cfg = data.config as SessionConfig;
-    _configCache.set(id, { cfg, ts: now });
+    const cfg = payload.config;
+    _configCache.set(cacheKey, { cfg, ts: now, revision: payload.revision || 0 });
+    if (!admin && payload.takenPostes) setTakenPostes(payload.takenPostes);
     return cfg;
   }, []);
 
@@ -394,7 +367,7 @@ export const useSenso = () => {
     const meta = asRecord(jaData?.["_poste"]);
     const day = meta.day;
     const num = meta.num;
-    if ((day === "mardi" || day === "jeudi") && typeof num === "number" && num >= 1 && num <= 10) {
+    if (isPosteDay(day) && isValidPosteNumber(num)) {
       return { day, num };
     }
     return null;
@@ -405,21 +378,7 @@ export const useSenso = () => {
     const listedSession = stateRef.current.sessions.find(session => session.id === id);
     const displayDate = displayDateOverride || listedSession?.slotDate || listedSession?.date || cfg.date;
     setCurSess({ ...cfg, date: displayDate });
-    const { data, error } = await supabase
-      .from("answers")
-      .select("juror_name, data")
-      .eq("session_id", id);
-    if (error) {
-      logDataError("Erreur lors du chargement des jurys:", error);
-    }
-    const rows = (data || []) as Array<{ juror_name: string; data: JurorAnswers | null }>;
-    setJurors(rows.map(r => r.juror_name));
-    const taken: Record<string, string> = {};
-    rows.forEach(r => {
-      const p = readPoste(r.data || undefined);
-      if (p) taken[posteKey(p)] = r.juror_name;
-    });
-    setTakenPostes(taken);
+    setJurors([]);
     return cfg;
   }, [loadSessionConfig]);
 
@@ -450,15 +409,19 @@ export const useSenso = () => {
   const handleLoginJury = useCallback(async (name: string, opts?: { review?: boolean }) => {
     const { curSessId, curSess, jurors } = stateRef.current;
     if (!name || !curSessId || !curSess) return;
+    let payload: ParticipantAccessPayload;
+    try {
+      payload = await accessParticipantAnswers(curSessId, name);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Identification impossible.";
+      alert(message);
+      return;
+    }
+    const answers = payload.data || {};
     setCj(name);
-    const { data } = await supabase
-      .from("answers")
-      .select("data")
-      .eq("session_id", curSessId)
-      .eq("juror_name", name)
-      .maybeSingle();
-    const answers = (data?.data || {}) as JurorAnswers;
     setJa(answers);
+    setTakenPostes(payload.takenPostes || {});
+    answerRevisionRef.current.set(participantIdentityKey(curSessId, name), payload.revision || 0);
 
     // Si le jury a déjà finalisé sa séance, on l'envoie directement sur l'écran
     // "Terminé !" plutôt que sur le dernier échantillon. La relecture ("Revoir
@@ -499,22 +462,31 @@ export const useSenso = () => {
     const p: Poste = { day, num };
     const key = posteKey(p);
     if (takenPostes[key] && takenPostes[key] !== cj) return; // déjà pris par un autre
-    setPoste(p);
-    setTakenPostes(prev => ({ ...prev, [key]: cj }));
-    // Persister le poste dans les réponses du jury
-    const next: JurorAnswers = { ...ja, _poste: { day, num } as Record<string, string | number> };
-    setJa(next);
-    if (curSessId && cj) {
-      const { error } = await supabase.from("answers").upsert({
-        session_id: curSessId,
-        juror_name: cj,
-        data: next,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "session_id,juror_name" });
-      if (error) {
-        logDataError("Erreur lors de l'enregistrement du poste:", error);
-      }
+    const token = getParticipantToken(curSessId, cj);
+    const identity = participantIdentityKey(curSessId, cj);
+    const response = await fetch("/api/public/answers/poste", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: curSessId,
+        jurorName: cj,
+        token,
+        revision: answerRevisionRef.current.get(identity) || 0,
+        day,
+        num,
+      }),
+    });
+    const payload = await response.json().catch(() => ({})) as ParticipantAccessPayload;
+    if (!response.ok || !payload.ok) {
+      if (payload.takenPostes) setTakenPostes(payload.takenPostes);
+      alert(payload.message || "Ce poste n'est plus disponible.");
+      return;
     }
+    const next = payload.data || { ...ja, _poste: { day, num } as Record<string, string | number> };
+    answerRevisionRef.current.set(identity, payload.revision || 0);
+    setPoste(p);
+    setJa(next);
+    setTakenPostes(payload.takenPostes || { ...takenPostes, [key]: cj });
     setCs(0);
     // L'écran "order" affiche l'ordre de service personnel avant le questionnaire.
     setScreen("order");
@@ -523,48 +495,75 @@ export const useSenso = () => {
   // Upsert différé : on agrège les saisies rapides (sliders, drag) en une seule requête.
   const _saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const _pendingJaRef = useRef<JurorAnswers | null>(null);
+  const _saveInFlightRef = useRef<Promise<void> | null>(null);
 
   const flushSave = useCallback(async () => {
     if (_saveTimerRef.current) {
       clearTimeout(_saveTimerRef.current);
       _saveTimerRef.current = null;
     }
-    const newJa = _pendingJaRef.current;
-    _pendingJaRef.current = null;
-    const { cj, curSessId, jurors } = stateRef.current;
-    if (!newJa || !cj || !curSessId) return;
-    setSaveStatus("saving");
-    const { error } = await supabase.from("answers").upsert({
-      session_id: curSessId,
-      juror_name: cj,
-      data: newJa,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "session_id,juror_name" });
-    if (error) {
-      console.warn("Upsert échoué, mise en file d'attente locale:", error);
-      console.warn("Détails sérialisés upsert:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      queuePending(curSessId, cj, newJa);
-      setPendingCount(countPending());
-      setSaveStatus("pending");
+    if (_saveInFlightRef.current) {
+      await _saveInFlightRef.current;
       return;
     }
-    clearPending(curSessId, cj);
-    setPendingCount(countPending());
-    setSaveStatus("saved");
-    if (!jurors.includes(cj)) {
-      const newJurors = [...jurors, cj];
-      setJurors(newJurors);
-      const { error: upError } = await supabase
-        .from("sessions")
-        .update({ juror_count: newJurors.length })
-        .eq("id", curSessId);
-      if (upError) {
-        logDataError("Erreur lors de la mise à jour du compteur de jurys:", upError);
+
+    const run = async () => {
+      while (_pendingJaRef.current) {
+        const newJa = _pendingJaRef.current;
+        _pendingJaRef.current = null;
+        const { cj, curSessId } = stateRef.current;
+        if (!cj || !curSessId) continue;
+        const identity = participantIdentityKey(curSessId, cj);
+        const token = getParticipantToken(curSessId, cj);
+        setSaveStatus("saving");
+
+        let saved = false;
+        let failure: unknown = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await fetch("/api/public/answers", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sessionId: curSessId,
+                jurorName: cj,
+                token,
+                revision: answerRevisionRef.current.get(identity) || 0,
+                data: newJa,
+              }),
+            });
+            const payload = await response.json().catch(() => ({})) as ParticipantAccessPayload;
+            if (response.status === 409 && payload.code === "revision_conflict" && typeof payload.revision === "number") {
+              answerRevisionRef.current.set(identity, payload.revision);
+              continue;
+            }
+            if (!response.ok || !payload.ok) throw new Error(payload.message || "Enregistrement impossible.");
+            answerRevisionRef.current.set(identity, payload.revision || 0);
+            saved = true;
+            break;
+          } catch (error) {
+            failure = error;
+            break;
+          }
+        }
+
+        if (!saved) {
+          console.warn("Enregistrement échoué, mise en file d'attente locale:", failure);
+          queuePending(curSessId, cj, newJa);
+          setPendingCount(countPending());
+          setSaveStatus("pending");
+          continue;
+        }
+        clearPending(curSessId, cj);
+        setPendingCount(countPending());
+        setSaveStatus("saved");
+        setJurors(prev => prev.includes(cj) ? prev : [...prev, cj]);
       }
-      setSessions(prev => prev.map(s =>
-        s.id === curSessId ? { ...s, jurorCount: newJurors.length } : s
-      ));
-    }
+    };
+
+    const promise = run().finally(() => { _saveInFlightRef.current = null; });
+    _saveInFlightRef.current = promise;
+    await promise;
   }, []);
 
   // Accepte soit un objet `JurorAnswers` complet, soit un updater fonctionnel
@@ -599,14 +598,31 @@ export const useSenso = () => {
   const flushPending = useCallback(async () => {
     const entries = listPending();
     if (entries.length === 0) { setPendingCount(0); return; }
-    const results = await Promise.all(entries.map(e =>
-      supabase.from("answers").upsert({
-        session_id: e.sessionId,
-        juror_name: e.jurorName,
-        data: e.data,
-        updated_at: new Date(e.ts).toISOString(),
-      }, { onConflict: "session_id,juror_name" }).then(({ error }) => ({ e, error }))
-    ));
+    const results = await Promise.all(entries.map(async e => {
+      try {
+        const access = await accessParticipantAnswers(e.sessionId, e.jurorName);
+        const response = await fetch("/api/public/answers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: e.sessionId,
+            jurorName: e.jurorName,
+            token: access.token,
+            revision: access.revision || 0,
+            data: e.data,
+          }),
+        });
+        const payload = await response.json().catch(() => ({})) as ParticipantAccessPayload;
+        if (!response.ok || !payload.ok) throw new Error(payload.message || "Synchronisation impossible.");
+        answerRevisionRef.current.set(
+          participantIdentityKey(e.sessionId, e.jurorName),
+          payload.revision || 0
+        );
+        return { e, error: null };
+      } catch (error) {
+        return { e, error };
+      }
+    }));
     let ok = 0;
     for (const { e, error } of results) {
       if (!error) { clearPending(e.sessionId, e.jurorName); ok++; }
@@ -702,29 +718,43 @@ export const useSenso = () => {
 
   const handleAnSessChange = useCallback(async (id: string) => {
     setAnSessId(id);
-    const cfg = await loadSessionConfig(id);
-    setAnCfg(cfg);
-    const { data } = await supabase
-      .from("answers")
-      .select("juror_name, data")
-      .eq("session_id", id);
-    const ans: Record<string, JurorAnswers> = {};
-    if (data) data.forEach((r: { juror_name: string; data: JurorAnswers | null }) => { ans[r.juror_name] = r.data || {}; });
-    setAllAnswers(ans);
+    const participantMode = stateRef.current.mode === "participant";
+    const endpoint = participantMode
+      ? `/api/public/sessions/${encodeURIComponent(id)}/summary`
+      : `/api/admin/sessions/${encodeURIComponent(id)}/answers`;
+    const [cfg, response] = await Promise.all([
+      participantMode ? Promise.resolve(null) : loadSessionConfig(id),
+      fetch(endpoint, { cache: "no-store", credentials: "same-origin" }),
+    ]);
+    const payload = await response.json().catch(() => ({})) as {
+      config?: SessionConfig;
+      answers?: AllAnswers;
+      error?: string;
+    };
+    if (!response.ok || !payload.answers) {
+      logDataError("Erreur lors du chargement des réponses:", payload.error || response.statusText);
+      setAllAnswers({});
+      return;
+    }
+    setAnCfg(participantMode ? payload.config || null : cfg);
+    setAllAnswers(payload.answers);
   }, [loadSessionConfig]);
 
   const saveSession = useCallback(async (id: string, cfg: SessionConfig, meta: Partial<SessionListItem>) => {
+    const cacheKey = configCacheKey(id, true);
+    const expectedRevision = _configCache.get(cacheKey)?.revision;
     const response = await fetch("/api/admin/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ id, cfg, meta }),
+      body: JSON.stringify({ id, cfg, meta, expectedRevision }),
     });
     const payload = await response.json().catch(() => ({})) as {
       ok?: boolean;
       error?: string;
       detail?: string;
       details?: string[];
+      revision?: number | string;
     };
 
     if (!response.ok || !payload.ok) {
@@ -735,39 +765,47 @@ export const useSenso = () => {
       logDataError("Erreur lors de l'enregistrement de la séance:", payload);
       return { success: false, error: payload };
     }
-    _configCache.set(id, { cfg, ts: Date.now() });
+    _configCache.set(cacheKey, { cfg, ts: Date.now(), revision: Number(payload.revision || 0) });
     return { success: true };
   }, []);
 
   const deleteSession = useCallback(async (id: string) => {
-    const { error } = await supabase.from("sessions").delete().eq("id", id);
-    if (error) {
-      logDataError("Erreur lors de la suppression de la séance:", error);
+    const response = await fetch(`/api/admin/sessions/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      logDataError("Erreur lors de la suppression de la séance:", payload);
     }
-    _configCache.delete(id);
+    _configCache.delete(configCacheKey(id, true));
+    _configCache.delete(configCacheKey(id, false));
   }, []);
 
   const listJurorsForSession = useCallback(async (sessionId: string): Promise<string[]> => {
-    const { data, error } = await supabase
-      .from("answers")
-      .select("juror_name")
-      .eq("session_id", sessionId);
-    if (error) {
-      logDataError("Erreur lors du listage des jurys:", error);
+    const response = await fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    const payload = await response.json().catch(() => ({})) as { answers?: AllAnswers; error?: string };
+    if (!response.ok || !payload.answers) {
+      logDataError("Erreur lors du listage des jurys:", payload.error || response.statusText);
+      return [];
     }
-    if (!data) return [];
-    return data.map((r: { juror_name: string }) => r.juror_name);
+    return Object.keys(payload.answers);
   }, []);
 
   const deleteJury = useCallback(async (sessionId: string, name: string) => {
     if (!sessionId) return { success: false };
-    const { error } = await supabase
-      .from("answers")
-      .delete()
-      .eq("session_id", sessionId)
-      .eq("juror_name", name);
-    if (error) {
-      logDataError("Erreur lors de la suppression du jury:", error);
+    const response = await fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ jurorName: name }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      logDataError("Erreur lors de la suppression du jury:", payload);
       return { success: false };
     }
     const { curSessId, jurors, cj } = stateRef.current;
@@ -777,13 +815,6 @@ export const useSenso = () => {
       if (cj === name) { setCj(""); setJa({}); }
     }
     const remaining = await listJurorsForSession(sessionId);
-    const { error: upError } = await supabase
-      .from("sessions")
-      .update({ juror_count: remaining.length })
-      .eq("id", sessionId);
-    if (upError) {
-      logDataError("Erreur lors de la mise à jour du compteur de jurys:", upError);
-    }
     setSessions(prev => prev.map(s =>
       s.id === sessionId ? { ...s, jurorCount: remaining.length } : s
     ));
@@ -797,18 +828,6 @@ export const useSenso = () => {
     return { success: true };
   }, [listJurorsForSession]);
 
-  const toggleActive = useCallback(async (id: string) => {
-    const { sessions } = stateRef.current;
-    const s = sessions.find(x => x.id === id);
-    if (!s) return;
-    const newActive = !s.active;
-    const { error } = await supabase.from("sessions").update({ active: newActive }).eq("id", id);
-    if (error) {
-      logDataError("Erreur lors de la modification de l'état actif:", error);
-    }
-    setSessions(prev => prev.map(x => x.id === id ? { ...x, active: newActive } : x));
-  }, []);
-
   // Bascule l'affichage du résumé d'analyse côté participant. Stocké en
   // colonne dédiée pour pouvoir être basculé sans réécrire `config`, et lu
   // par le polling de la liste : tous les jurys verront le bouton passer
@@ -818,9 +837,16 @@ export const useSenso = () => {
     const s = sessions.find(x => x.id === id);
     if (!s) return;
     const next = !s.resultsVisible;
-    const { error } = await supabase.from("sessions").update({ results_visible: next }).eq("id", id);
-    if (error) {
-      logDataError("Erreur lors de la modification de la visibilité des résultats:", error);
+    const response = await fetch(`/api/admin/sessions/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ resultsVisible: next }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      logDataError("Erreur lors de la modification de la visibilité des résultats:", payload);
+      return;
     }
     setSessions(prev => prev.map(x => x.id === id ? { ...x, resultsVisible: next } : x));
   }, []);
@@ -842,7 +868,7 @@ export const useSenso = () => {
     handleSelectSession, handleLoginJury, handleSelectPoste,
     handleSetJa, requestHelp, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
-    listJurorsForSession, toggleActive, toggleResultsVisible,
+    listJurorsForSession, toggleResultsVisible,
     isStepComplete,
     flushPending, flushSave,
     // Les useState setters sont stables par contrat React et n'ont pas besoin
@@ -852,7 +878,7 @@ export const useSenso = () => {
     handleSelectSession, handleLoginJury, handleSelectPoste,
     handleSetJa, requestHelp, handleAnSessChange,
     saveSession, deleteSession, deleteJury,
-    listJurorsForSession, toggleActive, toggleResultsVisible,
+    listJurorsForSession, toggleResultsVisible,
     isStepComplete, flushPending, flushSave,
   ]);
 
