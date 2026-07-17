@@ -195,7 +195,10 @@ export default function CiderScope() {
   }
 
   if (mode === "admin" && !adminAuth) {
-    return <AdminLoginView onSuccess={() => setAdminAuth(true)} />;
+    return <AdminLoginView onSuccess={() => {
+      setAdminAuth(true);
+      void loadSessions();
+    }} />;
   }
 
   return (
@@ -249,7 +252,7 @@ export default function CiderScope() {
         }
         // Verrouillage optimiste : on vérifie que la version serveur n'a pas changé depuis l'ouverture.
         if (editSessId && editFingerprintRef.current !== null) {
-          const current = await loadSessionConfig(editSessId);
+          const current = await loadSessionConfig(editSessId, { force: true });
           if (current && fingerprint(current) !== editFingerprintRef.current) {
             const ok = confirm("Cette séance a été modifiée ailleurs depuis que vous l'avez ouverte. Écraser ces modifications ?");
             if (!ok) return { success: false };

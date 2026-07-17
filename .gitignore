@@ -43,3 +43,6 @@ next-env.d.ts
 /lib/generated/prisma
 
 .vercel
+
+# local nested checkout kept for migration/debugging
+/ciderscope/

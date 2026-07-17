@@ -11,6 +11,9 @@ const GRAPH_SCOPE = "https://graph.microsoft.com/.default";
 const OUTLOOK_TIMEZONE = "Romance Standard Time";
 const DEFAULT_ORGANIZER_EMAIL = "lucas.semaan@ifpc.eu";
 const OUTLOOK_REMINDER_MINUTES_BEFORE_START = 24 * 60;
+const GRAPH_REQUEST_TIMEOUT_MS = 15_000;
+const GRAPH_MAX_ATTEMPTS = 3;
+const GRAPH_RETRY_STATUSES = new Set([429, 502, 503, 504]);
 
 type AccessToken = {
   token: string;
@@ -67,6 +70,25 @@ export type OutlookSlotEventInput = {
 };
 
 let cachedToken: AccessToken | null = null;
+
+const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs = GRAPH_REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort(init.signal?.reason);
+  init.signal?.addEventListener("abort", abortFromParent, { once: true });
+  const timeout = setTimeout(() => controller.abort(new Error("Microsoft Graph request timed out.")), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+    init.signal?.removeEventListener("abort", abortFromParent);
+  }
+};
+
+const retryDelayMs = (response: Response, attempt: number) => {
+  const retryAfter = Number.parseInt(response.headers.get("retry-after") || "", 10);
+  if (Number.isFinite(retryAfter) && retryAfter >= 0) return Math.min(retryAfter * 1000, 5_000);
+  return Math.min(250 * (2 ** attempt), 2_000);
+};
 
 const requiredConfig = () => ({
   tenantId: process.env.MICROSOFT_GRAPH_TENANT_ID || "",
@@ -176,7 +198,7 @@ const getToken = async () => {
     scope: GRAPH_SCOPE,
   });
 
-  const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`, {
+  const response = await fetchWithTimeout(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -195,26 +217,34 @@ const getToken = async () => {
 };
 
 const graphFetch = async <T>(path: string, init: RequestInit = {}) => {
-  const token = await getToken();
-  const response = await fetch(`${GRAPH_ROOT}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Prefer: `outlook.timezone="${OUTLOOK_TIMEZONE}"`,
-      ...(init.headers || {}),
-    },
-  });
+  for (let attempt = 0; attempt < GRAPH_MAX_ATTEMPTS; attempt++) {
+    const token = await getToken();
+    const response = await fetchWithTimeout(`${GRAPH_ROOT}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Prefer: `outlook.timezone="${OUTLOOK_TIMEZONE}"`,
+        ...(init.headers || {}),
+      },
+    });
 
-  if (response.status === 204) return undefined as T;
+    if (response.status === 204) return undefined as T;
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok) return payload as T;
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
+    if (response.status === 401 && attempt === 0) {
+      cachedToken = null;
+      continue;
+    }
+    if (GRAPH_RETRY_STATUSES.has(response.status) && attempt < GRAPH_MAX_ATTEMPTS - 1) {
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs(response, attempt)));
+      continue;
+    }
     const message = (payload as { error?: { message?: string } }).error?.message || response.statusText;
     throw new Error(`Microsoft Graph ${response.status}: ${message}`);
   }
-
-  return payload as T;
+  throw new Error("Microsoft Graph request failed after retries.");
 };
 
 const organizerPath = () => `/users/${encodeURIComponent(getOutlookOrganizerEmail())}`;

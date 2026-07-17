@@ -45,7 +45,30 @@ describe("sessionSteps", () => {
     });
 
     expect(posteToPresentationIndex({ day: "mardi", num: 2 })).toBe(1);
+    expect(posteToPresentationIndex({ day: "jeudi", num: 1 })).toBe(12);
     expect(byPoste[0]).toMatchObject({ type: "product", product: { code: "B" } });
+  });
+
+  it("keeps the initial poste order after restoring a participant session", () => {
+    const config = { ...baseConfig, presMode: "latin" as const };
+    const poste = { day: "mardi" as const, num: 2 };
+    const beforePosteSelection = buildSessionSteps(config, {
+      jurorName: "Alice",
+      jurorList: ["Alice"],
+    });
+    const initial = buildSessionSteps(config, {
+      jurorName: "Alice",
+      jurorList: ["Alice"],
+      poste,
+    });
+    const restored = buildSessionSteps(config, {
+      jurorName: "Alice",
+      jurorList: ["Bob", "Alice"],
+      poste,
+    });
+
+    expect(initial).not.toEqual(beforePosteSelection);
+    expect(restored).toEqual(initial);
   });
 
   it("keeps random ordering stable for the same juror and session", () => {

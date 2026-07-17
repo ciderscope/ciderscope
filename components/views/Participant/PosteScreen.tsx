@@ -3,6 +3,7 @@ import React from "react";
 import { FiArrowLeft } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { PosteDay } from "../../../types";
+import { POSTE_DAYS, POSTES_PER_DAY } from "../../../lib/postes";
 
 interface PosteScreenProps {
   onGoBack: () => void;
@@ -12,8 +13,8 @@ interface PosteScreenProps {
 }
 
 export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste, cj }: PosteScreenProps) => {
-  const days: PosteDay[] = ["mardi", "jeudi"];
-  const numbers = Array.from({ length: 12 }, (_, i) => i + 1);
+  const days: readonly PosteDay[] = POSTE_DAYS;
+  const numbers = Array.from({ length: POSTES_PER_DAY }, (_, i) => i + 1);
 
   return (
     <div className="mx-auto my-8 max-w-[720px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--paper)] px-5 py-[26px] shadow-[var(--shadow)] max-[480px]:mx-2 max-[480px]:my-3.5 max-[480px]:px-3.5 max-[480px]:py-[18px]">
@@ -42,10 +43,10 @@ export const PosteScreen = ({ onGoBack, takenPostes, onSelectPoste, cj }: PosteS
                     ].join(" ")}
                     onClick={() => !taken && onSelectPoste(d, n)}
                     disabled={taken}
-                    title={taken ? `Pris par ${owner}` : `Poste ${n}`}
+                    title={taken ? "Poste déjà pris" : `Poste ${n}`}
                   >
                     <span className="text-[22px] font-extrabold leading-none">{n}</span>
-                    {taken && <span className="mt-1 max-w-full truncate font-mono text-[11px] text-[var(--mid)]">{owner}</span>}
+                    {taken && <span className="mt-1 max-w-full truncate font-mono text-[11px] text-[var(--mid)]">Indisponible</span>}
                   </button>
                 );
               })}

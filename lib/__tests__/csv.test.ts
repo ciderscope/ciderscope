@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { AllAnswers, SessionConfig } from "../../types";
-import { buildCsvData } from "../csv";
+import { buildCsvData, buildDelimitedText } from "../csv";
+
+describe("buildDelimitedText", () => {
+  it("neutralizes spreadsheet formulas from untrusted cells", () => {
+    const csv = buildDelimitedText(["name", "value"], [
+      { name: "=HYPERLINK(\"https://example.test\")", value: "+1" },
+    ]);
+
+    expect(csv).toContain("'=HYPERLINK");
+    expect(csv).toContain("'+1");
+  });
+});
 
 describe("buildCsvData", () => {
   it("scores A/non-A answers with the shared parser", () => {

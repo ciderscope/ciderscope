@@ -1,40 +1,13 @@
 import { NextResponse } from "next/server";
-import { getCalendarSlot } from "../../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../../lib/server/supabaseAdmin";
-import { getCalendarSlotFromSql, registerSlotParticipantFromSql } from "../../../../../lib/server/slotSql";
-import { sendOutlookInvitationForRegistration } from "../../../../../lib/server/outlookInvitations";
-import { normalizeEmail } from "../../../../../lib/slots/validation";
+import { isValidEmail, normalizeEmail } from "../../../../../lib/slots/validation";
+import {
+  consumeSlotRegistrationQuota,
+  SLOT_REGISTRATION_BATCH_LIMIT,
+} from "../../../../../lib/server/registrationRateLimit";
+import { registerSlotWithInvitation, registrationMessageForCode } from "../../../../../lib/server/slotRegistration";
 
 export const runtime = "nodejs";
-
-type RegisterRpcResult = {
-  ok: boolean;
-  code?: string;
-  domain?: string;
-  places_taken?: number;
-  capacity?: number;
-  participant_name?: string;
-  registration?: {
-    id: string;
-    slot_id: string;
-    participant_name: string;
-    participant_email: string;
-    registration_status?: "confirmed" | "waitlist";
-    created_at: string;
-    token: string;
-    outlook_event_id?: string | null;
-  };
-};
-
-const messageForCode = (code?: string, domain?: string) => {
-  if (code === "invalid_name") return "Veuillez saisir une adresse email valide.";
-  if (code === "invalid_email") return "Veuillez saisir une adresse email valide.";
-  if (code === "domain_not_allowed") return `Le domaine ${domain || "email"} n'est pas autorisé pour cette inscription.`;
-  if (code === "slot_not_found") return "Ce créneau n'est plus disponible.";
-  if (code === "slot_full") return "Ce créneau est complet.";
-  if (code === "already_registered") return "Cette adresse email est déjà inscrite sur ce créneau.";
-  return "Inscription impossible.";
-};
 
 export async function POST(request: Request) {
   try {
@@ -46,50 +19,41 @@ export async function POST(request: Request) {
     if (slotIds.length === 0) {
       return NextResponse.json({ ok: false, message: "Sélectionnez au moins un créneau." }, { status: 400 });
     }
+    if (slotIds.length > SLOT_REGISTRATION_BATCH_LIMIT || !isValidEmail(participantEmail)) {
+      return NextResponse.json({ ok: false, message: "Inscription impossible." }, { status: 400 });
+    }
 
     const supabase = getSupabaseAdminIfConfigured();
+    const allowed = await consumeSlotRegistrationQuota({
+      supabase,
+      participantEmail,
+      requested: slotIds.length,
+    });
+    if (!allowed) {
+      return NextResponse.json({ ok: false, message: "Inscription impossible." }, { status: 400 });
+    }
     const results = [];
 
     for (const slotId of slotIds) {
-      const result = supabase
-        ? await supabase.rpc("register_slot_participant", {
-          p_slot_id: slotId,
-          p_participant_name: participantName,
-          p_participant_email: participantEmail,
-        }).then(({ data, error }) => {
-          if (error) throw error;
-          return data as RegisterRpcResult;
-        })
-        : await registerSlotParticipantFromSql({ slotId, participantName, participantEmail });
+      const { result, outlookInvitation } = await registerSlotWithInvitation({
+        supabase,
+        slotId,
+        participantName,
+        participantEmail,
+      });
 
       if (!result.ok || !result.registration) {
         results.push({
           ok: false,
           slotId,
           code: result.code,
-          message: messageForCode(result.code, result.domain),
+          message: registrationMessageForCode(result.code, result.domain),
           placesTaken: result.places_taken,
           capacity: result.capacity,
           participantName: result.participant_name,
         });
         continue;
       }
-
-      const slot = supabase ? await getCalendarSlot(supabase, slotId) : await getCalendarSlotFromSql(slotId);
-      const outlookInvitation = slot
-        ? await sendOutlookInvitationForRegistration({
-          supabase,
-          slot,
-          registration: {
-            id: result.registration.id,
-            slotId: result.registration.slot_id,
-            participantName: result.registration.participant_name,
-            participantEmail: result.registration.participant_email,
-            registrationStatus: result.registration.registration_status || "confirmed",
-            outlookEventId: result.registration.outlook_event_id || null,
-          },
-        })
-        : { status: "failed" as const, error: "Slot not found after registration." };
 
       results.push({
         ok: true,
@@ -101,7 +65,7 @@ export async function POST(request: Request) {
         },
         placesTaken: result.places_taken,
         capacity: result.capacity,
-        outlookInvitation,
+        outlookInvitation: outlookInvitation ? { status: outlookInvitation.status } : null,
       });
     }
 

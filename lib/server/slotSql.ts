@@ -62,6 +62,13 @@ type RegistrationPayload = {
   outlook_event_id: string | null;
 };
 
+export type CancelSlotRegistrationResult = {
+  ok: boolean;
+  code?: string;
+  registration?: RegistrationPayload & { cancelled_at: string };
+  promoted_registration?: RegistrationPayload;
+};
+
 type OutlookDeclineResult = {
   ok: boolean;
   code?: string;
@@ -90,7 +97,7 @@ const getPool = () => {
   const needsSsl = /sslmode=require/i.test(connectionString) || /supabase\.(co|com)/i.test(connectionString);
   pool = new Pool({
     connectionString,
-    ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+    ssl: needsSsl ? { rejectUnauthorized: true } : undefined,
     max: 3,
   });
   return pool;
@@ -114,6 +121,33 @@ const transaction = async <T>(handler: (client: PoolClient) => Promise<T>): Prom
   } finally {
     client.release();
   }
+};
+
+export const consumeSlotRegistrationQuotaFromSql = async ({
+  participantEmail,
+  requested,
+  dailyLimit = 20,
+}: {
+  participantEmail: string;
+  requested: number;
+  dailyLimit?: number;
+}) => {
+  const { rows } = await getPool().query<{ allowed: boolean }>(`
+    with cleanup as (
+      delete from slot_registration_rate_limits
+      where rate_date < (now() at time zone 'Europe/Paris')::date - 31
+    ), consumed as (
+      insert into slot_registration_rate_limits (rate_date, participant_email, attempts)
+      values ((now() at time zone 'Europe/Paris')::date, lower(btrim($1)), $2)
+      on conflict (rate_date, participant_email) do update
+        set attempts = slot_registration_rate_limits.attempts + excluded.attempts,
+            updated_at = now()
+        where slot_registration_rate_limits.attempts + excluded.attempts <= $3
+      returning 1
+    )
+    select exists(select 1 from consumed) as allowed
+  `, [participantEmail, requested, dailyLimit]);
+  return rows[0]?.allowed === true;
 };
 
 export const listSlotsFromSql = async (
@@ -145,7 +179,9 @@ export const listSlotsFromSql = async (
 
   const { rows: registrations } = await getPool().query<RegistrationRow>(
     `
-      select id::text, slot_id::text, participant_name, participant_email, registration_status, created_at::text
+      select id::text, slot_id::text,
+             ${admin ? "participant_name, participant_email" : "''::text as participant_name, ''::text as participant_email"},
+             registration_status, created_at::text
       from slot_registrations
       where status = 'active'
         and slot_id = any($1::uuid[])
@@ -193,9 +229,11 @@ export const listSlotsFromSql = async (
 
     return {
       ...base,
-      participants: participants.map(participant => ({
+      participants: participants.map((participant, index) => ({
         id: participant.id,
-        participantName: participant.participant_name,
+        participantName: participant.registration_status === "waitlist"
+          ? `Liste d'attente ${index + 1}`
+          : `Participant ${index + 1}`,
         registrationStatus: participant.registration_status || "confirmed",
       })),
     } satisfies SlotListItem;
@@ -393,6 +431,104 @@ export const registerSlotParticipantFromSql = async ({
       if ((error as PgError).code === "23505") return { ok: false, code: "already_registered" };
       throw error;
     }
+  });
+};
+
+export const cancelSlotRegistrationFromSql = async ({
+  slotId,
+  registrationId,
+}: {
+  slotId: string;
+  registrationId: string;
+}): Promise<CancelSlotRegistrationResult> => {
+  return transaction(async client => {
+    const slot = await client.query<{ id: string }>(
+      "select id::text from session_slots where id = $1 and deleted_at is null for update",
+      [slotId]
+    );
+    if (slot.rowCount === 0) return { ok: false, code: "slot_not_found" };
+
+    const current = await client.query<RegistrationPayload>(
+      `
+        select
+          id::text,
+          slot_id::text,
+          participant_name,
+          participant_email,
+          registration_status,
+          outlook_event_id
+        from slot_registrations
+        where id = $1
+          and slot_id = $2
+          and status = 'active'
+        for update
+      `,
+      [registrationId, slotId]
+    );
+    if (current.rowCount === 0) return { ok: false, code: "registration_not_found" };
+
+    const activeRegistration = current.rows[0];
+    const registration = await client.query<RegistrationPayload & { cancelled_at: string }>(
+      `
+        update slot_registrations
+        set status = 'cancelled',
+            cancelled_at = now(),
+            outlook_invite_status = case
+              when outlook_event_id is not null then 'cancel_pending'
+              else 'cancelled'
+            end,
+            outlook_invite_due_at = null
+        where id = $1
+          and status = 'active'
+        returning
+          id::text,
+          slot_id::text,
+          participant_name,
+          participant_email,
+          registration_status,
+          cancelled_at::text,
+          outlook_event_id
+      `,
+      [activeRegistration.id]
+    );
+
+    let promotedRegistration: RegistrationPayload | undefined;
+    if (registration.rows[0].registration_status === "confirmed") {
+      const promoted = await client.query<RegistrationPayload>(
+        `
+          with next_waitlist as (
+            select id
+            from slot_registrations
+            where slot_id = $1
+              and status = 'active'
+              and registration_status = 'waitlist'
+            order by created_at asc
+            for update skip locked
+            limit 1
+          )
+          update slot_registrations r
+          set registration_status = 'confirmed',
+              outlook_invite_last_error = null
+          from next_waitlist
+          where r.id = next_waitlist.id
+          returning
+            r.id::text,
+            r.slot_id::text,
+            r.participant_name,
+            r.participant_email,
+            r.registration_status,
+            r.outlook_event_id
+        `,
+        [slotId]
+      );
+      promotedRegistration = promoted.rows[0];
+    }
+
+    return {
+      ok: true,
+      registration: registration.rows[0],
+      promoted_registration: promotedRegistration,
+    };
   });
 };
 

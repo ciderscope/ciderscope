@@ -3,8 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FiBell, FiVolume2, FiX } from "react-icons/fi";
 import { Button } from "../../ui/Button";
-import { acknowledgeHelpRequest, getHelpRequests } from "../../../lib/helpRequests";
-import { supabase } from "../../../lib/supabase";
+import { getHelpRequests } from "../../../lib/helpRequests";
 import type { HelpRequest, JurorAnswers } from "../../../types";
 
 type AnswerRow = {
@@ -106,30 +105,20 @@ const formatRequestTime = (value: string): string => {
 };
 
 const persistAcknowledgement = async (notification: HelpNotification) => {
-  const { data, error } = await supabase
-    .from("answers")
-    .select("data")
-    .eq("session_id", notification.sessionId)
-    .eq("juror_name", notification.jurorName)
-    .maybeSingle();
-
-  if (error) {
-    console.warn("Acquittement de la demande d'aide impossible:", error);
-    return;
-  }
-
-  const next = acknowledgeHelpRequest((data?.data || {}) as JurorAnswers, notification.id);
-  const { error: updateError } = await supabase
-    .from("answers")
-    .update({
-      data: next,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("session_id", notification.sessionId)
-    .eq("juror_name", notification.jurorName);
-
-  if (updateError) {
-    console.warn("Enregistrement de l'acquittement de la demande d'aide impossible:", updateError);
+  const response = await fetch(
+    `/api/admin/sessions/${encodeURIComponent(notification.sessionId)}/answers`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        jurorName: notification.jurorName,
+        helpRequestId: notification.id,
+      }),
+    }
+  );
+  if (!response.ok) {
+    console.warn("Enregistrement de l'acquittement de la demande d'aide impossible.");
   }
 };
 
@@ -175,13 +164,18 @@ export const AdminHelpNotifications = ({ sessionId, sessionName }: AdminHelpNoti
     };
 
     const fetchRequests = async () => {
-      const { data, error } = await supabase
-        .from("answers")
-        .select("juror_name, data")
-        .eq("session_id", sessionId);
-
-      if (error || cancelled) return;
-      pushNewNotifications((data || []) as AnswerRow[]);
+      const response = await fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        answers?: Record<string, JurorAnswers>;
+      };
+      if (!response.ok || !payload.answers || cancelled) return;
+      pushNewNotifications(Object.entries(payload.answers).map(([jurorName, data]) => ({
+        juror_name: jurorName,
+        data,
+      })) as AnswerRow[]);
     };
 
     void fetchRequests();
@@ -191,24 +185,9 @@ export const AdminHelpNotifications = ({ sessionId, sessionName }: AdminHelpNoti
       void fetchRequests();
     }, 5_000);
 
-    const channel = supabase
-      .channel(`admin-help-${sessionId}-${Math.random().toString(36).slice(2)}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "answers", filter: `session_id=eq.${sessionId}` },
-        payload => {
-          const row = (payload as { new?: unknown }).new;
-          if (row && typeof row === "object" && !Array.isArray(row)) {
-            pushNewNotifications([row as AnswerRow]);
-          }
-        }
-      )
-      .subscribe();
-
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
-      void supabase.removeChannel(channel);
     };
   }, [sessionId, sessionName]);
 

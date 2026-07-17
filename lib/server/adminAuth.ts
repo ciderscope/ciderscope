@@ -4,6 +4,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const ADMIN_COOKIE = "ciderscope_admin";
 const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
+const localSessionSecret = randomBytes(32).toString("base64url");
 
 type AdminPayload = {
   user: string;
@@ -19,8 +20,7 @@ const getSecret = () => {
     process.env.ADMIN_SESSION_SECRET ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    "ciderscope-local-admin-secret"
+    localSessionSecret
   );
 };
 
@@ -90,5 +90,6 @@ export const requireAdmin = async () => {
 export const isValidAdminCredentials = (login: string, password: string) => {
   const expectedLogin = process.env.ADMIN_USERNAME || "ifpc";
   const expectedPassword = process.env.ADMIN_PASSWORD || "ifpc";
-  return login.trim().toLowerCase() === expectedLogin.trim().toLowerCase() && password === expectedPassword;
+  return safeEqual(login.trim().toLowerCase(), expectedLogin.trim().toLowerCase())
+    && safeEqual(password, expectedPassword);
 };

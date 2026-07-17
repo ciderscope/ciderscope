@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getSupabaseAdminIfConfigured } from "../../../../lib/server/supabaseAdmin";
 import {
   isValidOutlookWebhookClientState,
@@ -30,12 +30,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid clientState." }, { status: 403 });
   }
 
-  try {
-    const supabase = getSupabaseAdminIfConfigured();
-    const result = await processOutlookWebhookPayload(supabase, payload || {});
-    return NextResponse.json({ ok: true, ...result }, { status: 202 });
-  } catch (error) {
-    console.error("Outlook webhook processing error:", error);
-    return NextResponse.json({ ok: false, error: "Outlook webhook processing failed." }, { status: 500 });
-  }
+  const supabase = getSupabaseAdminIfConfigured();
+  after(async () => {
+    try {
+      await processOutlookWebhookPayload(supabase, payload || {});
+    } catch (error) {
+      console.error("Outlook webhook processing error:", error);
+    }
+  });
+  // Microsoft Graph expects a prompt acknowledgement; processing continues after the response.
+  return NextResponse.json({ ok: true, received: notifications.length }, { status: 202 });
 }

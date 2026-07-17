@@ -155,7 +155,7 @@ export type AppScreen = "landing" | "jury" | "poste" | "order" | "form" | "done"
 export type PosteDay = "mardi" | "jeudi";
 export interface Poste {
   day: PosteDay;
-  num: number; // 1..10
+  num: number; // 1..POSTES_PER_DAY
 }
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "pending";
 
