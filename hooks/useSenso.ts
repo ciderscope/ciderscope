@@ -687,11 +687,13 @@ export const useSenso = () => {
     return () => clearTimeout(t);
   }, [saveStatus]);
 
-  // Steps mémoïsés pour le jury courant — recalculés uniquement quand la config / nom / poste / liste change.
+  // Steps mémoïsés pour le jury courant — recalculés quand l'identité de
+  // présentation change. Le poste doit faire partie des dépendances : sinon
+  // l'ordre calculé avant sa sélection reste affiché jusqu'au rechargement.
   const currentSteps = useMemo<SessionStep[]>(() => {
     if (!curSess || !cj) return [];
-    return buildSteps(curSess, cj);
-  }, [curSess, cj, buildSteps]);
+    return buildSteps(curSess, cj, jurors, poste);
+  }, [curSess, cj, jurors, poste, buildSteps]);
 
   // Vérifie la complétion d'un step donné contre un état de réponses.
   // Pour les questions "scale" on exige une validation explicite : le jury
