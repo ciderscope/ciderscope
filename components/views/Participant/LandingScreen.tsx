@@ -1,10 +1,9 @@
 "use client";
 import React, { useState } from "react";
 import { FiCalendar, FiClipboard } from "react-icons/fi";
-import { SessionCard } from "../../features/SessionCard";
+import { Button } from "../../ui/Button";
 import { SessionListItem } from "../../../types";
 import { SlotSignupView } from "./SlotSignupView";
-import { formatSlotDateLong } from "../../../lib/slots/dates";
 
 interface LandingScreenProps {
   sessions: SessionListItem[];
@@ -22,7 +21,7 @@ const panelButtonClass = (active: boolean) => [
 
 export const LandingScreen = ({ sessions, onSelectSession }: LandingScreenProps) => {
   const [activePanel, setActivePanel] = useState<ParticipantLandingPanel>("sessions");
-  const activeSessions = sessions.filter(s => s.active);
+  const activeSession = sessions.find(session => session.active);
 
   return (
     <div className="mx-auto max-w-[min(94%,1500px)] px-7 py-12 text-center max-[480px]:px-3.5 max-[480px]:py-6">
@@ -53,31 +52,22 @@ export const LandingScreen = ({ sessions, onSelectSession }: LandingScreenProps)
       {activePanel === "slots" && <SlotSignupView />}
 
       {activePanel === "sessions" && (
-        <>
-          <div className="mb-4 text-left">
-            <h2 className="text-xl font-extrabold text-[var(--ink)]">Questionnaire en cours</h2>
-          </div>
-          <div className="text-left md:grid md:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] md:gap-2.5 lg:grid-cols-[repeat(auto-fill,minmax(270px,1fr))] lg:gap-3 xl:grid-cols-[repeat(auto-fill,minmax(290px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(320px,1fr))]">
-            {activeSessions.length === 0 ? (
-              <div className="rounded-[var(--radius)] border-2 border-dashed border-[var(--border)] bg-[var(--paper2)] p-10 text-center text-[15px] text-[var(--mid)]">
-                <FiClipboard size={36} className="mx-auto mb-2 block text-[var(--mid)]" />
-                <strong>Aucune séance active</strong>
-              </div>
-            ) : (
-              activeSessions.map(s => (
-                <SessionCard
-                  key={s.id}
-                  name={formatSlotDateLong(s.date)}
-                  date=""
-                  jurorCount={s.jurorCount}
-                  productCount={s.productCount}
-                  questionCount={s.questionCount}
-                  onClick={() => onSelectSession(s.id)}
-                />
-              ))
-            )}
-          </div>
-        </>
+        <div className="flex flex-col items-center gap-3 py-6 max-[480px]:py-3">
+          <Button
+            type="button"
+            className="!min-h-16 w-full max-w-[520px] justify-center !px-8 !text-lg !font-extrabold shadow-[0_8px_24px_rgba(98,141,23,.22)] max-[480px]:!min-h-14 max-[480px]:!px-5 max-[480px]:!text-base"
+            disabled={!activeSession}
+            onClick={() => {
+              if (activeSession) onSelectSession(activeSession.id);
+            }}
+          >
+            <FiClipboard size={22} aria-hidden="true" />
+            Rejoindre la séance en cours
+          </Button>
+          {!activeSession && (
+            <p className="text-sm text-[var(--mid)]">Aucune séance n&apos;est ouverte actuellement.</p>
+          )}
+        </div>
       )}
     </div>
   );

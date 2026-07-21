@@ -5,6 +5,12 @@ import { queuePending, clearPending, listPending, countPending } from "../lib/of
 import { asRecord, buildSessionSteps, isStepDone, isStepValidated } from "../lib/sessionSteps";
 import { appendHelpRequest, createHelpRequest } from "../lib/helpRequests";
 import { isPosteDay, isValidPosteNumber } from "../lib/postes";
+import { getTodayInSlotTimezone } from "../lib/slots/dates";
+import {
+  clearStoredParticipantSession,
+  isParticipantSessionDayExpired,
+  PARTICIPANT_SESSION_DAY_KEY,
+} from "../lib/participantSessionState";
 
 // Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
 // et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
@@ -128,6 +134,7 @@ export const useSenso = () => {
     anSessId, anCfg, allAnswers, curAnT, adminSection, saveStatus, pendingCount,
   };
   const answerRevisionRef = useRef<Map<string, number>>(new Map());
+  const lastSessionLoadSucceededRef = useRef(false);
 
   // Persistence unifiée : un seul effect debouncé écrit toutes les clés en bloc.
   // Évite la cascade de 11 setItem synchrones à chaque transition d'étape, et coalesce
@@ -150,6 +157,7 @@ export const useSenso = () => {
         senso_curEditTab: curEditTab,
         senso_curAnT: curAnT,
         senso_curSessId: curSessId,
+        senso_session_day: curSessId ? curSess?.date || null : null,
         senso_editSessId: editSessId,
         senso_anSessId: anSessId,
       };
@@ -180,7 +188,29 @@ export const useSenso = () => {
         _persistTimerRef.current = null;
       }
     };
-  }, [restored, mode, screen, adminSection, cj, cs, curEditTab, curAnT, curSessId, editSessId, anSessId]);
+  }, [restored, mode, screen, adminSection, cj, cs, curEditTab, curAnT, curSessId, curSess?.date, editSessId, anSessId]);
+
+  const resetCurrentParticipantSession = useCallback((goToLanding = true) => {
+    if (_persistTimerRef.current) {
+      clearTimeout(_persistTimerRef.current);
+      _persistTimerRef.current = null;
+    }
+    const { curSessId: sessionId, cj: jurorName } = stateRef.current;
+    if (sessionId) {
+      _configCache.delete(configCacheKey(sessionId, false));
+      if (jurorName) answerRevisionRef.current.delete(participantIdentityKey(sessionId, jurorName));
+    }
+    clearStoredParticipantSession(localStorage, { clearScreen: goToLanding });
+    setCurSessId(() => null);
+    setCurSess(() => null);
+    setJurors(() => []);
+    setTakenPostes(() => ({}));
+    setCj(() => "");
+    setPoste(() => null);
+    setJa(() => ({}));
+    setCs(() => 0);
+    if (goToLanding) setScreen(() => "landing");
+  }, []);
 
   // Online/offline detection
   useEffect(() => {
@@ -205,6 +235,7 @@ export const useSenso = () => {
       const savedMode = localStorage.getItem("senso_mode");
       const savedScreen = localStorage.getItem("senso_screen");
       const savedSessId = localStorage.getItem("senso_curSessId");
+      const savedSessionDay = localStorage.getItem(PARTICIPANT_SESSION_DAY_KEY);
       const savedCj = localStorage.getItem("senso_cj");
       const savedCs = localStorage.getItem("senso_cs");
       const savedEditSessId = localStorage.getItem("senso_editSessId");
@@ -212,12 +243,19 @@ export const useSenso = () => {
       const savedAnSessId = localStorage.getItem("senso_anSessId");
       const savedAnT = localStorage.getItem("senso_curAnT");
       const savedAdminSection = localStorage.getItem("senso_admin_section");
+      const participantSessionExpired = isParticipantSessionDayExpired(
+        savedSessId,
+        savedSessionDay,
+        getTodayInSlotTimezone()
+      );
 
       // Auth admin locale de session.
       if (sessionStorage.getItem("admin_auth") === "1") setAdminAuth(true);
 
       if (isStoredChoice(savedMode, APP_MODES)) setMode(savedMode);
-      if (isStoredChoice(savedScreen, APP_SCREENS)) setScreen(savedScreen);
+      if (isStoredChoice(savedScreen, APP_SCREENS) && !(participantSessionExpired && savedMode === "participant")) {
+        setScreen(savedScreen);
+      }
       if (isStoredChoice(savedAdminSection, ADMIN_SECTIONS)) setAdminSection(savedAdminSection);
 
       const promises: Promise<unknown>[] = [];
@@ -230,10 +268,10 @@ export const useSenso = () => {
       }
       if (savedEditTab) setCurEditTab(savedEditTab);
       if (savedAnT) setCurAnT(savedAnT);
-      const savedStep = parseStoredStep(savedCs);
+      const savedStep = participantSessionExpired ? null : parseStoredStep(savedCs);
       if (savedStep !== null) setCs(savedStep);
 
-      if (savedSessId && joinableSessionIds.has(savedSessId)) {
+      if (!participantSessionExpired && savedSessId && joinableSessionIds.has(savedSessId)) {
         const restoredSession = loadedSessions.find(session => session.id === savedSessId);
         setCurSessId(savedSessId);
         promises.push(loadSessionData(savedSessId, restoredSession?.slotDate || restoredSession?.date).then(async () => {
@@ -243,11 +281,7 @@ export const useSenso = () => {
           }
         }));
       } else if (savedSessId) {
-        localStorage.removeItem("senso_curSessId");
-        localStorage.removeItem("senso_screen");
-        setCurSessId(null);
-        setCurSess(null);
-        setScreen("landing");
+        resetCurrentParticipantSession(savedMode === "participant");
       }
 
       if (savedAnSessId) {
@@ -284,6 +318,7 @@ export const useSenso = () => {
 
   const loadSessions = useCallback(async (keepLoading?: boolean): Promise<SessionListItem[]> => {
     if (!keepLoading) setLoading(true);
+    lastSessionLoadSucceededRef.current = false;
     try {
       const savedMode = typeof window !== "undefined" ? localStorage.getItem("senso_mode") : null;
       const admin = stateRef.current.mode === "admin" || (stateRef.current.mode === "home" && savedMode === "admin");
@@ -294,6 +329,7 @@ export const useSenso = () => {
       const payload = await response.json().catch(() => ({})) as { sessions?: SessionListItem[]; error?: string };
       if (!response.ok || !payload.sessions) throw new Error(payload.error || "Chargement impossible.");
       const next = payload.sessions;
+      lastSessionLoadSucceededRef.current = true;
       setOnline(true);
       setSessions(prev => {
         if (prev.length === next.length) {
@@ -639,6 +675,60 @@ export const useSenso = () => {
     if (online) void flushPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
+
+  // Un onglet peut rester suspendu plusieurs jours sans remonter le composant.
+  // Au retour, on recharge le catalogue public et on abandonne la navigation
+  // participante si sa séance n'est plus active ou appartient à un autre jour.
+  useEffect(() => {
+    if (!restored) return;
+    let cancelled = false;
+    let refreshInFlight: Promise<void> | null = null;
+
+    const revalidateParticipantSession = () => {
+      if (cancelled || document.hidden || stateRef.current.mode !== "participant" || refreshInFlight) return;
+
+      refreshInFlight = (async () => {
+        const sessionId = stateRef.current.curSessId;
+        const savedSessionDay = localStorage.getItem(PARTICIPANT_SESSION_DAY_KEY);
+        const dayExpired = isParticipantSessionDayExpired(
+          sessionId,
+          savedSessionDay,
+          getTodayInSlotTimezone()
+        );
+
+        if (dayExpired) {
+          void flushSave();
+          resetCurrentParticipantSession();
+        }
+
+        const refreshed = await loadSessions(true);
+        if (cancelled || !lastSessionLoadSucceededRef.current || stateRef.current.mode !== "participant" || dayExpired) {
+          return;
+        }
+
+        const currentSessionId = stateRef.current.curSessId;
+        if (currentSessionId && !refreshed.some(session => session.id === currentSessionId && session.active)) {
+          void flushSave();
+          resetCurrentParticipantSession();
+        }
+      })().finally(() => {
+        refreshInFlight = null;
+      });
+    };
+
+    const onVisible = () => {
+      if (!document.hidden) revalidateParticipantSession();
+    };
+    window.addEventListener("focus", revalidateParticipantSession);
+    window.addEventListener("pageshow", revalidateParticipantSession);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", revalidateParticipantSession);
+      window.removeEventListener("pageshow", revalidateParticipantSession);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [restored, flushSave, loadSessions, resetCurrentParticipantSession]);
 
   // Rafraîchissement périodique de la liste des séances tant qu'on regarde
   // le tableau (landing participant ou liste admin). Sans cela, le compteur

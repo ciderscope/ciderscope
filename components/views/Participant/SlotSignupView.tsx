@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FiRefreshCw, FiUserPlus, FiX } from "react-icons/fi";
 import { SlotCalendar, type SlotCalendarItem } from "../../features/SlotCalendar";
 import { Button } from "../../ui/Button";
+import { ConfirmModal } from "./ConfirmModal";
 import type { SlotListItem } from "../../../types/slots";
 import { formatSlotDateLong, SLOT_CAPACITY, SLOT_TIME_LABEL } from "../../../lib/slots/dates";
 
@@ -22,6 +23,15 @@ type BatchRegistrationResult = {
   };
 };
 
+type RegistrationNotice = {
+  dates: Array<{
+    slotDate: string;
+    registrationStatus: "confirmed" | "waitlist";
+  }>;
+  hasWarning: boolean;
+  note: string;
+};
+
 export const SlotSignupView = () => {
   const [slots, setSlots] = useState<SlotListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +39,8 @@ export const SlotSignupView = () => {
   const [selectedSlotIds, setSelectedSlotIds] = useState<string[]>([]);
   const [participantEmail, setParticipantEmail] = useState("");
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [confirmingRegistration, setConfirmingRegistration] = useState(false);
+  const [registrationNotice, setRegistrationNotice] = useState<RegistrationNotice | null>(null);
   const [busy, setBusy] = useState(false);
   const refreshInFlightRef = useRef(false);
 
@@ -115,10 +127,16 @@ export const SlotSignupView = () => {
     setMessage(null);
   };
 
-  const register = async (event: React.FormEvent) => {
+  const requestRegistration = (event: React.FormEvent) => {
     event.preventDefault();
     if (selectedSlotIds.length === 0 || busy) return;
+    setConfirmingRegistration(true);
+  };
 
+  const register = async () => {
+    if (selectedSlotIds.length === 0 || busy) return;
+
+    setConfirmingRegistration(false);
     setBusy(true);
     setMessage(null);
     try {
@@ -149,10 +167,27 @@ export const SlotSignupView = () => {
       const failureNote = failures.length > 0
         ? ` ${failures.length} créneau(x) non réservé(s) : ${failures.map(result => result.message || "erreur").join(" ; ")}`
         : "";
+      const selectedSlotsById = new Map(selectedSlots.map(slot => [slot.id, slot]));
+      const registeredDates = successes.flatMap(result => {
+        const slot = selectedSlotsById.get(result.slotId);
+        if (!slot) return [];
+        return [{
+          slotDate: slot.slotDate,
+          registrationStatus: result.registration?.registrationStatus === "waitlist"
+            ? "waitlist" as const
+            : "confirmed" as const,
+        }];
+      });
+      const resultNote = `${successes.length} créneau(x) réservé(s).${waitlistNote}${invitationNote}${failureNote}`;
 
       setMessage({
         kind: failures.length > 0 || outlookIssues > 0 ? "error" : "ok",
-        text: `${successes.length} créneau(x) réservé(s).${waitlistNote}${invitationNote}${failureNote}`,
+        text: resultNote,
+      });
+      setRegistrationNotice({
+        dates: registeredDates,
+        hasWarning: failures.length > 0 || outlookIssues > 0,
+        note: resultNote,
       });
 
       if (failures.length === 0) {
@@ -299,7 +334,7 @@ export const SlotSignupView = () => {
                 </div>
               )}
 
-              <form className="space-y-3" onSubmit={register}>
+              <form className="space-y-3" onSubmit={requestRegistration}>
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase text-[var(--mid)]">Email</label>
                   <input
@@ -319,6 +354,66 @@ export const SlotSignupView = () => {
           )}
         </div>
       </div>
+
+      {confirmingRegistration && (
+        <ConfirmModal
+          title="Confirmer votre inscription"
+          message={(
+            <div className="space-y-3">
+              <p>
+                Vous allez vous inscrire avec l&apos;adresse <strong>{participantEmail}</strong> aux dates suivantes :
+              </p>
+              <ul className="grid gap-2">
+                {selectedSlots.map(slot => (
+                  <li key={slot.id} className="rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 font-semibold text-[var(--ink)]">
+                    {formatSlotDateLong(slot.slotDate)} · {SLOT_TIME_LABEL}
+                    {slot.placesTaken >= slot.capacity && (
+                      <span className="mt-1 block text-xs font-medium text-[var(--accent)]">
+                        Inscription en liste d&apos;attente
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p>Souhaitez-vous confirmer cette inscription ?</p>
+            </div>
+          )}
+          confirmLabel="Confirmer l'inscription"
+          cancelLabel="Annuler"
+          onConfirm={() => void register()}
+          onCancel={() => setConfirmingRegistration(false)}
+        />
+      )}
+
+      {registrationNotice && (
+        <ConfirmModal
+          title={registrationNotice.dates.length > 1 ? "Inscriptions enregistrées" : "Inscription enregistrée"}
+          message={(
+            <div className="space-y-3">
+              {registrationNotice.dates.length > 0 && (
+                <ul className="grid gap-2">
+                  {registrationNotice.dates.map(({ slotDate, registrationStatus }) => (
+                    <li key={slotDate} className="rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 font-semibold text-[var(--ink)]">
+                      {formatSlotDateLong(slotDate)} · {SLOT_TIME_LABEL}
+                      <span className={`mt-1 block text-xs font-medium ${
+                        registrationStatus === "waitlist" ? "text-[var(--accent)]" : "text-[var(--primary)]"
+                      }`}>
+                        {registrationStatus === "waitlist" ? "Liste d'attente" : "Inscription confirmée"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p>{registrationNotice.note}</p>
+            </div>
+          )}
+          tone={registrationNotice.hasWarning ? "warn" : "default"}
+          confirmLabel="OK"
+          confirmVariant={registrationNotice.hasWarning ? "secondary" : "ok"}
+          onConfirm={() => setRegistrationNotice(null)}
+          onCancel={() => setRegistrationNotice(null)}
+        />
+      )}
     </section>
   );
 };
