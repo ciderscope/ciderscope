@@ -11,6 +11,7 @@ import {
   isParticipantSessionDayExpired,
   PARTICIPANT_SESSION_DAY_KEY,
 } from "../lib/participantSessionState";
+import { apiFetch } from "../services/api";
 
 // Cache mémoire des configs de séance avec TTL : invalidé sur saveSession/deleteSession,
 // et automatiquement au-delà de CONFIG_CACHE_TTL_MS pour limiter les divergences avec
@@ -19,6 +20,18 @@ type ConfigCacheEntry = { cfg: SessionConfig; ts: number; revision: number };
 const _configCache = new Map<string, ConfigCacheEntry>();
 const CONFIG_CACHE_TTL_MS = 60_000;
 const PARTICIPANT_TOKEN_PREFIX = "senso_participant_token_v1";
+
+const getDirectShareToken = () => {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("share")?.trim() || "";
+};
+
+const withDirectShareToken = (endpoint: string) => {
+  const shareToken = getDirectShareToken();
+  if (!shareToken) return endpoint;
+  const separator = endpoint.includes("?") ? "&" : "?";
+  return `${endpoint}${separator}share=${encodeURIComponent(shareToken)}`;
+};
 
 const configCacheKey = (id: string, admin: boolean) => `${admin ? "admin" : "public"}:${id}`;
 const participantIdentityKey = (sessionId: string, jurorName: string) => `${sessionId}:${jurorName.trim()}`;
@@ -47,13 +60,14 @@ type ParticipantAccessPayload = {
 };
 
 const accessParticipantAnswers = async (sessionId: string, jurorName: string) => {
-  const response = await fetch("/api/public/answers/access", {
+  const response = await apiFetch("/api/public/answers/access", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       sessionId,
       jurorName,
       token: getParticipantToken(sessionId, jurorName) || undefined,
+      shareToken: getDirectShareToken() || undefined,
     }),
   });
   const payload = await response.json().catch(() => ({})) as ParticipantAccessPayload;
@@ -229,6 +243,46 @@ export const useSenso = () => {
   useEffect(() => {
     const restoreApp = async () => {
       setLoading(true);
+      const directShareToken = getDirectShareToken();
+      if (directShareToken) {
+        try {
+          const response = await apiFetch(
+            `/api/public/shared-sessions/${encodeURIComponent(directShareToken)}`,
+            { cache: "no-store" }
+          );
+          const payload = await response.json().catch(() => ({})) as {
+            session?: SessionListItem;
+            config?: SessionConfig;
+            takenPostes?: Record<string, string>;
+          };
+          if (response.ok && payload.session && payload.config) {
+            setMode("participant");
+            setScreen("jury");
+            setSessions([payload.session]);
+            setCurSessId(payload.session.id);
+            setCurSess(payload.config);
+            setTakenPostes(payload.takenPostes || {});
+            setOnline(true);
+            const savedCj = localStorage.getItem("senso_cj");
+            if (savedCj) {
+              setCj(savedCj);
+              await reloadJuryData(payload.session.id, savedCj);
+            }
+            setRestored(true);
+            setLoading(false);
+            return;
+          }
+        } catch (error) {
+          logDataError("Erreur lors du chargement du lien de séance:", error);
+        }
+        setMode("participant");
+        setScreen("landing");
+        setSessions([]);
+        setOnline(false);
+        setRestored(true);
+        setLoading(false);
+        return;
+      }
       const loadedSessions = await loadSessions(true);
       const joinableSessionIds = new Set(loadedSessions.filter(session => session.active).map(session => session.id));
 
@@ -248,9 +302,6 @@ export const useSenso = () => {
         savedSessionDay,
         getTodayInSlotTimezone()
       );
-
-      // Auth admin locale de session.
-      if (sessionStorage.getItem("admin_auth") === "1") setAdminAuth(true);
 
       if (isStoredChoice(savedMode, APP_MODES)) setMode(savedMode);
       if (isStoredChoice(savedScreen, APP_SCREENS) && !(participantSessionExpired && savedMode === "participant")) {
@@ -322,7 +373,7 @@ export const useSenso = () => {
     try {
       const savedMode = typeof window !== "undefined" ? localStorage.getItem("senso_mode") : null;
       const admin = stateRef.current.mode === "admin" || (stateRef.current.mode === "home" && savedMode === "admin");
-      const response = await fetch(admin ? "/api/admin/sessions" : "/api/public/sessions", {
+      const response = await apiFetch(admin ? "/api/admin/sessions" : "/api/public/sessions", {
         cache: "no-store",
         credentials: "same-origin",
       });
@@ -380,8 +431,8 @@ export const useSenso = () => {
     }
     const endpoint = admin
       ? `/api/admin/sessions/${encodeURIComponent(id)}`
-      : `/api/public/sessions/${encodeURIComponent(id)}`;
-    const response = await fetch(endpoint, { cache: "no-store", credentials: "same-origin" });
+      : withDirectShareToken(`/api/public/sessions/${encodeURIComponent(id)}`);
+    const response = await apiFetch(endpoint, { cache: "no-store", credentials: "same-origin" });
     const payload = await response.json().catch(() => ({})) as {
       config?: SessionConfig;
       revision?: number;
@@ -500,7 +551,7 @@ export const useSenso = () => {
     if (takenPostes[key] && takenPostes[key] !== cj) return; // déjà pris par un autre
     const token = getParticipantToken(curSessId, cj);
     const identity = participantIdentityKey(curSessId, cj);
-    const response = await fetch("/api/public/answers/poste", {
+    const response = await apiFetch("/api/public/answers/poste", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -557,7 +608,7 @@ export const useSenso = () => {
         let failure: unknown = null;
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
-            const response = await fetch("/api/public/answers", {
+            const response = await apiFetch("/api/public/answers", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -637,7 +688,7 @@ export const useSenso = () => {
     const results = await Promise.all(entries.map(async e => {
       try {
         const access = await accessParticipantAnswers(e.sessionId, e.jurorName);
-        const response = await fetch("/api/public/answers", {
+        const response = await apiFetch("/api/public/answers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -680,7 +731,7 @@ export const useSenso = () => {
   // Au retour, on recharge le catalogue public et on abandonne la navigation
   // participante si sa séance n'est plus active ou appartient à un autre jour.
   useEffect(() => {
-    if (!restored) return;
+    if (!restored || getDirectShareToken()) return;
     let cancelled = false;
     let refreshInFlight: Promise<void> | null = null;
 
@@ -739,7 +790,7 @@ export const useSenso = () => {
   // tourner si l'onglet est masqué (visibilitychange) pour ne pas générer de
   // trafic inutile.
   useEffect(() => {
-    if (!restored) return;
+    if (!restored || getDirectShareToken()) return;
     if (screen !== "landing" && screen !== "done") return;
     let cancelled = false;
     const tick = () => {
@@ -757,6 +808,11 @@ export const useSenso = () => {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [restored, screen, loadSessions]);
+
+  useEffect(() => {
+    if (!restored || getDirectShareToken()) return;
+    void loadSessions(true);
+  }, [mode, restored, loadSessions]);
 
   // Flush la sauvegarde différée à chaque changement d'étape (sécurité supplémentaire).
   useEffect(() => {
@@ -816,7 +872,10 @@ export const useSenso = () => {
       : `/api/admin/sessions/${encodeURIComponent(id)}/answers`;
     const [cfg, response] = await Promise.all([
       participantMode ? Promise.resolve(null) : loadSessionConfig(id),
-      fetch(endpoint, { cache: "no-store", credentials: "same-origin" }),
+      apiFetch(
+        participantMode ? withDirectShareToken(endpoint) : endpoint,
+        { cache: "no-store", credentials: "same-origin" }
+      ),
     ]);
     const payload = await response.json().catch(() => ({})) as {
       config?: SessionConfig;
@@ -835,7 +894,7 @@ export const useSenso = () => {
   const saveSession = useCallback(async (id: string, cfg: SessionConfig, meta: Partial<SessionListItem>) => {
     const cacheKey = configCacheKey(id, true);
     const expectedRevision = _configCache.get(cacheKey)?.revision;
-    const response = await fetch("/api/admin/sessions", {
+    const response = await apiFetch("/api/admin/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
@@ -851,7 +910,6 @@ export const useSenso = () => {
 
     if (!response.ok || !payload.ok) {
       if (response.status === 401) {
-        sessionStorage.removeItem("admin_auth");
         setAdminAuth(false);
       }
       logDataError("Erreur lors de l'enregistrement de la séance:", payload);
@@ -862,7 +920,7 @@ export const useSenso = () => {
   }, []);
 
   const deleteSession = useCallback(async (id: string) => {
-    const response = await fetch(`/api/admin/sessions/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`/api/admin/sessions/${encodeURIComponent(id)}`, {
       method: "DELETE",
       credentials: "same-origin",
     });
@@ -875,7 +933,7 @@ export const useSenso = () => {
   }, []);
 
   const listJurorsForSession = useCallback(async (sessionId: string): Promise<string[]> => {
-    const response = await fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
+    const response = await apiFetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
       cache: "no-store",
       credentials: "same-origin",
     });
@@ -889,7 +947,7 @@ export const useSenso = () => {
 
   const deleteJury = useCallback(async (sessionId: string, name: string) => {
     if (!sessionId) return { success: false };
-    const response = await fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
+    const response = await apiFetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
@@ -929,7 +987,7 @@ export const useSenso = () => {
     const s = sessions.find(x => x.id === id);
     if (!s) return;
     const next = !s.resultsVisible;
-    const response = await fetch(`/api/admin/sessions/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`/api/admin/sessions/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",

@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState, Dispatch, SetStateAction } from "react";
 import dynamic from "next/dynamic";
-import { FiChevronLeft, FiChevronRight, FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart, FiCalendar } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiEdit2, FiCopy, FiX, FiCheck, FiArrowLeft, FiPlus, FiBarChart2, FiList, FiPieChart, FiCalendar, FiLink } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { Badge } from "../../ui/Badge";
@@ -10,6 +10,8 @@ import { SessionConfig, SessionListItem, AllAnswers, CSVRow, AppScreen } from ".
 import type { AdminSlotListItem } from "../../../types/slots";
 import { adminFieldGridClass, chipRemoveButtonClass } from "./utils";
 import { addDays, getWeekCalendarDays, getWeekStart, weekLabel } from "../../../lib/slots/dates";
+import { apiFetch } from "../../../services/api";
+import type { AuthUser } from "../../../services/auth";
 
 // Import subcomponents
 import { ParticipantsTab } from "./ParticipantsTab";
@@ -100,6 +102,7 @@ const AnalyseView = dynamic(() => import("../Analyse/AnalyseView").then(m => m.A
 interface AdminViewProps {
   screen: AppScreen;
   sessions: SessionListItem[];
+  currentUser: AuthUser | null;
   editCfg: SessionConfig | null;
   curEditTab: string;
   editSessId: string | null;
@@ -131,7 +134,7 @@ interface AdminViewProps {
 }
 
 export const AdminView = ({
-  screen, sessions, editCfg, curEditTab, editSessId,
+  screen, sessions, currentUser, editCfg, curEditTab, editSessId,
   adminSection, setAdminSection,
   onNewSession, onEditSession, onToggleResultsVisible, onDuplicateSession, onDeleteSession,
   onSetEditCfg, onSetEditTab, onSaveEdit, onSessionSaved, onRefreshSessions, saveNotice, onDismissSaveNotice, onGoBack, downloadCSV,
@@ -139,6 +142,7 @@ export const AdminView = ({
   allAnswers, anSessId, anCfg, curAnT, onAnSessChange, onAnTabChange,
 }: AdminViewProps) => {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [skipSlotCreation, setSkipSlotCreation] = useState(false);
   const [selectedSlotDates, setSelectedSlotDates] = useState<Set<string>>(() => new Set());
   const [existingSlots, setExistingSlots] = useState<AdminSlotListItem[]>([]);
@@ -148,6 +152,15 @@ export const AdminView = ({
   const helpSessionName = helpSessionId
     ? (helpSessionId === editSessId ? editCfg?.name : anCfg?.name) || sessions.find(s => s.id === helpSessionId)?.name
     : undefined;
+  const canManageCalendar = Boolean(currentUser?.capabilities.calendar);
+  const editedSession = editSessId ? sessions.find(session => session.id === editSessId) : null;
+  const canManageEditedSessionSlots = canManageCalendar && (
+    !editedSession
+    || (
+      editedSession.ownerId === currentUser?.entityId
+      && editedSession.accessMode !== "link"
+    )
+  );
   const slotWeekDays = useMemo(() => getWeekCalendarDays(slotWeekStart), [slotWeekStart]);
   const existingSlotsByDate = useMemo(() => {
     return new Map(existingSlots.map(slot => [slot.slotDate, slot]));
@@ -201,11 +214,11 @@ export const AdminView = ({
   }, [editCfg, selectedSlotDates, skipSlotCreation]);
 
   useEffect(() => {
-    if (screen !== "edit") return;
+    if (screen !== "edit" || !canManageEditedSessionSlots) return;
     let cancelled = false;
     const loadExistingSlots = async () => {
       try {
-        const response = await fetch("/api/admin/slots", { cache: "no-store" });
+        const response = await apiFetch("/api/admin/slots", { cache: "no-store" });
         const payload = await response.json().catch(() => ({})) as { slots?: AdminSlotListItem[] };
         if (!response.ok) throw new Error("Impossible de charger les créneaux.");
         if (!cancelled) setExistingSlots(payload.slots || []);
@@ -218,7 +231,13 @@ export const AdminView = ({
     return () => {
       cancelled = true;
     };
-  }, [screen]);
+  }, [canManageEditedSessionSlots, screen]);
+
+  useEffect(() => {
+    if (!canManageCalendar && adminSection === "creneaux") {
+      setAdminSection("seances");
+    }
+  }, [adminSection, canManageCalendar, setAdminSection]);
 
   const moveSlotWeek = (delta: number) => {
     setSlotWeekStart(prev => addDays(prev, delta * 7));
@@ -242,7 +261,7 @@ export const AdminView = ({
 
   const createSlotsForSession = async (sessionId: string, sessionName: string) => {
     if (pendingSlotDates.length === 0) return;
-    const response = await fetch("/api/admin/slots", {
+    const response = await apiFetch("/api/admin/slots", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -277,6 +296,11 @@ export const AdminView = ({
 
   const handleSaveWithSlots = async () => {
     setSlotMessage(null);
+    if (!canManageEditedSessionSlots) {
+      const result = await onSaveEdit();
+      if (result?.success) onSessionSaved(result);
+      return;
+    }
     if (!editSessId && !skipSlotCreation && pendingSlotDates.length === 0) {
       setSlotMessage({ kind: "error", text: "Choisissez au moins une date valide pour créer un créneau, ou cochez \"Ne pas assigner de créneau\"." });
       return;
@@ -310,6 +334,14 @@ export const AdminView = ({
     }
   };
 
+  const copySessionLink = async (session: SessionListItem) => {
+    if (!session.shareToken || typeof window === "undefined") return;
+    const link = `${window.location.origin}/?share=${encodeURIComponent(session.shareToken)}`;
+    await navigator.clipboard.writeText(link);
+    setCopiedId(session.id);
+    window.setTimeout(() => setCopiedId(prev => prev === session.id ? null : prev), 1800);
+  };
+
   if (screen === "landing") {
     return (
       <>
@@ -323,13 +355,15 @@ export const AdminView = ({
           >
             <FiList /> Séances
           </Button>
-          <Button
-            size="sm"
-            variant={adminSection === "creneaux" ? "ok" : "secondary"}
-            onClick={() => setAdminSection("creneaux")}
-          >
-            <FiCalendar /> Créneaux
-          </Button>
+          {canManageCalendar && (
+            <Button
+              size="sm"
+              variant={adminSection === "creneaux" ? "ok" : "secondary"}
+              onClick={() => setAdminSection("creneaux")}
+            >
+              <FiCalendar /> Créneaux
+            </Button>
+          )}
           <Button
             size="sm"
             variant={adminSection === "analyse" ? "ok" : "secondary"}
@@ -353,8 +387,8 @@ export const AdminView = ({
           />
         )}
 
-        {adminSection === "creneaux" && (
-          <SlotAdminView sessions={sessions} />
+        {canManageCalendar && adminSection === "creneaux" && (
+          <SlotAdminView sessions={sessions.filter(session => session.ownerId === currentUser?.entityId)} />
         )}
 
         {adminSection === "seances" && (
@@ -384,6 +418,9 @@ export const AdminView = ({
                     <div className="min-w-0">
                       <div className="text-base font-bold">
                         {s.name}
+                        {currentUser?.role === "superadmin" && s.ownerId !== currentUser.entityId && (
+                          <Badge variant="inactive">{s.ownerName || s.ownerId}</Badge>
+                        )}
                         {s.active ? (
                           <Badge variant="active">AUJOURD&apos;HUI</Badge>
                         ) : s.hasSlotSchedule ? (
@@ -398,6 +435,17 @@ export const AdminView = ({
                     </div>
                     <div className="flex-1"></div>
                     <div className="flex flex-wrap gap-[5px]">
+                      {s.accessMode === "link" && s.shareToken && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void copySessionLink(s)}
+                          title="Copier le lien participant"
+                          aria-label="Copier le lien participant"
+                        >
+                          <FiLink /> {copiedId === s.id ? "Copié" : "Lien"}
+                        </Button>
+                      )}
                       <Button
                         variant={s.resultsVisible ? "ok" : "ghost"}
                         size="sm"
@@ -516,7 +564,7 @@ export const AdminView = ({
                 </div>
               </Card>
 
-              <Card title="Créneau">
+              {canManageEditedSessionSlots && <Card title="Créneau">
                 <div className="grid gap-3 p-[15px]">
                   <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--paper2)] px-3 py-2 text-sm font-semibold">
                     <input
@@ -614,7 +662,7 @@ export const AdminView = ({
                     </div>
                   )}
                 </div>
-              </Card>
+              </Card>}
 
               <Card title="Échantillons">
                 <div className="flex flex-col gap-2">
@@ -714,6 +762,7 @@ export const AdminView = ({
               <ParticipantsTab
                 sessionId={editSessId!}
                 config={editCfg!}
+                canManageSlots={canManageEditedSessionSlots}
                 listJurorsForSession={listJurorsForSession}
                 deleteJury={deleteJury}
               />

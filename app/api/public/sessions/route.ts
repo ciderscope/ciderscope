@@ -5,7 +5,10 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const sessions = await listSessionCatalog({ currentDayOnly: true });
+    const sessions = await listSessionCatalog({
+      currentDayOnly: true,
+      accessMode: "scheduled",
+    });
     return NextResponse.json({ sessions: sessions.filter(session => session.active) });
   } catch (error) {
     console.error("Public session catalog error:", error);

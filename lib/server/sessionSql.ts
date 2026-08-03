@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import type { SessionConfig, SessionListItem } from "../../types";
+import type { SessionAccessMode, SessionConfig, SessionListItem } from "../../types";
 
 let pool: Pool | null = null;
 
@@ -25,6 +25,9 @@ export const getSessionSqlPool = () => {
 
 type UpsertSessionInput = {
   id: string;
+  ownerId: string;
+  ownerName: string;
+  accessMode: SessionAccessMode;
   cfg: SessionConfig;
   meta: Partial<SessionListItem>;
   expectedRevision?: number;
@@ -32,10 +35,12 @@ type UpsertSessionInput = {
 
 export const findDuplicateSessionFromSql = async ({
   id,
+  ownerId,
   name,
   date,
 }: {
   id: string;
+  ownerId: string;
   name: string;
   date: string;
 }) => {
@@ -44,17 +49,26 @@ export const findDuplicateSessionFromSql = async ({
       select id::text
       from sessions
       where id <> $1
-        and date = $2
-        and lower(btrim(name)) = lower(btrim($3))
+        and owner_id = $2
+        and date = $3
+        and lower(btrim(name)) = lower(btrim($4))
       limit 1
     `,
-    [id, date, name]
+    [id, ownerId, date, name]
   );
 
   return rows[0] || null;
 };
 
-export const upsertSessionFromSql = async ({ id, cfg, meta, expectedRevision }: UpsertSessionInput) => {
+export const upsertSessionFromSql = async ({
+  id,
+  ownerId,
+  ownerName,
+  accessMode,
+  cfg,
+  meta,
+  expectedRevision,
+}: UpsertSessionInput) => {
   const name = (meta.name ?? cfg.name).trim();
   const date = meta.date ?? cfg.date;
   const active = meta.active ?? false;
@@ -66,10 +80,10 @@ export const upsertSessionFromSql = async ({ id, cfg, meta, expectedRevision }: 
       `
         update sessions
         set name = $2, date = $3, config = $4::jsonb
-        where id = $1 and revision = $5
+        where id = $1 and owner_id = $5 and revision = $6
         returning id::text, revision
       `,
-      [id, name, date, JSON.stringify(cfg), expectedRevision]
+      [id, name, date, JSON.stringify(cfg), ownerId, expectedRevision]
     );
     if (!rows[0]) {
       const error = new Error("Session revision conflict.") as Error & { code?: string };
@@ -81,8 +95,11 @@ export const upsertSessionFromSql = async ({ id, cfg, meta, expectedRevision }: 
 
   const { rows } = await getSessionSqlPool().query<{ id: string; revision: number }>(
     `
-      insert into sessions (id, name, date, active, juror_count, config, results_visible)
-      values ($1, $2, $3, $4, $5, $6::jsonb, $7)
+      insert into sessions (
+        id, owner_id, owner_name, access_mode,
+        name, date, active, juror_count, config, results_visible
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
       on conflict (id) do update set
         name = excluded.name,
         date = excluded.date,
@@ -90,10 +107,27 @@ export const upsertSessionFromSql = async ({ id, cfg, meta, expectedRevision }: 
         juror_count = excluded.juror_count,
         config = excluded.config,
         results_visible = excluded.results_visible
+      where sessions.owner_id = excluded.owner_id
       returning id::text, revision
     `,
-    [id, name, date, active, jurorCount, JSON.stringify(cfg), resultsVisible]
+    [
+      id,
+      ownerId,
+      ownerName,
+      accessMode,
+      name,
+      date,
+      active,
+      jurorCount,
+      JSON.stringify(cfg),
+      resultsVisible,
+    ]
   );
 
+  if (!rows[0]) {
+    const error = new Error("Session owner mismatch.") as Error & { code?: string };
+    error.code = "session_not_found";
+    throw error;
+  }
   return rows[0];
 };

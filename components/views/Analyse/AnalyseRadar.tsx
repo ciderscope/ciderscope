@@ -20,6 +20,7 @@ import {
 import { rvCoefficient, dravnieksScore, pcaCovariance } from "../../../lib/stats";
 import { analyzeAttributes, HrataObservation } from "../../../lib/hrata";
 import type { SessionConfig, AllAnswers, Question, Product, RadarAxis, RadarAnswer } from "../../../types";
+import { apiFetch } from "../../../services/api";
 import { getChartColors, pearson, flattenRadarAnswers } from "./utils";
 import { applyRadarAxisCorrection, buildRadarDisplayAxes, FRUITY_RADAR_DISPLAY_PRESET, type RadarDisplayAxis } from "../../../lib/radarDisplayPreset";
 import { buildDelimitedText, downloadTextFile } from "../../../lib/csv";
@@ -311,7 +312,7 @@ export function AnalyseRadar({ config, allAnswers, sessionId, participantMode, c
 
     let cancelled = false;
     const loadCorrections = async () => {
-      const response = await fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}`, {
+      const response = await apiFetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}`, {
         cache: "no-store",
         credentials: "same-origin",
       });
@@ -355,7 +356,7 @@ export function AnalyseRadar({ config, allAnswers, sessionId, participantMode, c
         [RADAR_CORRECTIONS_SETTINGS_KEY]: nextCorrections,
       };
 
-      void fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}`, {
+      void apiFetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",

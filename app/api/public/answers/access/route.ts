@@ -6,7 +6,11 @@ import {
   isValidParticipantToken,
   normalizeJurorName,
 } from "../../../../../lib/server/sessionSecurity";
-import { claimJurorIdentity, listOccupiedPostes } from "../../../../../lib/server/sessionStore";
+import {
+  claimJurorIdentity,
+  isParticipantSessionAccessible,
+  listOccupiedPostes,
+} from "../../../../../lib/server/sessionStore";
 
 export const runtime = "nodejs";
 
@@ -14,6 +18,7 @@ type AccessPayload = {
   sessionId?: string;
   jurorName?: string;
   token?: string;
+  shareToken?: string;
 };
 
 export async function POST(request: Request) {
@@ -22,8 +27,13 @@ export async function POST(request: Request) {
     const sessionId = body?.sessionId?.trim() || "";
     const jurorName = normalizeJurorName(body?.jurorName || "");
     const providedToken = body?.token?.trim() || "";
+    const shareToken = body?.shareToken?.trim() || "";
     if (!sessionId || !isValidJurorName(jurorName) || (providedToken && !isValidParticipantToken(providedToken))) {
       return NextResponse.json({ ok: false, message: "Identification invalide." }, { status: 400 });
+    }
+    const accessible = await isParticipantSessionAccessible(sessionId, shareToken || undefined);
+    if (!accessible) {
+      return NextResponse.json({ ok: false, message: "Cette séance n'est plus disponible." }, { status: 404 });
     }
 
     const token = providedToken || createParticipantToken();
@@ -31,6 +41,7 @@ export async function POST(request: Request) {
       sessionId,
       jurorName,
       tokenHash: hashParticipantToken(token),
+      allowLinkAccess: Boolean(shareToken),
     });
     if (!result.ok) {
       const message = result.code === "identity_in_use"

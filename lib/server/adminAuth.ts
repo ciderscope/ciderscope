@@ -1,95 +1,79 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { loginWithToken, type AuthSession, type AuthUser } from "../../services/auth";
+export { canAccessOwner } from "../authz";
 
-const ADMIN_COOKIE = "ciderscope_admin";
-const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
-const localSessionSecret = randomBytes(32).toString("base64url");
+const DEFAULT_SHARED_COOKIE = "senso_sso_token";
+const isEnabled = (value: string | undefined) => /^(1|true|yes)$/i.test(value || "");
 
-type AdminPayload = {
-  user: string;
-  nonce: string;
-  exp: number;
+const sharedCookieName = () => {
+  const configured = process.env.SSO_SHARED_COOKIE_NAME?.trim();
+  return configured && /^[A-Za-z0-9_.-]+$/.test(configured)
+    ? configured
+    : DEFAULT_SHARED_COOKIE;
 };
 
-const base64UrlEncode = (value: string | Buffer) => Buffer.from(value).toString("base64url");
-const base64UrlDecode = (value: string) => Buffer.from(value, "base64url").toString("utf8");
-
-const getSecret = () => {
-  return (
-    process.env.ADMIN_SESSION_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_KEY ||
-    localSessionSecret
-  );
+const readCookie = (header: string | null, name: string) => {
+  if (!header) return "";
+  for (const entry of header.split(";")) {
+    const separator = entry.indexOf("=");
+    if (separator < 0) continue;
+    if (entry.slice(0, separator).trim() !== name) continue;
+    const value = entry.slice(separator + 1).trim();
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return "";
 };
 
-const sign = (payload: string) => {
-  return createHmac("sha256", getSecret()).update(payload).digest("base64url");
+export const getRequestAuthToken = (request: Request) => {
+  const authorization = request.headers.get("authorization") || "";
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  if (match?.[1]?.trim()) return match[1].trim();
+  const sharedToken = readCookie(request.headers.get("cookie"), sharedCookieName());
+  if (sharedToken) return sharedToken;
+  if (!isEnabled(process.env.SSO_MOCK_ENABLED)) return "";
+  const id = process.env.SSO_MOCK_USER_ID?.trim() || "ifpc";
+  const role = process.env.SSO_MOCK_ROLE?.trim() || "superadmin";
+  const name = encodeURIComponent(process.env.SSO_MOCK_USER_NAME?.trim() || "IFPC");
+  return `mock:${id}:${role}:${name}`;
 };
 
-const safeEqual = (a: string, b: string) => {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-};
-
-export const createAdminSessionToken = (user: string) => {
-  const payload: AdminPayload = {
-    user,
-    nonce: randomBytes(12).toString("hex"),
-    exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
-  };
-  const encoded = base64UrlEncode(JSON.stringify(payload));
-  return `${encoded}.${sign(encoded)}`;
-};
-
-export const verifyAdminSessionToken = (token?: string) => {
-  if (!token) return false;
-  const [encoded, signature] = token.split(".");
-  if (!encoded || !signature || !safeEqual(signature, sign(encoded))) return false;
-
+export const authenticateRequest = async (request: Request): Promise<AuthSession | null> => {
+  const token = getRequestAuthToken(request);
+  if (!token) return null;
   try {
-    const payload = JSON.parse(base64UrlDecode(encoded)) as AdminPayload;
-    return typeof payload.exp === "number" && payload.exp > Date.now();
+    return await loginWithToken(token);
   } catch {
-    return false;
+    return null;
   }
 };
 
-export const setAdminCookie = (response: NextResponse, token: string) => {
-  response.cookies.set(ADMIN_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  });
+export type AdminAuthResult =
+  | { ok: true; user: AuthUser; token: string }
+  | { ok: false; response: NextResponse };
+
+export const requireAdmin = async (request: Request): Promise<AdminAuthResult> => {
+  const session = await authenticateRequest(request);
+  if (!session) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Admin authentication required." }, { status: 401 }),
+    };
+  }
+  return { ok: true, ...session };
 };
 
-export const clearAdminCookie = (response: NextResponse) => {
-  response.cookies.set(ADMIN_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 0,
-  });
-};
-
-export const isAdminRequest = async () => {
-  const store = await cookies();
-  return verifyAdminSessionToken(store.get(ADMIN_COOKIE)?.value);
-};
-
-export const requireAdmin = async () => {
-  if (await isAdminRequest()) return null;
-  return NextResponse.json({ error: "Admin authentication required." }, { status: 401 });
-};
-
-export const isValidAdminCredentials = (login: string, password: string) => {
-  const expectedLogin = process.env.ADMIN_USERNAME || "ifpc";
-  const expectedPassword = process.env.ADMIN_PASSWORD || "ifpc";
-  return safeEqual(login.trim().toLowerCase(), expectedLogin.trim().toLowerCase())
-    && safeEqual(password, expectedPassword);
+export const requireSuperadmin = async (request: Request): Promise<AdminAuthResult> => {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth;
+  if (auth.user.role !== "superadmin") {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Superadmin access required." }, { status: 403 }),
+    };
+  }
+  return auth;
 };

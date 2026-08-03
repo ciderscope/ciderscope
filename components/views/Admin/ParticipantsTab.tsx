@@ -6,6 +6,7 @@ import { MutedText, ConfirmDialog } from "../../ui/ViewPrimitives";
 import { Button } from "../../ui/Button";
 import type { SessionConfig, JurorAnswers, RadarAxis, RadarNodeAnswer, BetLevel } from "../../../types";
 import { AdminSlotListItem } from "../../../types/slots";
+import { apiFetch } from "../../../services/api";
 
 const ENABLE_TEST_DATA = process.env.NEXT_PUBLIC_ENABLE_TEST_DATA === "1";
 
@@ -21,11 +22,18 @@ const shuffledCopy = <T,>(values: T[]) => {
 interface ParticipantsTabProps {
   sessionId: string | null;
   config: SessionConfig;
+  canManageSlots?: boolean;
   listJurorsForSession: (id: string) => Promise<string[]>;
   deleteJury: (sessionId: string, name: string) => Promise<{ success: boolean } | undefined>;
 }
 
-export function ParticipantsTab({ sessionId, config, listJurorsForSession, deleteJury }: ParticipantsTabProps) {
+export function ParticipantsTab({
+  sessionId,
+  config,
+  canManageSlots = true,
+  listJurorsForSession,
+  deleteJury,
+}: ParticipantsTabProps) {
   const [jurors, setJurors] = useState<string[] | null>(null);
   const [registeredParticipants, setRegisteredParticipants] = useState<string[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -43,9 +51,13 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
     const list = await listJurorsForSession(sessionId);
     setJurors(list);
 
-    // 2. Load registered participants
+    // 2. Load registered participants (calendar-enabled IFPC flow only).
+    if (!canManageSlots) {
+      setRegisteredParticipants([]);
+      return;
+    }
     try {
-      const response = await fetch("/api/admin/slots", { cache: "no-store" });
+      const response = await apiFetch("/api/admin/slots", { cache: "no-store" });
       const payload = await response.json().catch(() => ({})) as { slots?: AdminSlotListItem[] };
       if (response.ok && payload.slots) {
         const sessionSlots = payload.slots.filter(s => s.sessionId === sessionId);
@@ -61,7 +73,7 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
       console.error("Failed to fetch slots for participants", e);
       setRegisteredParticipants([]);
     }
-  }, [listJurorsForSession, sessionId]);
+  }, [canManageSlots, listJurorsForSession, sessionId]);
 
   useEffect(() => { 
     void reload(); 
@@ -198,7 +210,7 @@ export function ParticipantsTab({ sessionId, config, listJurorsForSession, delet
         }
       });
 
-      const response = await fetch(`/api/admin/sessions/${encodeURIComponent(realSessionId)}/answers`, {
+      const response = await apiFetch(`/api/admin/sessions/${encodeURIComponent(realSessionId)}/answers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",

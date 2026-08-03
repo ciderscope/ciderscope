@@ -5,6 +5,7 @@ import { FiBell, FiVolume2, FiX } from "react-icons/fi";
 import { Button } from "../../ui/Button";
 import { getHelpRequests } from "../../../lib/helpRequests";
 import type { HelpRequest, JurorAnswers } from "../../../types";
+import { apiFetch } from "../../../services/api";
 
 type AnswerRow = {
   juror_name?: string | null;
@@ -105,7 +106,7 @@ const formatRequestTime = (value: string): string => {
 };
 
 const persistAcknowledgement = async (notification: HelpNotification) => {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/admin/sessions/${encodeURIComponent(notification.sessionId)}/answers`,
     {
       method: "PATCH",
@@ -164,7 +165,7 @@ export const AdminHelpNotifications = ({ sessionId, sessionName }: AdminHelpNoti
     };
 
     const fetchRequests = async () => {
-      const response = await fetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
+      const response = await apiFetch(`/api/admin/sessions/${encodeURIComponent(sessionId)}/answers`, {
         cache: "no-store",
         credentials: "same-origin",
       });

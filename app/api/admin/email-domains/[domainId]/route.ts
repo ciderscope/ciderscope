@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "../../../../../lib/server/adminAuth";
+import { requireSuperadmin } from "../../../../../lib/server/adminAuth";
 import { getSupabaseAdmin } from "../../../../../lib/server/supabaseAdmin";
 
 export const runtime = "nodejs";
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ domainId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireSuperadmin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { domainId } = await context.params;

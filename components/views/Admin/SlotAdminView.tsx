@@ -9,6 +9,7 @@ import { Card } from "../../ui/Card";
 import type { SessionListItem } from "../../../types";
 import type { AdminSlotListItem, AdminSlotParticipant } from "../../../types/slots";
 import { formatSlotDateLong, SLOT_CAPACITY, SLOT_TIME_LABEL } from "../../../lib/slots/dates";
+import { apiFetch } from "../../../services/api";
 
 type SlotAdminViewProps = {
   sessions: SessionListItem[];
@@ -68,7 +69,7 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     refreshInFlightRef.current = true;
     if (!silent) setBusy(true);
     try {
-      const slotsResponse = await fetch("/api/admin/slots", { cache: "no-store" });
+      const slotsResponse = await apiFetch("/api/admin/slots", { cache: "no-store" });
       if (!slotsResponse.ok) {
         if (silent) return;
         const text = slotsResponse.status === 401
@@ -133,7 +134,7 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     }
 
     try {
-      const response = await fetch("/api/admin/slots", {
+      const response = await apiFetch("/api/admin/slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -174,7 +175,7 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     setMessage(null);
 
     try {
-      const response = await fetch(`/api/admin/slots/${slot.id}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/admin/slots/${slot.id}`, { method: "DELETE" });
       const payload = await response.json();
       if (!response.ok || !payload.ok) {
         setMessage({ kind: "error", text: payload.error || "Suppression impossible." });
@@ -210,7 +211,7 @@ export const SlotAdminView = ({ sessions }: SlotAdminViewProps) => {
     setMessage(null);
 
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `/api/admin/slots/${slot.id}/registrations/${participant.id}`,
         { method: "DELETE" }
       );

@@ -86,13 +86,13 @@ Deux exports CSV sont disponibles depuis l'administration :
 
 ### Administration
 
-1. Se connecter a l'espace admin.
+1. Ouvrir Senso depuis l'application principale avec la session SSO partagee.
 2. Gerer les seances et leurs statuts.
 3. Configurer les echantillons et le questionnaire.
 4. Suivre ou supprimer les jurys associes a une seance.
 5. Ouvrir les analyses et exporter les resultats.
 
-Les identifiants admin restent volontairement simples pour l'usage local. Ils peuvent être remplacés par `ADMIN_USERNAME` et `ADMIN_PASSWORD`; le cookie de session est signé côté serveur.
+Senso ne propose ni connexion ni creation de compte. L'identite et le role sont fournis par l'application principale.
 
 ## Documentation
 
@@ -142,9 +142,12 @@ SUPABASE_SERVICE_ROLE_KEY=
 DATABASE_URL=
 DIRECT_URL=
 
-ADMIN_USERNAME=ifpc
-ADMIN_PASSWORD=ifpc
-ADMIN_SESSION_SECRET=
+SSO_SHARED_COOKIE_NAME=senso_sso_token
+SSO_AUTH_ENDPOINT=
+SSO_AUTH_METHOD=POST
+SSO_SUPERADMIN_USER_IDS=ifpc
+IFPC_OWNER_ID=ifpc
+NEXT_PUBLIC_MAIN_APP_URL=
 
 MICROSOFT_GRAPH_TENANT_ID=
 MICROSOFT_GRAPH_CLIENT_ID=
@@ -159,9 +162,21 @@ Option de developpement :
 
 ```env
 NEXT_PUBLIC_ENABLE_TEST_DATA=1
+SSO_MOCK_ENABLED=true
+SSO_MOCK_USER_ID=ifpc
+SSO_MOCK_USER_NAME=IFPC
+SSO_MOCK_ROLE=superadmin
 ```
 
-Cette option affiche le bouton de generation de participants fictifs dans l'administration pour lancer des tests.
+`NEXT_PUBLIC_ENABLE_TEST_DATA` affiche le bouton de generation de participants fictifs. Le mode SSO simule ne doit etre active que dans un environnement de test. Sans cookie, il ouvre automatiquement la session decrite par les variables `SSO_MOCK_*`. Un cookie `senso_sso_token` au format `mock:<id>:<admin|superadmin>:<nom-encode>` permet de tester plusieurs entites.
+
+### Authentification centralisee et isolation
+
+- L'application principale pose le cookie partage dont le nom est configure par `SSO_SHARED_COOKIE_NAME`.
+- Senso valide son jeton avec `SSO_AUTH_ENDPOINT`, puis ajoute automatiquement `Authorization: Bearer <token>` aux appels API.
+- `SSO_SUPERADMIN_USER_IDS` contient les identifiants SSO autorises a consulter toutes les entites. `IFPC_OWNER_ID=ifpc` conserve l'entite historique IFPC, meme lorsque l'identifiant SSO definitif changera.
+- Les administrateurs standards voient uniquement leurs seances et analyses. Chaque seance dispose d'un lien participant opaque; le calendrier, les inscriptions et le mailing restent reserves au superadmin IFPC.
+- `NEXT_PUBLIC_MAIN_APP_URL` sera utilise pour le retour apres deconnexion des qu'il sera connu.
 
 ### Inscriptions aux creneaux
 
@@ -173,11 +188,12 @@ et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
 `supabase/migrations/202607021700_slot_waitlist.sql`, puis
 `supabase/migrations/202607021730_promote_waitlist_on_cancel.sql`, puis
 `supabase/migrations/202607021800_outlook_decline_webhook.sql`, puis
-`supabase/migrations/202607171200_security_hardening.sql`, avant de l'utiliser.
+`supabase/migrations/202607171200_security_hardening.sql`, puis
+`supabase/migrations/202607271700_centralized_auth_tenancy.sql`, avant de l'utiliser.
 
 - `SUPABASE_SERVICE_ROLE_KEY` reste uniquement cote serveur et permet aux API de faire respecter les controles metier.
 - La migration de durcissement ferme l'accès navigateur direct aux séances/réponses, ajoute un jeton local transparent pour la reprise et limite à 20 les demandes d'inscription quotidiennes par adresse.
-- `ADMIN_USERNAME`, `ADMIN_PASSWORD` et `ADMIN_SESSION_SECRET` pilotent le cookie admin HTTP-only utilise par les nouvelles API admin.
+- La migration de tenancy rattache les donnees historiques a l'entite provisoire `ifpc`, isole les contraintes par proprietaire et cree les liens directs opaques.
 - Si Microsoft Graph est configure, chaque inscription cree immediatement une invitation Outlook dediee dans le calendrier de `OUTLOOK_ORGANIZER_EMAIL`.
 - Si un creneau est complet, l'inscription reste possible en liste d'attente et l'invitation Outlook est envoyee en provisoire.
 - Quand une inscription confirmee est annulee, la premiere personne en liste d'attente est automatiquement confirmee.
@@ -255,7 +271,7 @@ Consulter [CONTRIBUTING.md](CONTRIBUTING.md) pour les conventions de developpeme
 
 - Ne jamais commiter de secrets Supabase ou de fichiers `.env.local`.
 - Verifier les politiques RLS Supabase avant toute exposition publique.
-- Remplacer l'authentification admin locale actuelle par une solution configuree avant production.
+- Ne jamais activer `SSO_MOCK_ENABLED` en production.
 - Documenter le contact de signalement de vulnerabilite lorsque le projet est ouvert a des tiers.
 
 ## Licence

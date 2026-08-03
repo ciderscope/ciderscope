@@ -1,3 +1,6 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
 import { FiHome, FiLogOut, FiSettings, FiUsers } from "react-icons/fi";
 
 interface TopbarProps {
@@ -13,13 +16,24 @@ const NAV = [
   { id: "admin" as const, label: "Admin", icon: FiSettings },
 ];
 
+const subscribeToDirectAccess = () => () => undefined;
+const getDirectAccessSnapshot = () => Boolean(new URLSearchParams(window.location.search).get("share"));
+const getDirectAccessServerSnapshot = () => false;
+
 const navButtonClass = (active = false, danger = false) => [
   "inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-[var(--radius)] border border-transparent px-2 py-[7px] text-xs font-medium whitespace-nowrap transition-[background,border-color,color] sm:min-h-[38px] sm:gap-[7px] sm:px-3.5 sm:py-2 sm:text-[13px]",
   active ? "bg-[rgba(98,141,23,.08)] font-semibold text-[var(--primary)]" : "text-[var(--mid)] hover:bg-[var(--paper3)] hover:text-[var(--ink)]",
   danger ? "hover:bg-[rgba(198,40,40,.06)] hover:text-[var(--danger)]" : "",
 ].filter(Boolean).join(" ");
 
-export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }: TopbarProps) => (
+export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }: TopbarProps) => {
+  const directParticipantAccess = useSyncExternalStore(
+    subscribeToDirectAccess,
+    getDirectAccessSnapshot,
+    getDirectAccessServerSnapshot
+  );
+
+  return (
   <div className="fixed inset-x-0 top-0 z-[100] flex h-13 max-w-[100vw] flex-nowrap items-center gap-1.5 overflow-x-auto border-b border-[var(--border)] bg-[var(--topbar-bg)] px-2.5 backdrop-blur-md [backdrop-filter:saturate(180%)_blur(8px)] [scrollbar-width:none] sm:h-15 sm:gap-3 sm:px-6 [&::-webkit-scrollbar]:hidden">
     <div className="flex items-center gap-1.5 whitespace-nowrap text-sm font-bold tracking-[-0.01em] text-[var(--ink)] sm:gap-2.5 sm:text-[15px]">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -34,7 +48,7 @@ export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }:
       {online ? "Connecté" : "Local"}
     </span>
     <div className="flex gap-px sm:gap-1">
-      <button
+      {!directParticipantAccess && <button
         className={navButtonClass()}
         onClick={onHome}
         title="Retour à l'accueil"
@@ -42,8 +56,8 @@ export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }:
       >
         <FiHome size={14} />
         <span className="hidden sm:inline">Accueil</span>
-      </button>
-      {NAV.map(({ id, label, icon: Icon }) => (
+      </button>}
+      {!directParticipantAccess && NAV.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
           className={navButtonClass(mode === id)}
@@ -55,7 +69,7 @@ export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }:
           <span className="hidden sm:inline">{label}</span>
         </button>
       ))}
-      {mode === "admin" && onLogout && (
+      {!directParticipantAccess && mode === "admin" && onLogout && (
         <button
           className={navButtonClass(false, true)}
           onClick={onLogout}
@@ -68,4 +82,5 @@ export const Topbar = ({ mode, onModeChange, onHome, online = false, onLogout }:
       )}
     </div>
   </div>
-);
+  );
+};

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "../../../../../lib/server/adminAuth";
+import { requireSuperadmin } from "../../../../../lib/server/adminAuth";
 import { getCalendarSlot } from "../../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../../lib/server/supabaseAdmin";
 import { deleteSlotFromSql, getCalendarSlotFromSql } from "../../../../../lib/server/slotSql";
@@ -40,11 +40,11 @@ const tryCancelOutlookRegistrations = async (
 };
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ slotId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireSuperadmin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { slotId } = await context.params;

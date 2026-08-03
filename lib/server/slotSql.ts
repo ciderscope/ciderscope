@@ -4,6 +4,7 @@ import { getEmailDomain, isValidEmail, normalizeEmail } from "../slots/validatio
 
 type SlotRow = QueryResultRow & {
   id: string;
+  owner_id: string;
   slot_date: string;
   capacity: number;
   session_id: string | null;
@@ -32,6 +33,7 @@ type ListSlotOptions = {
   start?: string | null;
   end?: string | null;
   admin?: boolean;
+  ownerId?: string;
 };
 
 type RegisterSlotResult = {
@@ -151,7 +153,7 @@ export const consumeSlotRegistrationQuotaFromSql = async ({
 };
 
 export const listSlotsFromSql = async (
-  { start, end, admin = false }: ListSlotOptions = {}
+  { start, end, admin = false, ownerId }: ListSlotOptions = {}
 ): Promise<Array<SlotListItem | AdminSlotListItem>> => {
   const values: string[] = [];
   const conditions = ["deleted_at is null"];
@@ -164,10 +166,14 @@ export const listSlotsFromSql = async (
     values.push(end);
     conditions.push(`slot_date <= $${values.length}`);
   }
+  if (ownerId) {
+    values.push(ownerId);
+    conditions.push(`owner_id = $${values.length}`);
+  }
 
   const { rows: slotRows } = await getPool().query<SlotRow>(
     `
-      select id::text, slot_date::text, capacity, session_id, session_name, created_at::text
+      select id::text, owner_id, slot_date::text, capacity, session_id, session_name, created_at::text
       from session_slots
       where ${conditions.join(" and ")}
       order by slot_date asc
@@ -244,18 +250,20 @@ export const createSlotFromSql = async ({
   slotDate,
   sessionId,
   sessionName,
+  ownerId,
 }: {
   slotDate: string;
   sessionId: string | null;
   sessionName: string;
+  ownerId: string;
 }): Promise<{ id: string; attached: boolean }> => {
   return transaction(async client => {
     let finalSessionName = sessionName.trim();
 
     if (sessionId) {
       const session = await client.query<{ id: string; name: string }>(
-        "select id, name from sessions where id = $1",
-        [sessionId]
+        "select id, name from sessions where id = $1 and owner_id = $2",
+        [sessionId, ownerId]
       );
       if (session.rowCount === 0) {
         const error = new Error("Session not found.") as PgError;
@@ -266,8 +274,8 @@ export const createSlotFromSql = async ({
     }
 
     const existing = await client.query<{ id: string; session_id: string | null }>(
-      "select id::text, session_id from session_slots where slot_date = $1 and deleted_at is null for update",
-      [slotDate]
+      "select id::text, session_id from session_slots where owner_id = $1 and slot_date = $2 and deleted_at is null for update",
+      [ownerId, slotDate]
     );
 
     if ((existing.rowCount || 0) > 0) {
@@ -293,11 +301,11 @@ export const createSlotFromSql = async ({
 
     const { rows } = await client.query<{ id: string }>(
       `
-        insert into session_slots (slot_date, session_id, session_name, created_by)
-        values ($1, $2, $3, 'admin')
+        insert into session_slots (owner_id, slot_date, session_id, session_name, created_by)
+        values ($1, $2, $3, $4, $1)
         returning id::text
       `,
-      [slotDate, sessionId, finalSessionName]
+      [ownerId, slotDate, sessionId, finalSessionName]
     );
 
     return { id: rows[0].id, attached: false };

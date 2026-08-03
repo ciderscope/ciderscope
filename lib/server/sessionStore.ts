@@ -1,5 +1,12 @@
 import type { PoolClient } from "pg";
-import type { AllAnswers, JurorAnswers, Poste, SessionConfig, SessionListItem } from "../../types";
+import type {
+  AllAnswers,
+  JurorAnswers,
+  Poste,
+  SessionAccessMode,
+  SessionConfig,
+  SessionListItem,
+} from "../../types";
 import { acknowledgeHelpRequest } from "../helpRequests";
 import { isPosteDay, isValidPosteNumber } from "../postes";
 import { chooseSessionSlotDate, getTodayInSlotTimezone } from "../slots/dates";
@@ -8,8 +15,10 @@ import { getSessionSqlPool, hasSessionSqlConfig } from "./sessionSql";
 import { listSlotsFromSql } from "./slotSql";
 import { getSupabaseAdminIfConfigured } from "./supabaseAdmin";
 
-type SessionRow = {
+export type SessionRow = {
   id: string;
+  owner_id: string;
+  owner_name: string;
   name: string;
   date: string;
   active?: boolean | null;
@@ -17,6 +26,8 @@ type SessionRow = {
   config: SessionConfig;
   analysis_settings?: Record<string, unknown> | null;
   results_visible: boolean | null;
+  access_mode: SessionAccessMode;
+  share_token: string;
   revision: number | string | null;
   created_at?: string;
 };
@@ -31,6 +42,8 @@ type AnswerRow = {
 
 type CatalogSessionRow = {
   id: string;
+  owner_id: string;
+  owner_name: string;
   name: string;
   date: string;
   juror_count: number | null;
@@ -38,6 +51,8 @@ type CatalogSessionRow = {
   product_count: number | null;
   question_count: number | null;
   answer_count: number | string | null;
+  access_mode: SessionAccessMode;
+  share_token: string;
   created_at?: string;
 };
 
@@ -76,34 +91,60 @@ const withSqlTransaction = async <T>(handler: (client: PoolClient) => Promise<T>
   }
 };
 
-const listCatalogSessionRows = async (): Promise<CatalogSessionRow[]> => {
+type CatalogFilters = {
+  ownerId?: string;
+  accessMode?: SessionAccessMode;
+};
+
+const listCatalogSessionRows = async ({
+  ownerId,
+  accessMode,
+}: CatalogFilters = {}): Promise<CatalogSessionRow[]> => {
   const supabase = requireStore();
   if (supabase) {
-    const { data, error } = await supabase.rpc("list_session_catalog");
+    const { data, error } = await supabase.rpc("list_session_catalog", {
+      p_owner_id: ownerId || null,
+      p_access_mode: accessMode || null,
+    });
     if (error) throw error;
     return (data || []) as CatalogSessionRow[];
   }
 
   const { rows } = await getSessionSqlPool().query<CatalogSessionRow>(`
-    select s.id, s.name, s.date, s.juror_count, s.results_visible,
+    select s.id, s.owner_id, s.owner_name, s.name, s.date, s.juror_count, s.results_visible,
            coalesce(jsonb_array_length(s.config -> 'products'), 0)::integer as product_count,
            coalesce(jsonb_array_length(s.config -> 'questions'), 0)::integer as question_count,
            count(a.session_id) as answer_count,
+           s.access_mode, s.share_token,
            s.created_at::text
     from sessions s
     left join answers a on a.session_id = s.id
+    where ($1::text is null or s.owner_id = $1)
+      and ($2::text is null or s.access_mode = $2)
     group by s.id
     order by s.created_at desc
-  `);
+  `, [ownerId || null, accessMode || null]);
   return rows;
 };
 
-export const listSessionCatalog = async ({ currentDayOnly = false } = {}): Promise<SessionListItem[]> => {
+type SessionCatalogOptions = CatalogFilters & {
+  currentDayOnly?: boolean;
+  includeShareTokens?: boolean;
+};
+
+export const listSessionCatalog = async ({
+  currentDayOnly = false,
+  ownerId,
+  accessMode,
+  includeShareTokens = false,
+}: SessionCatalogOptions = {}): Promise<SessionListItem[]> => {
   const supabase = requireStore();
   const today = getTodayInSlotTimezone();
-  const slotOptions = currentDayOnly ? { admin: false, start: today, end: today } : { admin: false };
+  const slotOptions = currentDayOnly
+    ? { admin: false, start: today, end: today, ownerId }
+    : { admin: false, ownerId };
   const [sessionRows, slots] = await Promise.all([
-    listCatalogSessionRows(),
+    listCatalogSessionRows({ ownerId, accessMode }),
     supabase ? listSlots(supabase, slotOptions) : listSlotsFromSql(slotOptions),
   ]);
 
@@ -123,6 +164,8 @@ export const listSessionCatalog = async ({ currentDayOnly = false } = {}): Promi
     const registrationCount = sessionSlots.find(slot => slot.slotDate === displayDate)?.placesTaken || 0;
     return {
       id: row.id,
+      ownerId: row.owner_id,
+      ownerName: row.owner_name,
       name: row.name,
       date: displayDate || "",
       active: Boolean(activeSlot),
@@ -133,6 +176,8 @@ export const listSessionCatalog = async ({ currentDayOnly = false } = {}): Promi
       productCount: row.product_count || 0,
       questionCount: row.question_count || 0,
       resultsVisible: Boolean(row.results_visible),
+      accessMode: row.access_mode,
+      ...(includeShareTokens ? { shareToken: row.share_token } : {}),
     };
   });
 };
@@ -142,17 +187,38 @@ export const getSessionDetails = async (sessionId: string): Promise<SessionRow |
   if (supabase) {
     const { data, error } = await supabase
       .from("sessions")
-      .select("id, name, date, active, juror_count, config, analysis_settings, results_visible, revision, created_at")
+      .select("id, owner_id, owner_name, name, date, active, juror_count, config, analysis_settings, results_visible, access_mode, share_token, revision, created_at")
       .eq("id", sessionId)
       .maybeSingle();
     if (error) throw error;
     return data as SessionRow | null;
   }
   const { rows } = await getSessionSqlPool().query<SessionRow>(`
-    select id, name, date, active, juror_count, config, analysis_settings,
-           results_visible, revision, created_at::text
+    select id, owner_id, owner_name, name, date, active, juror_count, config, analysis_settings,
+           results_visible, access_mode, share_token, revision, created_at::text
     from sessions where id = $1
   `, [sessionId]);
+  return rows[0] || null;
+};
+
+export const getSessionByShareToken = async (shareToken: string): Promise<SessionRow | null> => {
+  const supabase = requireStore();
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("id, owner_id, owner_name, name, date, active, juror_count, config, analysis_settings, results_visible, access_mode, share_token, revision, created_at")
+      .eq("share_token", shareToken)
+      .eq("access_mode", "link")
+      .maybeSingle();
+    if (error) throw error;
+    return data as SessionRow | null;
+  }
+  const { rows } = await getSessionSqlPool().query<SessionRow>(`
+    select id, owner_id, owner_name, name, date, active, juror_count, config, analysis_settings,
+           results_visible, access_mode, share_token, revision, created_at::text
+    from sessions
+    where share_token = $1 and access_mode = 'link'
+  `, [shareToken]);
   return rows[0] || null;
 };
 
@@ -176,6 +242,18 @@ export const isSessionJoinable = async (sessionId: string) => {
     [sessionId, today]
   );
   return Boolean(rowCount);
+};
+
+export const isParticipantSessionAccessible = async (
+  sessionId: string,
+  shareToken?: string
+) => {
+  if (shareToken) {
+    const sharedSession = await getSessionByShareToken(shareToken);
+    return Boolean(sharedSession && sharedSession.id === sessionId);
+  }
+  const session = await getSessionDetails(sessionId);
+  return Boolean(session && session.access_mode === "scheduled" && await isSessionJoinable(sessionId));
 };
 
 const listAnswerRows = async (sessionId: string): Promise<AnswerRow[]> => {
@@ -233,10 +311,12 @@ export const claimJurorIdentity = async ({
   sessionId,
   jurorName,
   tokenHash,
+  allowLinkAccess = false,
 }: {
   sessionId: string;
   jurorName: string;
   tokenHash: string;
+  allowLinkAccess?: boolean;
 }): Promise<ParticipantMutationResult> => {
   const supabase = requireStore();
   if (supabase) {
@@ -244,6 +324,7 @@ export const claimJurorIdentity = async ({
       p_session_id: sessionId,
       p_juror_name: jurorName,
       p_access_token_hash: tokenHash,
+      p_allow_link_access: allowLinkAccess,
     });
     if (error) throw error;
     const result = data as ParticipantMutationResult;
@@ -252,9 +333,21 @@ export const claimJurorIdentity = async ({
 
   return withSqlTransaction(async client => {
     const active = await client.query(
-      `select 1 from session_slots
-       where session_id = $1 and slot_date = $2 and deleted_at is null limit 1`,
-      [sessionId, getTodayInSlotTimezone()]
+      `select 1
+       from sessions
+       where id = $1
+         and (
+           ($3::boolean and access_mode = 'link')
+           or (
+             access_mode = 'scheduled'
+             and exists (
+               select 1 from session_slots
+               where session_id = $1 and slot_date = $2 and deleted_at is null
+             )
+           )
+         )
+       limit 1`,
+      [sessionId, getTodayInSlotTimezone(), allowLinkAccess]
     );
     if (!active.rowCount) return { ok: false, code: "session_inactive" };
 

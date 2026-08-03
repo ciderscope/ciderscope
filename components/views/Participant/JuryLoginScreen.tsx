@@ -9,7 +9,7 @@ interface JuryLoginScreenProps {
   curSess: SessionConfig | null;
   jurors: string[];
   onLoginJury: (name: string) => void;
-  onGoBack: () => void;
+  onGoBack?: () => void;
 }
 
 export const JuryLoginScreen = ({ curSess, onLoginJury, onGoBack }: JuryLoginScreenProps) => {
@@ -32,7 +32,9 @@ export const JuryLoginScreen = ({ curSess, onLoginJury, onGoBack }: JuryLoginScr
       <Button onClick={submit}>
         Commencer <FiArrowRight />
       </Button>
-      <Button variant="ghost" size="sm" className="mt-4" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
+      {onGoBack && (
+        <Button variant="ghost" size="sm" className="mt-4" onClick={onGoBack}><FiArrowLeft /> Retour</Button>
+      )}
     </div>
   );
 };

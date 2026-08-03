@@ -12,6 +12,7 @@ import { SummaryScreen } from "./SummaryScreen";
 
 interface ParticipantViewProps {
   screen: AppScreen;
+  directAccess?: boolean;
   sessions: SessionListItem[];
   curSess: SessionConfig | null;
   curSessId: string | null;
@@ -43,6 +44,17 @@ interface ParticipantViewProps {
 export const ParticipantView = (props: ParticipantViewProps) => {
   const { screen, saveStatus, pendingCount } = props;
 
+  if (props.directAccess && !props.curSess) {
+    return (
+      <div className="mx-auto max-w-xl px-5 py-12 text-center">
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-7 shadow-[var(--shadow)]">
+          <h1 className="mb-2 text-xl font-bold text-[var(--ink)]">Lien de séance indisponible</h1>
+          <p className="text-sm text-[var(--mid)]">Demandez un nouveau lien à l&apos;animateur de la séance.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`participant-shell screen-${screen}`}>
       <SaveIndicator status={saveStatus} pendingCount={pendingCount} />
@@ -68,7 +80,7 @@ export const ParticipantView = (props: ParticipantViewProps) => {
           curSess={props.curSess}
           jurors={props.jurors}
           onLoginJury={props.onLoginJury}
-          onGoBack={props.onGoBack}
+          onGoBack={props.directAccess ? undefined : props.onGoBack}
         />
       )}
 

@@ -7,6 +7,7 @@ import { Button } from "../../ui/Button";
 import { ConfirmModal } from "./ConfirmModal";
 import type { SlotListItem } from "../../../types/slots";
 import { formatSlotDateLong, SLOT_CAPACITY, SLOT_TIME_LABEL } from "../../../lib/slots/dates";
+import { apiFetch } from "../../../services/api";
 
 const panelClass = "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] p-5 shadow-[var(--shadow)]";
 const SLOT_REFRESH_INTERVAL_MS = 15_000;
@@ -49,7 +50,7 @@ export const SlotSignupView = () => {
     refreshInFlightRef.current = true;
     if (!silent) setLoading(true);
     try {
-      const response = await fetch("/api/public/slots", { cache: "no-store" });
+      const response = await apiFetch("/api/public/slots", { cache: "no-store" });
       if (!response.ok) throw new Error("Slot refresh failed.");
       const payload = await response.json();
       setSlots(payload.slots || []);
@@ -140,7 +141,7 @@ export const SlotSignupView = () => {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/public/slots/register", {
+      const response = await apiFetch("/api/public/slots/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slotIds: selectedSlotIds, participantEmail }),

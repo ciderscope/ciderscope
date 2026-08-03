@@ -61,8 +61,12 @@ export interface SessionConfig {
   presMode: "fixed" | "latin" | "random";
 }
 
+export type SessionAccessMode = "scheduled" | "link";
+
 export interface SessionListItem {
   id: string;
+  ownerId?: string;
+  ownerName?: string;
   name: string;
   date: string;
   active: boolean;
@@ -73,6 +77,8 @@ export interface SessionListItem {
   productCount?: number;
   questionCount?: number;
   resultsVisible?: boolean; // l'animateur a autorisé l'affichage du résumé aux jurys
+  accessMode?: SessionAccessMode;
+  shareToken?: string;
 }
 
 export interface HelpRequest {

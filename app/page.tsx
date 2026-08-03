@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 
 import { ParticipantView } from "../components/views/Participant/ParticipantView";
-import { AdminLoginView } from "../components/views/Admin/AdminLoginView";
 import { HomeScreen } from "../components/views/Home/HomeScreen";
+import { AuthGuard } from "../components/auth/AuthGuard";
+import { useAuth } from "../components/auth/AuthContext";
 import type { AppMode, AppScreen } from "../types";
 import { validateSession } from "../lib/validation";
 import { hsh } from "../lib/utils";
@@ -28,6 +29,9 @@ const AnalyseView = dynamic(() => import("../components/views/Analyse/AnalyseVie
 });
 
 const fingerprint = (cfg: unknown) => hsh(JSON.stringify(cfg));
+const subscribeToDirectAccess = () => () => undefined;
+const getDirectAccessSnapshot = () => Boolean(new URLSearchParams(window.location.search).get("share"));
+const getDirectAccessServerSnapshot = () => false;
 type AdminSection = "seances" | "creneaux" | "analyse";
 type NavigationPoint = { mode: AppMode; screen: AppScreen; adminSection: AdminSection };
 type SaveNotice = { title: string; text: string };
@@ -64,6 +68,12 @@ const getHierarchicalBackTarget = ({ mode, screen, adminSection }: NavigationPoi
 export default function CiderScope() {
   const editFingerprintRef = useRef<number | null>(null);
   const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
+  const directParticipantAccess = useSyncExternalStore(
+    subscribeToDirectAccess,
+    getDirectAccessSnapshot,
+    getDirectAccessServerSnapshot
+  );
+  const { user } = useAuth();
 
   const {
     mode, setMode, screen, setScreen,
@@ -93,7 +103,6 @@ export default function CiderScope() {
     completion,
     validatedCompletion,
     flushSave,
-    adminAuth, setAdminAuth,
     restored,
   } = useApp();
 
@@ -104,6 +113,13 @@ export default function CiderScope() {
   }
 
   const goBack = () => {
+    if (directParticipantAccess && mode === "participant") {
+      if (screen === "jury") return;
+      if (screen === "done") {
+        setScreen("jury");
+        return;
+      }
+    }
     const target = getHierarchicalBackTarget(currentNavigation);
     if (sameNavigationPoint(currentNavigation, target)) return;
     setMode(target.mode);
@@ -143,6 +159,7 @@ export default function CiderScope() {
     return (
       <ParticipantView
         screen={screen}
+        directAccess={directParticipantAccess}
         sessions={sessions}
         curSess={curSess}
         curSessId={curSessId}
@@ -194,17 +211,12 @@ export default function CiderScope() {
     );
   }
 
-  if (mode === "admin" && !adminAuth) {
-    return <AdminLoginView onSuccess={() => {
-      setAdminAuth(true);
-      void loadSessions();
-    }} />;
-  }
-
   return (
-    <AdminView
+    <AuthGuard>
+      <AdminView
       screen={screen}
       sessions={sessions}
+      currentUser={user}
       editCfg={editCfg}
       curEditTab={curEditTab}
       editSessId={editSessId}
@@ -300,6 +312,7 @@ export default function CiderScope() {
       curAnT={curAnT}
       onAnSessChange={handleAnSessChange}
       onAnTabChange={setCurAnT}
-    />
+      />
+    </AuthGuard>
   );
 }

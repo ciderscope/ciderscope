@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "../../../../lib/server/adminAuth";
+import { requireSuperadmin } from "../../../../lib/server/adminAuth";
 import { getSupabaseAdmin } from "../../../../lib/server/supabaseAdmin";
 import { isValidDomain, normalizeDomain } from "../../../../lib/slots/validation";
 
@@ -11,9 +11,9 @@ type DomainRow = {
   created_at: string;
 };
 
-export async function GET() {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+export async function GET(request: Request) {
+  const auth = await requireSuperadmin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const supabase = getSupabaseAdmin();
@@ -37,8 +37,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireSuperadmin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const body = await request.json().catch(() => null) as { domain?: string } | null;

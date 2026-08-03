@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "../../../../lib/server/adminAuth";
+import { canAccessOwner, requireAdmin } from "../../../../lib/server/adminAuth";
 import { getSupabaseAdminIfConfigured } from "../../../../lib/server/supabaseAdmin";
 import { findDuplicateSessionFromSql, hasSessionSqlConfig, upsertSessionFromSql } from "../../../../lib/server/sessionSql";
 import { parseIsoDate } from "../../../../lib/slots/dates";
 import { validateSession } from "../../../../lib/validation";
 import type { SessionConfig, SessionListItem } from "../../../../types";
-import { listSessionCatalog } from "../../../../lib/server/sessionStore";
+import { getSessionDetails, listSessionCatalog } from "../../../../lib/server/sessionStore";
 
 export const runtime = "nodejs";
 
@@ -24,11 +24,16 @@ const getAdminErrorDetail = (error: unknown) => {
 const isValidSessionId = (value: string) => /^s[0-9A-Za-z_-]+$/.test(value) || /^[0-9A-Fa-f-]{36}$/.test(value);
 const normalizeSessionName = (value: string) => value.trim().toLowerCase();
 
-export async function GET() {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+export async function GET(request: Request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
-    return NextResponse.json({ sessions: await listSessionCatalog() });
+    return NextResponse.json({
+      sessions: await listSessionCatalog({
+        ownerId: auth.user.role === "superadmin" ? undefined : auth.user.entityId,
+        includeShareTokens: true,
+      }),
+    });
   } catch (error) {
     console.error("Admin session catalog error:", error);
     return NextResponse.json({ error: "Impossible de charger les séances." }, { status: 500 });
@@ -36,8 +41,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const contentLength = Number(request.headers.get("content-length") || 0);
@@ -70,9 +75,18 @@ export async function POST(request: Request) {
 
     const name = (meta.name ?? cfg.name).trim();
     const date = meta.date ?? cfg.date;
+    const existingSession = await getSessionDetails(id);
+    if (existingSession && !canAccessOwner(auth.user, existingSession.owner_id)) {
+      return NextResponse.json({ error: "Seance introuvable." }, { status: 404 });
+    }
+    const ownerId = existingSession?.owner_id || auth.user.entityId;
+    const ownerName = existingSession?.owner_name || auth.user.name;
+    const accessMode = existingSession?.access_mode || (
+      auth.user.role === "superadmin" ? "scheduled" : "link"
+    );
 
     if (hasSessionSqlConfig()) {
-      const duplicate = await findDuplicateSessionFromSql({ id, name, date });
+      const duplicate = await findDuplicateSessionFromSql({ id, ownerId, name, date });
       if (duplicate) {
         return NextResponse.json({
           error: "Une seance existe deja avec ce nom a cette date.",
@@ -80,7 +94,15 @@ export async function POST(request: Request) {
         }, { status: 409 });
       }
 
-      const saved = await upsertSessionFromSql({ id, cfg, meta, expectedRevision });
+      const saved = await upsertSessionFromSql({
+        id,
+        ownerId,
+        ownerName,
+        accessMode,
+        cfg,
+        meta,
+        expectedRevision,
+      });
       return NextResponse.json({ ok: true, id: saved.id, revision: saved.revision });
     }
 
@@ -95,6 +117,7 @@ export async function POST(request: Request) {
     const { data: sameDateSessions, error: duplicateError } = await supabase
       .from("sessions")
       .select("id, name")
+      .eq("owner_id", ownerId)
       .eq("date", date);
 
     if (duplicateError) throw duplicateError;
@@ -114,6 +137,7 @@ export async function POST(request: Request) {
       const { data, error } = await supabase.from("sessions")
         .update({ name, date, config: cfg })
         .eq("id", id)
+        .eq("owner_id", ownerId)
         .eq("revision", expectedRevision)
         .select("revision")
         .maybeSingle();
@@ -129,6 +153,9 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase.from("sessions").upsert({
       id,
+      owner_id: ownerId,
+      owner_name: ownerName,
+      access_mode: accessMode,
       name,
       date,
       active: meta.active ?? false,

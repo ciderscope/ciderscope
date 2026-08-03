@@ -3,6 +3,7 @@ import type { AdminSlotListItem, SlotListItem } from "../../types/slots";
 
 type SlotRow = {
   id: string;
+  owner_id: string;
   slot_date: string;
   capacity: number;
   session_id: string | null;
@@ -29,20 +30,22 @@ type ListSlotOptions = {
   start?: string | null;
   end?: string | null;
   admin?: boolean;
+  ownerId?: string;
 };
 
 export const listSlots = async (
   supabase: SupabaseClient,
-  { start, end, admin = false }: ListSlotOptions = {}
+  { start, end, admin = false, ownerId }: ListSlotOptions = {}
 ): Promise<Array<SlotListItem | AdminSlotListItem>> => {
   let query = supabase
     .from("session_slots")
-    .select("id, slot_date, capacity, session_id, session_name, created_at")
+    .select("id, owner_id, slot_date, capacity, session_id, session_name, created_at")
     .is("deleted_at", null)
     .order("slot_date", { ascending: true });
 
   if (start) query = query.gte("slot_date", start);
   if (end) query = query.lte("slot_date", end);
+  if (ownerId) query = query.eq("owner_id", ownerId);
 
   const { data: slots, error: slotsError } = await query;
   if (slotsError) throw slotsError;

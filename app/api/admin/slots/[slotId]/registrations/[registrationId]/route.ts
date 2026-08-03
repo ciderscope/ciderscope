@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "../../../../../../../lib/server/adminAuth";
+import { requireSuperadmin } from "../../../../../../../lib/server/adminAuth";
 import { getSupabaseAdminIfConfigured } from "../../../../../../../lib/server/supabaseAdmin";
 import { cancelSlotRegistrationWithInvitations } from "../../../../../../../lib/server/slotCancellation";
 
@@ -8,11 +8,11 @@ export const runtime = "nodejs";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ slotId: string; registrationId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireSuperadmin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { slotId, registrationId } = await context.params;

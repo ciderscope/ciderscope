@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "../../../../../lib/server/adminAuth";
+import { canAccessOwner, requireAdmin } from "../../../../../lib/server/adminAuth";
 import {
   deleteSessionAdmin,
   getSessionDetails,
@@ -15,14 +15,17 @@ type PatchPayload = {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ sessionId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { sessionId } = await context.params;
     const session = await getSessionDetails(sessionId);
+    if (session && !canAccessOwner(auth.user, session.owner_id)) {
+      return NextResponse.json({ error: "Séance introuvable." }, { status: 404 });
+    }
     if (!session) return NextResponse.json({ error: "Séance introuvable." }, { status: 404 });
     return NextResponse.json({
       config: session.config,
@@ -40,10 +43,14 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ sessionId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { sessionId } = await context.params;
+    const session = await getSessionDetails(sessionId);
+    if (!session || !canAccessOwner(auth.user, session.owner_id)) {
+      return NextResponse.json({ error: "Séance introuvable." }, { status: 404 });
+    }
     const body = await request.json().catch(() => null) as PatchPayload | null;
     if (!body || (typeof body.resultsVisible !== "boolean" && !body.analysisSettings)) {
       return NextResponse.json({ error: "Modification invalide." }, { status: 400 });
@@ -60,13 +67,17 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ sessionId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { sessionId } = await context.params;
+    const session = await getSessionDetails(sessionId);
+    if (!session || !canAccessOwner(auth.user, session.owner_id)) {
+      return NextResponse.json({ error: "Séance introuvable." }, { status: 404 });
+    }
     await deleteSessionAdmin(sessionId);
     return NextResponse.json({ ok: true });
   } catch (error) {

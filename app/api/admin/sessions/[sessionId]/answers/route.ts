@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { JurorAnswers } from "../../../../../../types";
-import { requireAdmin } from "../../../../../../lib/server/adminAuth";
+import { canAccessOwner, requireAdmin } from "../../../../../../lib/server/adminAuth";
 import {
   isAnswerPayloadSizeValid,
   isValidJurorName,
@@ -11,6 +11,7 @@ import {
   getAdminAnswers,
   acknowledgeAdminHelpRequest,
   upsertAdminAnswer,
+  getSessionDetails,
 } from "../../../../../../lib/server/sessionStore";
 
 export const runtime = "nodejs";
@@ -27,13 +28,17 @@ const parsePayload = async (request: Request) => {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ sessionId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { sessionId } = await context.params;
+    const session = await getSessionDetails(sessionId);
+    if (!session || !canAccessOwner(auth.user, session.owner_id)) {
+      return NextResponse.json({ error: "Séance introuvable." }, { status: 404 });
+    }
     return NextResponse.json({ answers: await getAdminAnswers(sessionId) });
   } catch (error) {
     console.error("Admin answer list error:", error);
@@ -45,10 +50,14 @@ const saveAnswer = async (
   request: Request,
   context: { params: Promise<{ sessionId: string }> }
 ) => {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { sessionId } = await context.params;
+    const session = await getSessionDetails(sessionId);
+    if (!session || !canAccessOwner(auth.user, session.owner_id)) {
+      return NextResponse.json({ error: "Séance introuvable." }, { status: 404 });
+    }
     const { jurorName, data } = await parsePayload(request);
     if (!isValidJurorName(jurorName) || !data || !isAnswerPayloadSizeValid(data)) {
       return NextResponse.json({ error: "Réponses invalides." }, { status: 400 });
@@ -67,10 +76,14 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ sessionId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { sessionId } = await context.params;
+    const session = await getSessionDetails(sessionId);
+    if (!session || !canAccessOwner(auth.user, session.owner_id)) {
+      return NextResponse.json({ error: "Séance introuvable." }, { status: 404 });
+    }
     const { jurorName, helpRequestId, data } = await parsePayload(request);
     if (helpRequestId) {
       if (!isValidJurorName(jurorName) || helpRequestId.length > 120) {
@@ -96,10 +109,14 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ sessionId: string }> }
 ) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { sessionId } = await context.params;
+    const session = await getSessionDetails(sessionId);
+    if (!session || !canAccessOwner(auth.user, session.owner_id)) {
+      return NextResponse.json({ error: "Séance introuvable." }, { status: 404 });
+    }
     const { jurorName } = await parsePayload(request);
     if (!isValidJurorName(jurorName)) {
       return NextResponse.json({ error: "Participant invalide." }, { status: 400 });

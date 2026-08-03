@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useMemo, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useCallback, useEffect, type ReactNode } from "react";
 import { Topbar } from "../components/ui/Topbar";
 import { useSenso, type SensoState, type SensoActions } from "../hooks/useSenso";
+import { useAuth } from "../components/auth/AuthContext";
 
 // Contexte d'actions : référence stable, ne se ré-émet jamais après le premier render
 // (toutes les actions sont useCallback à deps vides).
@@ -40,12 +41,16 @@ export const useApp = (): AppContextValue => {
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const { state, actions } = useSenso();
+  const auth = useAuth();
 
   const handleLogout = useCallback(() => {
-    sessionStorage.removeItem("admin_auth");
-    void fetch("/api/admin/logout", { method: "POST" }).catch(() => undefined);
     actions.setAdminAuth(false);
-  }, [actions]);
+    auth.logout();
+  }, [actions, auth]);
+
+  useEffect(() => {
+    actions.setAdminAuth(auth.isAuthenticated);
+  }, [actions, auth.isAuthenticated]);
 
   // Actions étendues : on injecte handleLogout. handleLogout est stable car
   // setAdminAuth est stable et actions est stable, donc useCallback ne se rebuilde
@@ -69,7 +74,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
             actions.setMode("home");
             actions.setScreen("landing");
           }}
-          onLogout={state.adminAuth ? handleLogout : undefined}
+          onLogout={auth.isAuthenticated ? handleLogout : undefined}
         />
         <main className="max-w-full overflow-x-clip pt-13 sm:pt-15">{children}</main>
       </AppStateContext.Provider>

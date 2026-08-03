@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { listSlots } from "../../../../lib/server/slotData";
 import { getSupabaseAdminIfConfigured } from "../../../../lib/server/supabaseAdmin";
 import { createSlotFromSql, hasSlotSqlConfig, listSlotsFromSql } from "../../../../lib/server/slotSql";
-import { requireAdmin } from "../../../../lib/server/adminAuth";
+import { requireSuperadmin } from "../../../../lib/server/adminAuth";
 import { parseIsoDate } from "../../../../lib/slots/dates";
 
 export const runtime = "nodejs";
@@ -37,11 +37,13 @@ const createSlotWithSupabase = async (
   supabase: SupabaseClient,
   slotDate: string,
   sessionId: string | null,
-  sessionName: string
+  sessionName: string,
+  ownerId: string
 ) => {
   const { data: existing, error: existingError } = await supabase
     .from("session_slots")
     .select("id, session_id")
+    .eq("owner_id", ownerId)
     .eq("slot_date", slotDate)
     .is("deleted_at", null)
     .maybeSingle();
@@ -61,7 +63,7 @@ const createSlotWithSupabase = async (
       .update({
         session_id: sessionId,
         session_name: sessionName,
-        created_by: "admin",
+        created_by: ownerId,
       })
       .eq("id", existingSlot.id)
       .select("id")
@@ -75,9 +77,10 @@ const createSlotWithSupabase = async (
     .from("session_slots")
     .insert({
       slot_date: slotDate,
+      owner_id: ownerId,
       session_id: sessionId,
       session_name: sessionName,
-      created_by: "admin",
+      created_by: ownerId,
     })
     .select("id")
     .single();
@@ -87,8 +90,8 @@ const createSlotWithSupabase = async (
 };
 
 export async function GET(request: Request) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireSuperadmin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const url = new URL(request.url);
@@ -96,8 +99,8 @@ export async function GET(request: Request) {
     const end = url.searchParams.get("end");
     const supabase = getSupabaseAdminIfConfigured();
     const slots = supabase
-      ? await listSlots(supabase, { start, end, admin: true })
-      : await listSlotsFromSql({ start, end, admin: true });
+      ? await listSlots(supabase, { start, end, admin: true, ownerId: auth.user.entityId })
+      : await listSlotsFromSql({ start, end, admin: true, ownerId: auth.user.entityId });
     return NextResponse.json({ slots });
   } catch (error) {
     console.error("Admin slot list error:", error);
@@ -109,8 +112,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireSuperadmin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const body = await request.json().catch(() => null) as SlotCreatePayload | null;
@@ -133,6 +136,7 @@ export async function POST(request: Request) {
         .from("sessions")
         .select("id, name")
         .eq("id", sessionId)
+        .eq("owner_id", auth.user.entityId)
         .maybeSingle();
 
       if (sessionError) throw sessionError;
@@ -153,16 +157,16 @@ export async function POST(request: Request) {
     for (const slotDate of slotDates) {
       try {
         const data = canUseSql
-          ? { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate }
+          ? { ...(await createSlotFromSql({ slotDate, sessionId, sessionName, ownerId: auth.user.entityId })), slotDate }
           : supabase
-            ? await createSlotWithSupabase(supabase, slotDate, sessionId, sessionName)
-            : { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+            ? await createSlotWithSupabase(supabase, slotDate, sessionId, sessionName, auth.user.entityId)
+            : { ...(await createSlotFromSql({ slotDate, sessionId, sessionName, ownerId: auth.user.entityId })), slotDate };
         if (data.attached) attached.push(data);
         else created.push(data);
       } catch (error) {
         if (isUniqueSlotError(error)) {
           try {
-            const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+            const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName, ownerId: auth.user.entityId })), slotDate };
             if (data.attached) attached.push(data);
             else created.push(data);
           } catch (sqlError) {
@@ -176,7 +180,7 @@ export async function POST(request: Request) {
         }
         if (isRlsError(error) && canUseSql) {
           try {
-            const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName })), slotDate };
+            const data = { ...(await createSlotFromSql({ slotDate, sessionId, sessionName, ownerId: auth.user.entityId })), slotDate };
             if (data.attached) attached.push(data);
             else created.push(data);
           } catch (sqlError) {
