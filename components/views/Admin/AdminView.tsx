@@ -16,6 +16,7 @@ import { ParticipantsTab } from "./ParticipantsTab";
 import { QuestionBuilder } from "./QuestionBuilder";
 import { SlotAdminView } from "./SlotAdminView";
 import { AdminHelpNotifications } from "./AdminHelpNotifications";
+import { SessionMergeCard } from "./SessionMergeCard";
 
 const adminShellClass = "mx-auto max-w-full overflow-x-clip px-[22px] py-7 pb-[60px] sm:max-w-[95%] supports-[not(overflow-x:clip)]:overflow-x-hidden";
 const sessionCardClass = "mb-2.5 flex max-w-full min-w-0 flex-wrap items-center gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--paper)] px-5 py-[18px] shadow-[var(--shadow)] transition-[box-shadow,border-color] duration-150 hover:border-[rgba(30,46,46,.18)] hover:shadow-[0_3px_16px_rgba(30,46,46,.09)]";
@@ -393,7 +394,7 @@ export const AdminView = ({
                         )}
                       </div>
                       <div className="mt-0.5 font-mono text-[11px] text-[var(--mid)]">
-                        {[s.date || "sans créneau", `${s.productCount} éch.`, `${s.questionCount} Q`, `${s.jurorCount} jurys`].join(" · ")}
+                        {[(s.slotDates?.length ? s.slotDates.join(" / ") : s.date) || "sans créneau", `${s.productCount} éch.`, `${s.questionCount} Q`, `${s.jurorCount} jurys`].join(" · ")}
                       </div>
                     </div>
                     <div className="flex-1"></div>
@@ -684,6 +685,15 @@ export const AdminView = ({
                   </Button>
                 </div>
               </Card>
+
+              {editSessId && (
+                <SessionMergeCard
+                  targetSessionId={editSessId}
+                  targetSessionName={editCfg.name}
+                  candidates={sessions.filter(session => session.id !== editSessId)}
+                  onMerged={async () => { await onRefreshSessions(); }}
+                />
+              )}
 
               {/* Option "Williams Design (Carré latin)" masquée à la demande.
                   La logique reste branchée côté hook (presMode peut valoir

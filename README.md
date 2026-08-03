@@ -173,7 +173,8 @@ et `supabase/migrations/202607021330_remove_ics_fallback.sql`, puis
 `supabase/migrations/202607021700_slot_waitlist.sql`, puis
 `supabase/migrations/202607021730_promote_waitlist_on_cancel.sql`, puis
 `supabase/migrations/202607021800_outlook_decline_webhook.sql`, puis
-`supabase/migrations/202607171200_security_hardening.sql`, avant de l'utiliser.
+`supabase/migrations/202607171200_security_hardening.sql`, puis
+`supabase/migrations/202608031000_merge_sessions.sql`, avant d'utiliser la fusion de séances.
 
 - `SUPABASE_SERVICE_ROLE_KEY` reste uniquement cote serveur et permet aux API de faire respecter les controles metier.
 - La migration de durcissement ferme l'accès navigateur direct aux séances/réponses, ajoute un jeton local transparent pour la reprise et limite à 20 les demandes d'inscription quotidiennes par adresse.
